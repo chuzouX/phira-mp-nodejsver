@@ -37,14 +37,17 @@ export enum ServerCommandType {
   JoinRoom = 9,
   OnJoinRoom = 10,
   LeaveRoom = 11,
-  LockRoom = 12,
-  CycleRoom = 13,
-  SelectChart = 14,
-  RequestStart = 15,
-  Ready = 16,
-  CancelReady = 17,
-  Played = 18,
-  Abort = 19,
+  OnLeaveRoom = 12,
+  LockRoom = 13,
+  CycleRoom = 14,
+  SelectChart = 15,
+  OnSelectChart = 16,
+  RequestStart = 17,
+  OnRequestStart = 18,
+  Ready = 19,
+  CancelReady = 20,
+  Played = 21,
+  Abort = 22,
 }
 
 export type ClientCommand =
@@ -103,11 +106,14 @@ export type ServerCommand =
   | { type: ServerCommandType.CreateRoom; success: boolean; error?: string; room?: ClientRoomState }
   | { type: ServerCommandType.JoinRoom; success: boolean; error?: string; room?: ClientRoomState }
   | { type: ServerCommandType.OnJoinRoom; user: UserInfo }
-  | { type: ServerCommandType.LeaveRoom; userId: number }
+  | { type: ServerCommandType.LeaveRoom; success: boolean; error?: string }
+  | { type: ServerCommandType.OnLeaveRoom; userId: number }
   | { type: ServerCommandType.LockRoom; locked: boolean }
   | { type: ServerCommandType.CycleRoom; cycle: boolean }
-  | { type: ServerCommandType.SelectChart; chartId: number }
-  | { type: ServerCommandType.RequestStart }
+  | { type: ServerCommandType.SelectChart; success: boolean; error?: string }
+  | { type: ServerCommandType.OnSelectChart; chartId: number }
+  | { type: ServerCommandType.RequestStart; success: boolean; error?: string }
+  | { type: ServerCommandType.OnRequestStart }
   | { type: ServerCommandType.Ready; userId: number }
   | { type: ServerCommandType.CancelReady; userId: number }
   | { type: ServerCommandType.Played; userId: number; chartId: number }
@@ -280,6 +286,15 @@ export class CommandParser {
         break;
 
       case ServerCommandType.LeaveRoom:
+        if (command.success) {
+          writer.bool(true);
+        } else {
+          writer.bool(false);
+          writer.string(command.error || 'Failed to leave room');
+        }
+        break;
+
+      case ServerCommandType.OnLeaveRoom:
         writer.i32(command.userId);
         break;
 
@@ -292,10 +307,28 @@ export class CommandParser {
         break;
 
       case ServerCommandType.SelectChart:
+        if (command.success) {
+          writer.bool(true);
+        } else {
+          writer.bool(false);
+          writer.string(command.error || 'Failed to select chart');
+        }
+        break;
+
+      case ServerCommandType.OnSelectChart:
         writer.i32(command.chartId);
         break;
 
       case ServerCommandType.RequestStart:
+        if (command.success) {
+          writer.bool(true);
+        } else {
+          writer.bool(false);
+          writer.string(command.error || 'Failed to start game');
+        }
+        break;
+
+      case ServerCommandType.OnRequestStart:
         break;
 
       case ServerCommandType.Ready:

@@ -12,6 +12,14 @@ export interface PlayerInfo {
   isReady: boolean;
 }
 
+export interface ChartInfo {
+  id: number;
+  name: string;
+  charter?: string;
+  level?: string;
+  // Add other chart fields as needed from the API response
+}
+
 export interface Room {
   id: string;
   name: string;
@@ -23,6 +31,7 @@ export interface Room {
   locked: boolean;
   cycle: boolean;
   live: boolean;
+  selectedChart?: ChartInfo;
   createdAt: number;
 }
 
@@ -51,6 +60,8 @@ export interface RoomManager {
   setPlayerReady(roomId: string, userId: number, ready: boolean): boolean;
   isRoomOwner(roomId: string, userId: number): boolean;
   changeRoomOwner(roomId: string, newOwnerId: number): boolean;
+  setRoomChart(roomId: string, chart: ChartInfo | undefined): boolean;
+  getRoomChart(roomId: string): ChartInfo | undefined;
   cleanupEmptyRooms(): void;
 }
 
@@ -240,6 +251,22 @@ export class InMemoryRoomManager implements RoomManager {
     room.ownerId = newOwnerId;
     this.logger.info('Room owner changed', { roomId, newOwnerId });
     return true;
+  }
+
+  setRoomChart(roomId: string, chart: ChartInfo | undefined): boolean {
+    const room = this.rooms.get(roomId);
+    if (!room) {
+      return false;
+    }
+
+    room.selectedChart = chart;
+    this.logger.debug('Room chart changed', { roomId, chartId: chart?.id });
+    return true;
+  }
+
+  getRoomChart(roomId: string): ChartInfo | undefined {
+    const room = this.rooms.get(roomId);
+    return room?.selectedChart;
   }
 
   cleanupEmptyRooms(): void {
