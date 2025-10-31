@@ -8,8 +8,7 @@ import { config as loadEnvironment } from 'dotenv';
 loadEnvironment();
 
 export interface ProtocolOptions {
-  http: boolean;
-  websocket: boolean;
+  tcp: boolean;
 }
 
 export interface LoggingOptions {
@@ -27,8 +26,7 @@ const defaultConfig: ServerConfig = {
   port: 3000,
   host: '0.0.0.0',
   protocol: {
-    http: true,
-    websocket: true,
+    tcp: true,
   },
   logging: {
     level: 'info',
@@ -48,8 +46,7 @@ export const createServerConfig = (overrides: Partial<ServerConfig> = {}): Serve
     port: Number.parseInt(process.env.PORT ?? `${defaultConfig.port}`, 10),
     host: process.env.HOST ?? defaultConfig.host,
     protocol: {
-      http: parseBoolean(process.env.HTTP_ENABLED, defaultConfig.protocol.http),
-      websocket: parseBoolean(process.env.WS_ENABLED, defaultConfig.protocol.websocket),
+      tcp: parseBoolean(process.env.TCP_ENABLED, defaultConfig.protocol.tcp),
     },
     logging: {
       level: process.env.LOG_LEVEL ?? defaultConfig.logging.level,

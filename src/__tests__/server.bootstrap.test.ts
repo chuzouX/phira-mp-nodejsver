@@ -3,7 +3,7 @@
  * Copyright (c) 2024
  */
 
-import { AddressInfo } from 'net';
+import { AddressInfo, createConnection } from 'net';
 import { createApplication } from '../app';
 
 describe('Server bootstrap', () => {
@@ -15,7 +15,7 @@ describe('Server bootstrap', () => {
     process.env.HOST = originalHost;
   });
 
-  it('starts and responds to health check', async () => {
+  it('starts and accepts TCP connections', async () => {
     process.env.PORT = '0';
     process.env.HOST = '127.0.0.1';
 
@@ -24,16 +24,42 @@ describe('Server bootstrap', () => {
     await app.start();
 
     try {
-      const serverInstance = app.getServer().getHttpServer();
+      const serverInstance = app.getServer().getTcpServer();
       const address = serverInstance?.address() as AddressInfo | null;
       const port = address?.port ?? app.config.port;
       const host = address?.address ?? app.config.host;
 
-      const response = await fetch(`http://${host}:${port}/health`);
-      const data = (await response.json()) as { status: string };
+      // Test TCP connection
+      const client = createConnection({ port, host });
 
-      expect(response.status).toBe(200);
-      expect(data.status).toBe('ok');
+      const connectionEstablished = await new Promise<boolean>((resolve) => {
+        const timeout = setTimeout(() => {
+          client.destroy();
+          resolve(false);
+        }, 1000);
+
+        client.once('connect', () => {
+          clearTimeout(timeout);
+          client.end();
+          resolve(true);
+        });
+
+        client.once('error', () => {
+          clearTimeout(timeout);
+          client.destroy();
+          resolve(false);
+        });
+      });
+
+      expect(connectionEstablished).toBe(true);
+
+      if (client.destroyed) {
+        // connection already closed
+      } else {
+        await new Promise<void>((resolve) => {
+          client.once('close', resolve);
+        });
+      }
     } finally {
       await app.stop();
     }

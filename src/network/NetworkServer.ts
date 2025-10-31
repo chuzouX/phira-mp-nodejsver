@@ -3,101 +3,80 @@
  * Copyright (c) 2024
  */
 
-import { createServer, Server as HttpServerType } from 'http';
+import { AddressInfo, Server as NetServer } from 'net';
 import { Logger } from '../logging/logger';
 import { ServerConfig } from '../config/config';
-import { HttpServer } from './HttpServer';
-import { WebSocketGateway } from './WebSocketServer';
-import { RoomManager } from '../domain/rooms/RoomManager';
+import { TcpServer } from './TcpServer';
 import { ProtocolHandler } from '../domain/protocol/ProtocolHandler';
 
 export class NetworkServer {
-  private httpServer?: HttpServerType;
-  private readonly httpApp: HttpServer;
-  private wsGateway?: WebSocketGateway;
+  private readonly tcpServer: TcpServer;
   private runtimePort?: number;
+  private runtimeHost?: string;
 
   constructor(
     private readonly config: ServerConfig,
     private readonly logger: Logger,
-    roomManager: RoomManager,
-    private readonly protocolHandler: ProtocolHandler,
+    protocolHandler: ProtocolHandler,
   ) {
-    this.httpApp = new HttpServer(config, logger, roomManager);
+    this.tcpServer = new TcpServer(logger, protocolHandler);
   }
 
   async start(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      try {
-        if (!this.config.protocol.http) {
-          this.logger.warn('HTTP protocol disabled; network server will not start listening');
+    if (!this.config.protocol.tcp) {
+      this.logger.warn('TCP protocol disabled; network server will not start listening');
+      return;
+    }
 
-          if (this.config.protocol.websocket) {
-            this.logger.warn('WebSocket protocol requires HTTP server attachment; skipping setup');
-          }
+    try {
+      await this.tcpServer.start(this.config.port, this.config.host);
 
-          resolve();
-          return;
-        }
+      const address = this.tcpServer.getServer()?.address() as AddressInfo | string | null;
+      const host = typeof address === 'object' && address ? address.address : this.config.host;
+      const port =
+        typeof address === 'object' && address
+          ? address.port
+          : typeof address === 'number'
+            ? address
+            : this.config.port;
 
-        this.httpServer = createServer(this.httpApp.getApp());
+      this.runtimeHost = typeof host === 'string' ? host : undefined;
+      this.runtimePort = typeof port === 'number' ? port : undefined;
 
-        if (this.config.protocol.websocket) {
-          this.wsGateway = new WebSocketGateway(this.logger, this.protocolHandler);
-          this.wsGateway.attach(this.httpServer);
-        }
-
-        this.httpServer.listen(this.config.port, this.config.host, () => {
-          const address = this.httpServer?.address();
-          const port = typeof address === 'object' && address ? address.port : this.config.port;
-          this.runtimePort = typeof port === 'number' ? port : undefined;
-
-          this.logger.info('Server started successfully', {
-            host: this.config.host,
-            port,
-            protocols: this.config.protocol,
-          });
-
-          resolve();
-        });
-
-        this.httpServer.on('error', (error) => {
-          this.logger.error('Server error occurred', { error: error.message });
-          reject(error);
-        });
-      } catch (error) {
-        this.logger.error('Failed to start server', {
-          error: (error as Error).message,
-        });
-        reject(error);
-      }
-    });
+      this.logger.info('Server started successfully', {
+        host: this.runtimeHost ?? this.config.host,
+        port: this.runtimePort ?? this.config.port,
+        protocols: this.config.protocol,
+      });
+    } catch (error) {
+      this.logger.error('Failed to start server', {
+        error: (error as Error).message,
+      });
+      throw error;
+    }
   }
 
   async stop(): Promise<void> {
-    return new Promise((resolve) => {
-      this.wsGateway?.close();
+    if (!this.config.protocol.tcp) {
+      this.logger.info('Server stopped successfully');
+      return;
+    }
 
-      if (!this.httpServer) {
-        this.logger.info('Server stopped successfully');
-        resolve();
-        return;
-      }
-
-      this.httpServer.close(() => {
-        this.runtimePort = undefined;
-        this.httpServer = undefined;
-        this.logger.info('Server stopped successfully');
-        resolve();
-      });
-    });
+    await this.tcpServer.stop();
+    this.runtimePort = undefined;
+    this.runtimeHost = undefined;
+    this.logger.info('Server stopped successfully');
   }
 
-  getHttpServer(): HttpServerType | undefined {
-    return this.httpServer;
+  getTcpServer(): NetServer | undefined {
+    return this.tcpServer.getServer();
   }
 
   getPort(): number | undefined {
     return this.runtimePort ?? this.config.port;
+  }
+
+  getHost(): string {
+    return this.runtimeHost ?? this.config.host;
   }
 }

@@ -1,7 +1,7 @@
 {
   "name": "phira-mp-server",
   "version": "1.0.0",
-  "description": "TypeScript Node.js server with HTTP/WebSocket support",
+  "description": "TypeScript Node.js server with TCP socket support",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
@@ -17,7 +17,7 @@
     "type": "git",
     "url": "git+https://github.com/Pimeng/phira-mp-nodejsver.git"
   },
-  "keywords": ["typescript", "nodejs", "server", "websocket"],
+  "keywords": ["typescript", "nodejs", "server", "tcp"],
   "author": "",
   "license": "MIT",
   "type": "commonjs",
@@ -26,15 +26,11 @@
   },
   "homepage": "https://github.com/Pimeng/phira-mp-nodejsver#readme",
   "dependencies": {
-    "dotenv": "^17.2.3",
-    "express": "^5.1.0",
-    "ws": "^8.18.3"
+    "dotenv": "^17.2.3"
   },
   "devDependencies": {
-    "@types/express": "^5.0.5",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.9.2",
-    "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^8.46.2",
     "@typescript-eslint/parser": "^8.46.2",
     "eslint": "^9.38.0",

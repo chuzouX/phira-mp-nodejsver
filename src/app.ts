@@ -28,7 +28,7 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
 
   const roomManager = new InMemoryRoomManager(roomLogger);
   const protocolHandler = new ProtocolHandler(roomManager, protocolLogger);
-  const networkServer = new NetworkServer(config, logger, roomManager, protocolHandler);
+  const networkServer = new NetworkServer(config, logger, protocolHandler);
 
   return {
     config,
