@@ -22,6 +22,7 @@ export enum ClientCommandType {
   CancelReady = 13,
   Played = 14,
   Abort = 15,
+  Pong = 16,
 }
 
 export enum ServerCommandType {
@@ -48,6 +49,7 @@ export enum ServerCommandType {
   CancelReady = 20,
   Played = 21,
   Abort = 22,
+  Ping = 23,
 }
 
 export type ClientCommand =
@@ -66,7 +68,8 @@ export type ClientCommand =
   | { type: ClientCommandType.Ready }
   | { type: ClientCommandType.CancelReady }
   | { type: ClientCommandType.Played; id: number }
-  | { type: ClientCommandType.Abort };
+  | { type: ClientCommandType.Abort }
+  | { type: ClientCommandType.Pong };
 
 export interface UserInfo {
   id: number;
@@ -92,6 +95,7 @@ export interface ClientRoomState {
 
 export type ServerCommand =
   | { type: ServerCommandType.Pong }
+  | { type: ServerCommandType.Ping; timestamp: number }
   | {
       type: ServerCommandType.Authenticate;
       success: boolean;
@@ -131,6 +135,9 @@ export class CommandParser {
     switch (commandType) {
       case ClientCommandType.Ping:
         return { rawType: commandType, command: { type: ClientCommandType.Ping } };
+
+      case ClientCommandType.Pong:
+        return { rawType: commandType, command: { type: ClientCommandType.Pong } };
 
       case ClientCommandType.Authenticate: {
         const token = reader.string();
@@ -222,6 +229,10 @@ export class CommandParser {
 
     switch (command.type) {
       case ServerCommandType.Pong:
+        break;
+
+      case ServerCommandType.Ping:
+        writer.f64(command.timestamp);
         break;
 
       case ServerCommandType.Authenticate:
