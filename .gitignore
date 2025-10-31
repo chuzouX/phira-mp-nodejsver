@@ -3,4 +3,4 @@ dist/
 coverage/
 .env
 *.log
-pnpm-lock.yaml
+pnpm-*.yaml
