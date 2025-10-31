@@ -335,7 +335,7 @@ export class ProtocolHandler {
 
   private handleLeaveRoom(
     connectionId: string,
-    sendResponse: (response: ServerCommand) => void,
+    _sendResponse: (response: ServerCommand) => void,
   ): void {
     const session = this.sessions.get(connectionId);
     if (!session) {
@@ -364,7 +364,7 @@ export class ProtocolHandler {
   private handleLockRoom(
     connectionId: string,
     lock: boolean,
-    sendResponse: (response: ServerCommand) => void,
+    _sendResponse: (response: ServerCommand) => void,
   ): void {
     const session = this.sessions.get(connectionId);
     if (!session) {
@@ -395,7 +395,7 @@ export class ProtocolHandler {
   private handleCycleRoom(
     connectionId: string,
     cycle: boolean,
-    sendResponse: (response: ServerCommand) => void,
+    _sendResponse: (response: ServerCommand) => void,
   ): void {
     const session = this.sessions.get(connectionId);
     if (!session) {
@@ -426,7 +426,7 @@ export class ProtocolHandler {
   private handleSelectChart(
     connectionId: string,
     chartId: number,
-    sendResponse: (response: ServerCommand) => void,
+    _sendResponse: (response: ServerCommand) => void,
   ): void {
     const session = this.sessions.get(connectionId);
     if (!session) {
@@ -456,7 +456,7 @@ export class ProtocolHandler {
 
   private handleRequestStart(
     connectionId: string,
-    sendResponse: (response: ServerCommand) => void,
+    _sendResponse: (response: ServerCommand) => void,
   ): void {
     const session = this.sessions.get(connectionId);
     if (!session) {
@@ -485,7 +485,7 @@ export class ProtocolHandler {
 
   private handleReady(
     connectionId: string,
-    sendResponse: (response: ServerCommand) => void,
+    _sendResponse: (response: ServerCommand) => void,
   ): void {
     const session = this.sessions.get(connectionId);
     if (!session) {
@@ -515,7 +515,7 @@ export class ProtocolHandler {
 
   private handleCancelReady(
     connectionId: string,
-    sendResponse: (response: ServerCommand) => void,
+    _sendResponse: (response: ServerCommand) => void,
   ): void {
     const session = this.sessions.get(connectionId);
     if (!session) {
@@ -537,7 +537,7 @@ export class ProtocolHandler {
   private handlePlayed(
     connectionId: string,
     chartId: number,
-    sendResponse: (response: ServerCommand) => void,
+    _sendResponse: (response: ServerCommand) => void,
   ): void {
     const session = this.sessions.get(connectionId);
     if (!session) {
@@ -558,7 +558,7 @@ export class ProtocolHandler {
 
   private handleAbort(
     connectionId: string,
-    sendResponse: (response: ServerCommand) => void,
+    _sendResponse: (response: ServerCommand) => void,
   ): void {
     const session = this.sessions.get(connectionId);
     if (!session) {
