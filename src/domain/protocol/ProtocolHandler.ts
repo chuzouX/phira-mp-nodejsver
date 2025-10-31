@@ -5,6 +5,7 @@
 
 import { Logger } from '../../logging/logger';
 import { RoomManager, Room } from '../rooms/RoomManager';
+import { AuthService } from '../auth/AuthService';
 import {
   ClientCommand,
   ClientCommandType,
@@ -26,6 +27,7 @@ export class ProtocolHandler {
 
   constructor(
     private readonly roomManager: RoomManager,
+    private readonly authService: AuthService,
     private readonly logger: Logger,
   ) {}
 
@@ -121,6 +123,16 @@ export class ProtocolHandler {
   ): void {
     this.logger.info('Authentication attempt', { connectionId, tokenLength: token.length });
 
+    if (this.sessions.has(connectionId)) {
+      this.logger.warn('Repeated authentication attempt', { connectionId });
+      sendResponse({
+        type: ServerCommandType.Authenticate,
+        success: false,
+        error: 'Already authenticated',
+      });
+      return;
+    }
+
     if (token.length !== 32) {
       this.logger.warn('Invalid token length', { connectionId, tokenLength: token.length });
       sendResponse({
@@ -131,32 +143,44 @@ export class ProtocolHandler {
       return;
     }
 
-    const mockUserId = Math.floor(Math.random() * 1000000);
-    const mockUserName = `User_${mockUserId}`;
-    const userInfo: UserInfo = {
-      id: mockUserId,
-      name: mockUserName,
-      monitor: false,
+    const authenticate = async (): Promise<void> => {
+      try {
+        const userInfo = await this.authService.authenticate(token);
+
+        this.sessions.set(connectionId, {
+          userId: userInfo.id,
+          userInfo,
+          connectionId,
+        });
+
+        this.logger.info('Authentication successful', {
+          connectionId,
+          userId: userInfo.id,
+          userName: userInfo.name,
+        });
+
+        sendResponse({
+          type: ServerCommandType.Authenticate,
+          success: true,
+          user: userInfo,
+          room: undefined,
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Authentication failed';
+        this.logger.warn('Authentication failed', {
+          connectionId,
+          error: errorMessage,
+        });
+
+        sendResponse({
+          type: ServerCommandType.Authenticate,
+          success: false,
+          error: errorMessage,
+        });
+      }
     };
 
-    this.sessions.set(connectionId, {
-      userId: mockUserId,
-      userInfo,
-      connectionId,
-    });
-
-    this.logger.info('Authentication successful', {
-      connectionId,
-      userId: mockUserId,
-      userName: mockUserName,
-    });
-
-    sendResponse({
-      type: ServerCommandType.Authenticate,
-      success: true,
-      user: userInfo,
-      room: undefined,
-    });
+    void authenticate();
   }
 
   private handleChat(

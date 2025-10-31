@@ -20,6 +20,7 @@ export interface ServerConfig {
   host: string;
   protocol: ProtocolOptions;
   logging: LoggingOptions;
+  phiraApiUrl: string;
 }
 
 const defaultConfig: ServerConfig = {
@@ -31,6 +32,7 @@ const defaultConfig: ServerConfig = {
   logging: {
     level: 'info',
   },
+  phiraApiUrl: 'https://phira.5wyxi.com',
 };
 
 const parseBoolean = (value: string | undefined, fallback: boolean): boolean => {
@@ -51,6 +53,7 @@ export const createServerConfig = (overrides: Partial<ServerConfig> = {}): Serve
     logging: {
       level: process.env.LOG_LEVEL ?? defaultConfig.logging.level,
     },
+    phiraApiUrl: process.env.PHIRA_API_URL ?? defaultConfig.phiraApiUrl,
   };
 
   return {

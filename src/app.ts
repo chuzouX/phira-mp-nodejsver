@@ -6,6 +6,7 @@
 import { ConfigService, ServerConfig } from './config/config';
 import { ConsoleLogger, Logger } from './logging/logger';
 import { InMemoryRoomManager } from './domain/rooms/RoomManager';
+import { PhiraAuthService } from './domain/auth/AuthService';
 import { ProtocolHandler } from './domain/protocol/ProtocolHandler';
 import { NetworkServer } from './network/NetworkServer';
 
@@ -24,10 +25,12 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
 
   const logger = new ConsoleLogger('application', logLevel);
   const roomLogger = new ConsoleLogger('rooms', logLevel);
+  const authLogger = new ConsoleLogger('auth', logLevel);
   const protocolLogger = new ConsoleLogger('protocol', logLevel);
 
   const roomManager = new InMemoryRoomManager(roomLogger);
-  const protocolHandler = new ProtocolHandler(roomManager, protocolLogger);
+  const authService = new PhiraAuthService(config.phiraApiUrl, authLogger);
+  const protocolHandler = new ProtocolHandler(roomManager, authService, protocolLogger);
   const networkServer = new NetworkServer(config, logger, protocolHandler);
 
   return {
