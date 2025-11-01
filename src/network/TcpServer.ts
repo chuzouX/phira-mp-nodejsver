@@ -7,15 +7,21 @@ import { Server as NetServer, Socket, createServer } from 'net';
 import { Logger } from '../logging/logger';
 import { ProtocolHandler } from '../domain/protocol/ProtocolHandler';
 import { BinaryReader, BinaryWriter } from '../domain/protocol/BinaryProtocol';
-import { CommandParser, ServerCommand } from '../domain/protocol/Commands';
+import { ClientCommandType, CommandParser, ServerCommand, ServerCommandType } from '../domain/protocol/Commands';
 
 const PROTOCOL_VERSION = 1;
+const SERVER_HEARTBEAT_INTERVAL_MS = 30_000;
+const SERVER_HEARTBEAT_TIMEOUT_MS = 10_000;
 
 interface ConnectionState {
   socket: Socket;
   versionReceived: boolean;
   buffer: Buffer;
   version?: number;
+  heartbeatInterval?: NodeJS.Timeout;
+  pongTimeout?: NodeJS.Timeout;
+  awaitingPong: boolean;
+  lastPingTimestamp?: number;
 }
 
 export class TcpServer {
@@ -59,6 +65,7 @@ export class TcpServer {
   stop(): Promise<void> {
     return new Promise((resolve) => {
       this.connections.forEach((state, connectionId) => {
+        this.clearHeartbeat(state);
         state.socket.destroy();
         this.logger.debug('Connection closed during shutdown', { connectionId });
       });
@@ -85,6 +92,7 @@ export class TcpServer {
       socket,
       versionReceived: false,
       buffer: Buffer.alloc(0),
+      awaitingPong: false,
     };
 
     this.connections.set(connectionId, state);
@@ -96,6 +104,7 @@ export class TcpServer {
     });
 
     this.protocolHandler.handleConnection(connectionId);
+    this.startHeartbeat(connectionId, state);
 
     socket.on('data', (data: Buffer) => {
       try {
@@ -132,6 +141,7 @@ export class TcpServer {
     });
 
     socket.on('close', () => {
+      this.clearHeartbeat(state);
       this.connections.delete(connectionId);
       this.protocolHandler.handleDisconnection(connectionId);
       this.logger.info('TCP connection closed', { connectionId });
@@ -143,6 +153,79 @@ export class TcpServer {
         error: error.message,
       });
     });
+  }
+
+  private startHeartbeat(connectionId: string, state: ConnectionState): void {
+    this.clearHeartbeat(state);
+
+    state.heartbeatInterval = setInterval(() => {
+      this.sendHeartbeat(connectionId, state);
+    }, SERVER_HEARTBEAT_INTERVAL_MS);
+  }
+
+  private sendHeartbeat(connectionId: string, state: ConnectionState): void {
+    if (state.socket.destroyed) {
+      this.clearHeartbeat(state);
+      return;
+    }
+
+    if (state.awaitingPong) {
+      this.logger.warn('Skipping heartbeat; awaiting previous pong', { connectionId });
+      return;
+    }
+
+    const command: ServerCommand = {
+      type: ServerCommandType.Ping,
+      timestamp: Date.now(),
+    };
+
+    this.logger.debug('Sending heartbeat ping', { connectionId });
+
+    this.sendCommand(state.socket, command);
+    state.awaitingPong = true;
+    state.lastPingTimestamp = command.timestamp;
+
+    state.pongTimeout = setTimeout(() => {
+      state.awaitingPong = false;
+      state.pongTimeout = undefined;
+      this.logger.warn('Pong timeout, closing connection', { connectionId });
+      state.socket.destroy(new Error('Heartbeat timeout'));
+    }, SERVER_HEARTBEAT_TIMEOUT_MS);
+  }
+
+  private handleHeartbeatAck(connectionId: string, state: ConnectionState): void {
+    if (!state.awaitingPong) {
+      return;
+    }
+
+    state.awaitingPong = false;
+
+    if (state.pongTimeout) {
+      clearTimeout(state.pongTimeout);
+      state.pongTimeout = undefined;
+    }
+
+    const latency = state.lastPingTimestamp ? Date.now() - state.lastPingTimestamp : undefined;
+
+    this.logger.debug('Pong received from client', {
+      connectionId,
+      latency,
+    });
+  }
+
+  private clearHeartbeat(state: ConnectionState): void {
+    if (state.heartbeatInterval) {
+      clearInterval(state.heartbeatInterval);
+      state.heartbeatInterval = undefined;
+    }
+
+    if (state.pongTimeout) {
+      clearTimeout(state.pongTimeout);
+      state.pongTimeout = undefined;
+    }
+
+    state.awaitingPong = false;
+    state.lastPingTimestamp = undefined;
   }
 
   private processPackets(connectionId: string, state: ConnectionState): void {
@@ -170,6 +253,15 @@ export class TcpServer {
         const parsed = CommandParser.parseClientCommand(reader);
 
         if (parsed.command) {
+          if (parsed.command.type === ClientCommandType.Pong) {
+            this.handleHeartbeatAck(connectionId, state);
+            continue;
+          }
+
+          if (parsed.command.type === ClientCommandType.Ping) {
+            this.handleHeartbeatAck(connectionId, state);
+          }
+
           this.protocolHandler.handleMessage(
             connectionId,
             parsed.command,

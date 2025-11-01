@@ -31,6 +31,26 @@ export class ProtocolHandler {
     private readonly logger: Logger,
   ) {}
 
+  private respond(
+    connectionId: string,
+    sendResponse: (response: ServerCommand) => void,
+    response: ServerCommand,
+  ): void {
+    sendResponse(response);
+
+    const logPayload = {
+      connectionId,
+      responseType: ServerCommandType[response.type],
+      timestamp: Date.now(),
+    };
+
+    if (response.type === ServerCommandType.Pong) {
+      this.logger.debug('Response sent to client', logPayload);
+    } else {
+      this.logger.info('Response sent to client', logPayload);
+    }
+  }
+
   private async fetchChartInfo(chartId: number): Promise<ChartInfo> {
     // Using the same API endpoint as the Rust implementation
     const response = await fetch(`https://phira.5wyxi.com/chart/${chartId}`);
@@ -71,7 +91,11 @@ export class ProtocolHandler {
 
     switch (message.type) {
       case ClientCommandType.Ping:
-        sendResponse({ type: ServerCommandType.Pong });
+        this.respond(connectionId, sendResponse, { type: ServerCommandType.Pong });
+        break;
+
+      case ClientCommandType.Pong:
+        this.logger.debug('Heartbeat pong received', { connectionId });
         break;
 
       case ClientCommandType.Authenticate:
@@ -149,7 +173,7 @@ export class ProtocolHandler {
 
     if (this.sessions.has(connectionId)) {
       this.logger.warn('Repeated authentication attempt', { connectionId });
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.Authenticate,
         success: false,
         error: 'Already authenticated',
@@ -159,7 +183,7 @@ export class ProtocolHandler {
 
     if (token.length !== 32) {
       this.logger.warn('Invalid token length', { connectionId, tokenLength: token.length });
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.Authenticate,
         success: false,
         error: 'Invalid token length',
@@ -183,7 +207,7 @@ export class ProtocolHandler {
           userName: userInfo.name,
         });
 
-        sendResponse({
+        this.respond(connectionId, sendResponse, {
           type: ServerCommandType.Authenticate,
           success: true,
           user: userInfo,
@@ -196,7 +220,7 @@ export class ProtocolHandler {
           error: errorMessage,
         });
 
-        sendResponse({
+        this.respond(connectionId, sendResponse, {
           type: ServerCommandType.Authenticate,
           success: false,
           error: errorMessage,
@@ -214,7 +238,11 @@ export class ProtocolHandler {
   ): void {
     const session = this.sessions.get(connectionId);
     if (!session) {
-      sendResponse({ type: ServerCommandType.Chat, success: false, error: 'Not authenticated' });
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.Chat,
+        success: false,
+        error: 'Not authenticated',
+      });
       return;
     }
 
@@ -228,7 +256,11 @@ export class ProtocolHandler {
       userId: session.userId,
       message,
     });
-    sendResponse({ type: ServerCommandType.Chat, success: true });
+
+    this.respond(connectionId, sendResponse, {
+      type: ServerCommandType.Chat,
+      success: true,
+    });
   }
 
   private handleCreateRoom(
@@ -238,7 +270,7 @@ export class ProtocolHandler {
   ): void {
     const session = this.sessions.get(connectionId);
     if (!session) {
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.CreateRoom,
         success: false,
         error: 'Not authenticated',
@@ -248,7 +280,7 @@ export class ProtocolHandler {
 
     const existingRoom = this.roomManager.getRoomByUserId(session.userId);
     if (existingRoom) {
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.CreateRoom,
         success: false,
         error: 'Already in a room',
@@ -271,23 +303,25 @@ export class ProtocolHandler {
         roomId: room.id,
       });
 
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.CreateRoom,
         success: true,
         room: this.toClientRoomState(room, session.userId),
       });
     } catch (error) {
+      const errorMessage = (error as Error).message;
+
       this.logger.error('Failed to create room', {
         connectionId,
         userId: session.userId,
         roomId,
-        error: (error as Error).message,
+        error: errorMessage,
       });
 
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.CreateRoom,
         success: false,
-        error: (error as Error).message,
+        error: errorMessage,
       });
     }
   }
@@ -300,7 +334,7 @@ export class ProtocolHandler {
   ): void {
     const session = this.sessions.get(connectionId);
     if (!session) {
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.JoinRoom,
         success: false,
         error: 'Not authenticated',
@@ -310,7 +344,7 @@ export class ProtocolHandler {
 
     const existingRoom = this.roomManager.getRoomByUserId(session.userId);
     if (existingRoom) {
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.JoinRoom,
         success: false,
         error: 'Already in a room',
@@ -320,7 +354,7 @@ export class ProtocolHandler {
 
     const room = this.roomManager.getRoom(roomId);
     if (!room) {
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.JoinRoom,
         success: false,
         error: 'Room not found',
@@ -338,18 +372,22 @@ export class ProtocolHandler {
         roomId,
       });
 
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.JoinRoom,
         success: true,
         room: this.toClientRoomState(room, session.userId),
       });
 
-      this.broadcastToRoom(room, {
-        type: ServerCommandType.OnJoinRoom,
-        user: userInfo,
-      }, connectionId);
+      this.broadcastToRoom(
+        room,
+        {
+          type: ServerCommandType.OnJoinRoom,
+          user: userInfo,
+        },
+        connectionId,
+      );
     } else {
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.JoinRoom,
         success: false,
         error: 'Failed to join room',
@@ -363,7 +401,7 @@ export class ProtocolHandler {
   ): void {
     const session = this.sessions.get(connectionId);
     if (!session) {
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.LeaveRoom,
         success: false,
         error: 'Not authenticated',
@@ -373,7 +411,7 @@ export class ProtocolHandler {
 
     const room = this.roomManager.getRoomByUserId(session.userId);
     if (!room) {
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.LeaveRoom,
         success: false,
         error: 'Not in a room',
@@ -387,28 +425,25 @@ export class ProtocolHandler {
       roomId: room.id,
     });
 
-    // Check if the leaving player is the host
     const wasHost = this.roomManager.isRoomOwner(room.id, session.userId);
-
-    // Remove player from room (this also handles host transfer if needed)
     const playerRemoved = this.roomManager.removePlayerFromRoom(room.id, session.userId);
 
     if (playerRemoved) {
-      // Get updated room state after player removal
       const updatedRoom = this.roomManager.getRoom(room.id);
-      
-      if (updatedRoom) {
-        // Broadcast to remaining players
-        this.broadcastToRoom(updatedRoom, {
-          type: ServerCommandType.OnLeaveRoom,
-          userId: session.userId,
-        }, connectionId);
 
-        // If the leaving player was host and there are still players, check if host was transferred
+      if (updatedRoom) {
+        this.broadcastToRoom(
+          updatedRoom,
+          {
+            type: ServerCommandType.OnLeaveRoom,
+            userId: session.userId,
+          },
+          connectionId,
+        );
+
         if (wasHost && updatedRoom.players.size > 0 && updatedRoom.ownerId !== session.userId) {
           const newHostId = updatedRoom.ownerId;
-          
-          // Broadcast host change to all players
+
           this.broadcastToRoom(updatedRoom, {
             type: ServerCommandType.ChangeHost,
             newHostId,
@@ -422,12 +457,12 @@ export class ProtocolHandler {
         }
       }
 
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.LeaveRoom,
         success: true,
       });
     } else {
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.LeaveRoom,
         success: false,
         error: 'Failed to leave room',
@@ -438,15 +473,23 @@ export class ProtocolHandler {
   private handleLockRoom(
     connectionId: string,
     lock: boolean,
-    _sendResponse: (response: ServerCommand) => void,
+    sendResponse: (response: ServerCommand) => void,
   ): void {
     const session = this.sessions.get(connectionId);
     if (!session) {
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.Message,
+        message: 'Not authenticated',
+      });
       return;
     }
 
     const room = this.roomManager.getRoomByUserId(session.userId);
     if (!room) {
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.Message,
+        message: 'Not in a room',
+      });
       return;
     }
 
@@ -456,28 +499,52 @@ export class ProtocolHandler {
         userId: session.userId,
         roomId: room.id,
       });
+
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.Message,
+        message: 'Only room owner can lock or unlock the room',
+      });
       return;
     }
 
     this.roomManager.setRoomLocked(room.id, lock);
-    this.broadcastToRoom(room, {
-      type: ServerCommandType.LockRoom,
+
+    this.logger.info('Room lock state updated', {
+      connectionId,
+      userId: session.userId,
+      roomId: room.id,
       locked: lock,
     });
+
+    const response: ServerCommand = {
+      type: ServerCommandType.LockRoom,
+      locked: lock,
+    };
+
+    this.respond(connectionId, sendResponse, response);
+    this.broadcastToRoom(room, response, connectionId);
   }
 
   private handleCycleRoom(
     connectionId: string,
     cycle: boolean,
-    _sendResponse: (response: ServerCommand) => void,
+    sendResponse: (response: ServerCommand) => void,
   ): void {
     const session = this.sessions.get(connectionId);
     if (!session) {
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.Message,
+        message: 'Not authenticated',
+      });
       return;
     }
 
     const room = this.roomManager.getRoomByUserId(session.userId);
     if (!room) {
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.Message,
+        message: 'Not in a room',
+      });
       return;
     }
 
@@ -487,14 +554,30 @@ export class ProtocolHandler {
         userId: session.userId,
         roomId: room.id,
       });
+
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.Message,
+        message: 'Only room owner can toggle cycle mode',
+      });
       return;
     }
 
     this.roomManager.setRoomCycle(room.id, cycle);
-    this.broadcastToRoom(room, {
-      type: ServerCommandType.CycleRoom,
+
+    this.logger.info('Room cycle mode updated', {
+      connectionId,
+      userId: session.userId,
+      roomId: room.id,
       cycle,
     });
+
+    const response: ServerCommand = {
+      type: ServerCommandType.CycleRoom,
+      cycle,
+    };
+
+    this.respond(connectionId, sendResponse, response);
+    this.broadcastToRoom(room, response, connectionId);
   }
 
   private async handleSelectChart(
@@ -504,7 +587,7 @@ export class ProtocolHandler {
   ): Promise<void> {
     const session = this.sessions.get(connectionId);
     if (!session) {
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.SelectChart,
         success: false,
         error: 'Not authenticated',
@@ -514,7 +597,7 @@ export class ProtocolHandler {
 
     const room = this.roomManager.getRoomByUserId(session.userId);
     if (!room) {
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.SelectChart,
         success: false,
         error: 'Not in a room',
@@ -528,7 +611,7 @@ export class ProtocolHandler {
         userId: session.userId,
         roomId: room.id,
       });
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.SelectChart,
         success: false,
         error: 'Only room owner can select chart',
@@ -559,7 +642,7 @@ export class ProtocolHandler {
       });
 
       // Send success response to the requester
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.SelectChart,
         success: true,
       });
@@ -573,7 +656,7 @@ export class ProtocolHandler {
         error: errorMessage,
       });
 
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.SelectChart,
         success: false,
         error: errorMessage,
@@ -587,7 +670,7 @@ export class ProtocolHandler {
   ): void {
     const session = this.sessions.get(connectionId);
     if (!session) {
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.RequestStart,
         success: false,
         error: 'Not authenticated',
@@ -597,7 +680,7 @@ export class ProtocolHandler {
 
     const room = this.roomManager.getRoomByUserId(session.userId);
     if (!room) {
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.RequestStart,
         success: false,
         error: 'Not in a room',
@@ -611,7 +694,7 @@ export class ProtocolHandler {
         userId: session.userId,
         roomId: room.id,
       });
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.RequestStart,
         success: false,
         error: 'Only room owner can start game',
@@ -619,10 +702,9 @@ export class ProtocolHandler {
       return;
     }
 
-    // Check if a chart is selected
     const selectedChart = this.roomManager.getRoomChart(room.id);
     if (!selectedChart) {
-      sendResponse({
+      this.respond(connectionId, sendResponse, {
         type: ServerCommandType.RequestStart,
         success: false,
         error: 'No chart selected',
@@ -635,7 +717,7 @@ export class ProtocolHandler {
       type: ServerCommandType.OnRequestStart,
     });
 
-    sendResponse({
+    this.respond(connectionId, sendResponse, {
       type: ServerCommandType.RequestStart,
       success: true,
     });
@@ -643,23 +725,35 @@ export class ProtocolHandler {
 
   private handleReady(
     connectionId: string,
-    _sendResponse: (response: ServerCommand) => void,
+    sendResponse: (response: ServerCommand) => void,
   ): void {
     const session = this.sessions.get(connectionId);
     if (!session) {
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.Message,
+        message: 'Not authenticated',
+      });
       return;
     }
 
     const room = this.roomManager.getRoomByUserId(session.userId);
     if (!room) {
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.Message,
+        message: 'Not in a room',
+      });
       return;
     }
 
     this.roomManager.setPlayerReady(room.id, session.userId, true);
-    this.broadcastToRoom(room, {
+
+    const readyCommand: ServerCommand = {
       type: ServerCommandType.Ready,
       userId: session.userId,
-    });
+    };
+
+    this.respond(connectionId, sendResponse, readyCommand);
+    this.broadcastToRoom(room, readyCommand, connectionId);
 
     const allReady = Array.from(room.players.values()).every((p) => p.isReady || p.user.monitor);
     if (allReady && room.players.size > 0) {
@@ -673,58 +767,89 @@ export class ProtocolHandler {
 
   private handleCancelReady(
     connectionId: string,
-    _sendResponse: (response: ServerCommand) => void,
+    sendResponse: (response: ServerCommand) => void,
   ): void {
     const session = this.sessions.get(connectionId);
     if (!session) {
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.Message,
+        message: 'Not authenticated',
+      });
       return;
     }
 
     const room = this.roomManager.getRoomByUserId(session.userId);
     if (!room) {
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.Message,
+        message: 'Not in a room',
+      });
       return;
     }
 
     this.roomManager.setPlayerReady(room.id, session.userId, false);
-    this.broadcastToRoom(room, {
+
+    const cancelCommand: ServerCommand = {
       type: ServerCommandType.CancelReady,
       userId: session.userId,
-    });
+    };
+
+    this.respond(connectionId, sendResponse, cancelCommand);
+    this.broadcastToRoom(room, cancelCommand, connectionId);
   }
 
   private handlePlayed(
     connectionId: string,
     chartId: number,
-    _sendResponse: (response: ServerCommand) => void,
+    sendResponse: (response: ServerCommand) => void,
   ): void {
     const session = this.sessions.get(connectionId);
     if (!session) {
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.Message,
+        message: 'Not authenticated',
+      });
       return;
     }
 
     const room = this.roomManager.getRoomByUserId(session.userId);
     if (!room) {
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.Message,
+        message: 'Not in a room',
+      });
       return;
     }
 
-    this.broadcastToRoom(room, {
+    const playedCommand: ServerCommand = {
       type: ServerCommandType.Played,
       userId: session.userId,
       chartId,
-    });
+    };
+
+    this.respond(connectionId, sendResponse, playedCommand);
+    this.broadcastToRoom(room, playedCommand, connectionId);
   }
 
   private handleAbort(
     connectionId: string,
-    _sendResponse: (response: ServerCommand) => void,
+    sendResponse: (response: ServerCommand) => void,
   ): void {
     const session = this.sessions.get(connectionId);
     if (!session) {
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.Message,
+        message: 'Not authenticated',
+      });
       return;
     }
 
     const room = this.roomManager.getRoomByUserId(session.userId);
     if (!room) {
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.Message,
+        message: 'Not in a room',
+      });
       return;
     }
 
@@ -734,9 +859,12 @@ export class ProtocolHandler {
       this.roomManager.setPlayerReady(room.id, player.user.id, false);
     }
 
-    this.broadcastToRoom(room, {
+    const abortCommand: ServerCommand = {
       type: ServerCommandType.Abort,
-    });
+    };
+
+    this.respond(connectionId, sendResponse, abortCommand);
+    this.broadcastToRoom(room, abortCommand, connectionId);
   }
 
   private toClientRoomState(room: Room, userId: number): ClientRoomState {
