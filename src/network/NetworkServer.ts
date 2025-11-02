@@ -24,7 +24,7 @@ export class NetworkServer {
 
   async start(): Promise<void> {
     if (!this.config.protocol.tcp) {
-      this.logger.warn('TCP protocol disabled; network server will not start listening');
+      this.logger.warn('TCP协议被禁用；网络服务器无法开始监听');
       return;
     }
 

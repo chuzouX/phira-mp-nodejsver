@@ -23,10 +23,10 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
   const config = configService.getConfig();
   const logLevel = config.logging.level;
 
-  const logger = new ConsoleLogger(' 主程序 ', logLevel);
-  const roomLogger = new ConsoleLogger('房间处理', logLevel);
-  const authLogger = new ConsoleLogger('认证处理', logLevel);
-  const protocolLogger = new ConsoleLogger('协议处理', logLevel);
+  const logger = new ConsoleLogger('程序', logLevel);
+  const roomLogger = new ConsoleLogger('房间', logLevel);
+  const authLogger = new ConsoleLogger('认证', logLevel);
+  const protocolLogger = new ConsoleLogger('协议', logLevel);
 
   const roomManager = new InMemoryRoomManager(roomLogger);
   const authService = new PhiraAuthService(config.phiraApiUrl, authLogger);
