@@ -44,16 +44,16 @@ export class TcpServer {
           const runtimeHost = typeof address === 'object' && address ? address.address : host;
           const runtimePort = typeof address === 'object' && address ? address.port : port;
 
-          this.logger.info('TCP server started', { host: runtimeHost, port: runtimePort });
+          this.logger.info('TCP 服务器已启动：', { host: runtimeHost, port: runtimePort });
           resolve();
         });
 
         this.server.on('error', (error) => {
-          this.logger.error('TCP server error', { error: error.message });
+          this.logger.error('TCP 服务器错误：', { error: error.message });
           reject(error);
         });
       } catch (error) {
-        this.logger.error('Failed to start TCP server', {
+        this.logger.error('启动 TCP 服务器失败：', {
           error: (error as Error).message,
         });
         reject(error);
@@ -66,19 +66,19 @@ export class TcpServer {
       this.connections.forEach((state, connectionId) => {
         this.clearTimeoutMonitor(state);
         state.socket.destroy();
-        this.logger.debug('Connection closed during shutdown', { connectionId });
+        this.logger.debug('关机时关闭连接：', { connectionId });
       });
       this.connections.clear();
 
       if (!this.server) {
-        this.logger.info('TCP server stopped');
+        this.logger.info('已关闭 TCP 服务器');
         resolve();
         return;
       }
 
       this.server.close(() => {
         this.server = undefined;
-        this.logger.info('TCP server stopped');
+        this.logger.info('已关闭 TCP 服务器');
         resolve();
       });
     });
@@ -96,7 +96,7 @@ export class TcpServer {
 
     this.connections.set(connectionId, state);
 
-    this.logger.info('TCP connection established', {
+    this.logger.debug('建立TCP连接：', {
       connectionId,
       remoteAddress: socket.remoteAddress,
       remotePort: socket.remotePort,
@@ -117,10 +117,10 @@ export class TcpServer {
             state.versionReceived = true;
             state.version = version;
 
-            this.logger.debug('Protocol version received', { connectionId, version });
+            this.logger.debug('收到协议版本信息：', { connectionId, version });
 
             if (version !== PROTOCOL_VERSION) {
-              this.logger.warn('Client protocol version mismatch', {
+              this.logger.warn('客户端协议版本不匹配：', {
                 connectionId,
                 expected: PROTOCOL_VERSION,
                 received: version,
@@ -133,7 +133,7 @@ export class TcpServer {
 
         this.processPackets(connectionId, state);
       } catch (error) {
-        this.logger.error('Error processing data', {
+        this.logger.error('处理数据失败：', {
           connectionId,
           error: (error as Error).message,
         });
@@ -144,11 +144,11 @@ export class TcpServer {
       this.clearTimeoutMonitor(state);
       this.connections.delete(connectionId);
       this.protocolHandler.handleDisconnection(connectionId);
-      this.logger.info('TCP connection closed', { connectionId });
+      this.logger.debug('TCP 连接被关闭：', { connectionId });
     });
 
     socket.on('error', (error) => {
-      this.logger.error('TCP socket error', {
+      this.logger.error('TCP 通信错误：', {
         connectionId,
         error: error.message,
       });
@@ -223,13 +223,13 @@ export class TcpServer {
             },
           );
         } else {
-          this.logger.debug('Unhandled command type', {
+          this.logger.debug('未处理的命令类型：', {
             connectionId,
             rawType: parsed.rawType,
           });
         }
       } catch (error) {
-        this.logger.error('Invalid packet received', {
+        this.logger.error('收到非法的包：', {
           connectionId,
           error: (error as Error).message,
         });
@@ -254,7 +254,7 @@ export class TcpServer {
       }
 
       if (shift > 32) {
-        throw new Error('Invalid ULEB encoding');
+        throw new Error('无效的ULEB编码');
       }
     }
 
@@ -272,7 +272,7 @@ export class TcpServer {
       socket.write(lengthBuffer);
       socket.write(payload);
     } catch (error) {
-      this.logger.error('Failed to send command', {
+      this.logger.error('发送命令失败：', {
         error: (error as Error).message,
       });
     }

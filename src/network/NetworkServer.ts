@@ -24,7 +24,7 @@ export class NetworkServer {
 
   async start(): Promise<void> {
     if (!this.config.protocol.tcp) {
-      this.logger.warn('TCP protocol disabled; network server will not start listening');
+      this.logger.warn('TCP协议被禁用；网络服务器无法开始监听');
       return;
     }
 
@@ -43,13 +43,9 @@ export class NetworkServer {
       this.runtimeHost = typeof host === 'string' ? host : undefined;
       this.runtimePort = typeof port === 'number' ? port : undefined;
 
-      this.logger.info('Server started successfully', {
-        host: this.runtimeHost ?? this.config.host,
-        port: this.runtimePort ?? this.config.port,
-        protocols: this.config.protocol,
-      });
+      this.logger.info('服务器启动成功');
     } catch (error) {
-      this.logger.error('Failed to start server', {
+      this.logger.error('启动服务器失败：', {
         error: (error as Error).message,
       });
       throw error;
@@ -58,14 +54,14 @@ export class NetworkServer {
 
   async stop(): Promise<void> {
     if (!this.config.protocol.tcp) {
-      this.logger.info('Server stopped successfully');
+      this.logger.info('服务器已成功关闭');
       return;
     }
 
     await this.tcpServer.stop();
     this.runtimePort = undefined;
     this.runtimeHost = undefined;
-    this.logger.info('Server stopped successfully');
+    this.logger.info('服务器已成功关闭');
   }
 
   getTcpServer(): NetServer | undefined {

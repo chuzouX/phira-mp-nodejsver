@@ -74,7 +74,7 @@ export class InMemoryRoomManager implements RoomManager {
     const { id, name, ownerId, ownerInfo, connectionId, maxPlayers = 8, password } = options;
 
     if (this.rooms.has(id)) {
-      throw new Error(`Room with id ${id} already exists`);
+      throw new Error(`房间 ${id} 已存在`);
     }
 
     const players = new Map<number, PlayerInfo>();
@@ -99,7 +99,7 @@ export class InMemoryRoomManager implements RoomManager {
     };
 
     this.rooms.set(id, room);
-    this.logger.info('Room created', { id, name, ownerId, totalRooms: this.rooms.size });
+    this.logger.info('房间已创建：', { id, name, ownerId, totalRooms: this.rooms.size });
 
     return room;
   }
@@ -112,7 +112,7 @@ export class InMemoryRoomManager implements RoomManager {
     const deleted = this.rooms.delete(id);
 
     if (deleted) {
-      this.logger.info('Room deleted', { id, totalRooms: this.rooms.size });
+      this.logger.info(`删除房间：${id}`);
     }
 
     return deleted;
@@ -154,7 +154,7 @@ export class InMemoryRoomManager implements RoomManager {
       isReady: false,
     });
 
-    this.logger.info('Player added to room', { roomId, userId, playerCount: room.players.size });
+    this.logger.debug('已添加玩家到房间：', { roomId, userId, playerCount: room.players.size });
     return true;
   }
 
@@ -166,7 +166,7 @@ export class InMemoryRoomManager implements RoomManager {
 
     const removed = room.players.delete(userId);
     if (removed) {
-      this.logger.info('Player removed from room', { roomId, userId, playerCount: room.players.size });
+      this.logger.info(`从房间 ${roomId}移除玩家${userId}`);
 
       if (room.players.size === 0) {
         this.deleteRoom(roomId);
@@ -249,7 +249,7 @@ export class InMemoryRoomManager implements RoomManager {
     }
 
     room.ownerId = newOwnerId;
-    this.logger.info('Room owner changed', { roomId, newOwnerId });
+    this.logger.info('房主已更换：', { roomId, newOwnerId });
     return true;
   }
 
@@ -279,7 +279,7 @@ export class InMemoryRoomManager implements RoomManager {
 
     emptyRooms.forEach((id) => this.deleteRoom(id));
     if (emptyRooms.length > 0) {
-      this.logger.info('Empty rooms cleaned up', { count: emptyRooms.length });
+      this.logger.info('清理空房间：', { count: emptyRooms.length });
     }
   }
 }

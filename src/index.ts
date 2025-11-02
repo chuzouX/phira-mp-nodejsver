@@ -12,7 +12,7 @@ const main = async () => {
     await app.start();
 
     const shutdown = async (signal: string) => {
-      app.logger.info(`Received ${signal} signal, shutting down...`);
+      app.logger.info(`收到 ${signal} 信号, 正在关闭服务器...`);
       await app.stop();
       process.exit(0);
     };
@@ -20,7 +20,7 @@ const main = async () => {
     process.on('SIGTERM', () => shutdown('SIGTERM'));
     process.on('SIGINT', () => shutdown('SIGINT'));
   } catch (error) {
-    console.error('Failed to start application:', error);
+    console.error('启动程序失败:', error);
     process.exit(1);
   }
 };

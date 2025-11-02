@@ -50,9 +50,9 @@ export class ProtocolHandler {
     };
 
     if (response.type === ServerCommandType.Pong) {
-      this.logger.debug('Response sent to client', logPayload);
+      this.logger.debug('已将请求发送给客户端：', logPayload);
     } else {
-      this.logger.info('Response sent to client', logPayload);
+      this.logger.debug('已将请求发送给客户端：', logPayload);
     }
   }
 
@@ -104,7 +104,7 @@ export class ProtocolHandler {
   }
 
   handleConnection(connectionId: string): void {
-    this.logger.info('Protocol connection established', {
+    this.logger.debug('建立协议连接：', {
       connectionId,
       totalRooms: this.roomManager.count(),
     });
@@ -189,7 +189,7 @@ export class ProtocolHandler {
         break;
 
       default:
-        this.logger.warn('Unhandled command type', {
+        this.logger.warn('未知的指令类型：', {
           connectionId,
           messageType: ClientCommandType[message.type],
         });
@@ -203,10 +203,10 @@ export class ProtocolHandler {
     token: string,
     sendResponse: (response: ServerCommand) => void,
   ): void {
-    this.logger.info('Authentication attempt', { connectionId, tokenLength: token.length });
+    this.logger.debug('重复验证尝试：', { connectionId, tokenLength: token.length });
 
     if (this.sessions.has(connectionId)) {
-      this.logger.warn('Repeated authentication attempt', { connectionId });
+      this.logger.warn('重复验证尝试：', { connectionId });
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.Authenticate,
         result: { ok: false, error: 'repeated authenticate' },
@@ -215,7 +215,7 @@ export class ProtocolHandler {
     }
 
     if (token.length !== 32) {
-      this.logger.warn('Invalid token length', { connectionId, tokenLength: token.length });
+      this.logger.warn('非法的 Token 长度', { connectionId, tokenLength: token.length });
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.Authenticate,
         result: { ok: false, error: 'invalid token' },
@@ -233,7 +233,7 @@ export class ProtocolHandler {
           connectionId,
         });
 
-        this.logger.info('Authentication successful', {
+        this.logger.debug('验证成功：', {
           connectionId,
           userId: userInfo.id,
           userName: userInfo.name,
@@ -248,7 +248,7 @@ export class ProtocolHandler {
         });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Authentication failed';
-        this.logger.warn('Authentication failed', {
+        this.logger.warn('验证失败：', {
           connectionId,
           error: errorMessage,
         });
@@ -356,7 +356,7 @@ export class ProtocolHandler {
     } catch (error) {
       const errorMessage = (error as Error).message;
 
-      this.logger.error('Failed to create room', {
+      this.logger.error('创建房间失败：', {
         connectionId,
         userId: session.userId,
         roomId,
@@ -424,7 +424,7 @@ export class ProtocolHandler {
     const success = this.roomManager.addPlayerToRoom(roomId, session.userId, userInfo, connectionId);
 
     if (success) {
-      this.logger.info('Player joined room', {
+      this.logger.info('玩家加入房间：', {
         connectionId,
         userId: session.userId,
         roomId,
@@ -485,7 +485,7 @@ export class ProtocolHandler {
       return;
     }
 
-    this.logger.info('Player leaving room', {
+    this.logger.info('玩家离开房间：', {
       connectionId,
       userId: session.userId,
       roomId: room.id,

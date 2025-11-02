@@ -31,23 +31,23 @@ const client = createConnection({ port: PORT, host: HOST }, () => {
 client.on('data', (data: Buffer) => {
   try {
     const message = JSON.parse(data.toString());
-    console.log('Received:', message);
+    console.log('收到:', message);
   } catch (error) {
-    console.log('Received raw data:', data.toString());
+    console.log('收到原数据:', data.toString());
   }
 });
 
 client.on('error', (error) => {
-  console.error('Connection error:', error.message);
+  console.error('连接错误:', error.message);
 });
 
 client.on('close', () => {
-  console.log('Connection closed');
+  console.log('连接已关闭');
   process.exit(0);
 });
 
 // Handle graceful shutdown
 process.on('SIGINT', () => {
-  console.log('\nClosing connection...');
+  console.log('\n正在关闭服务器...');
   client.end();
 });
