@@ -1,10 +1,14 @@
 /*
  * MIT License
  * Copyright (c) 2024
+ * 
+ * IMPORTANT: This file must match phira-mp-common/src/command.rs exactly
+ * Source: https://github.com/TeamFlos/phira-mp/blob/main/phira-mp-common/src/command.rs
  */
 
 import { BinaryReader, BinaryWriter } from './BinaryProtocol';
 
+// Source: phira-mp-common/src/command.rs:157-178
 export enum ClientCommandType {
   Ping = 0,
   Authenticate = 1,
@@ -22,9 +26,9 @@ export enum ClientCommandType {
   CancelReady = 13,
   Played = 14,
   Abort = 15,
-  Pong = 16,
 }
 
+// Source: phira-mp-common/src/command.rs:276-308
 export enum ServerCommandType {
   Pong = 0,
   Authenticate = 1,
@@ -38,20 +42,17 @@ export enum ServerCommandType {
   JoinRoom = 9,
   OnJoinRoom = 10,
   LeaveRoom = 11,
-  OnLeaveRoom = 12,
-  LockRoom = 13,
-  CycleRoom = 14,
-  SelectChart = 15,
-  OnSelectChart = 16,
-  RequestStart = 17,
-  OnRequestStart = 18,
-  Ready = 19,
-  CancelReady = 20,
-  Played = 21,
-  Abort = 22,
-  Ping = 23,
+  LockRoom = 12,
+  CycleRoom = 13,
+  SelectChart = 14,
+  RequestStart = 15,
+  Ready = 16,
+  CancelReady = 17,
+  Played = 18,
+  Abort = 19,
 }
 
+// Source: phira-mp-common/src/command.rs:157-178
 export type ClientCommand =
   | { type: ClientCommandType.Ping }
   | { type: ClientCommandType.Authenticate; token: string }
@@ -68,20 +69,22 @@ export type ClientCommand =
   | { type: ClientCommandType.Ready }
   | { type: ClientCommandType.CancelReady }
   | { type: ClientCommandType.Played; id: number }
-  | { type: ClientCommandType.Abort }
-  | { type: ClientCommandType.Pong };
+  | { type: ClientCommandType.Abort };
 
+// Source: phira-mp-common/src/command.rs:250-254
 export interface UserInfo {
   id: number;
   name: string;
   monitor: boolean;
 }
 
-export interface RoomState {
-  state: 'SelectChart' | 'WaitingForReady' | 'Playing';
-  chartId?: number;
-}
+// Source: phira-mp-common/src/command.rs:236-247
+export type RoomState =
+  | { type: 'SelectChart'; chartId: number | null }
+  | { type: 'WaitingForReady' }
+  | { type: 'Playing' };
 
+// Source: phira-mp-common/src/command.rs:256-266
 export interface ClientRoomState {
   id: string;
   state: RoomState;
@@ -93,35 +96,57 @@ export interface ClientRoomState {
   users: Map<number, UserInfo>;
 }
 
+// Source: phira-mp-common/src/command.rs:268-273
+export interface JoinRoomResponse {
+  state: RoomState;
+  users: UserInfo[];
+  live: boolean;
+}
+
+// Source: phira-mp-common/src/command.rs:181-234
+export type Message =
+  | { type: 'Chat'; user: number; content: string }
+  | { type: 'CreateRoom'; user: number }
+  | { type: 'JoinRoom'; user: number; name: string }
+  | { type: 'LeaveRoom'; user: number; name: string }
+  | { type: 'NewHost'; user: number }
+  | { type: 'SelectChart'; user: number; name: string; id: number }
+  | { type: 'GameStart'; user: number }
+  | { type: 'Ready'; user: number }
+  | { type: 'CancelReady'; user: number }
+  | { type: 'CancelGame'; user: number }
+  | { type: 'StartPlaying' }
+  | { type: 'Played'; user: number; score: number; accuracy: number; fullCombo: boolean }
+  | { type: 'GameEnd' }
+  | { type: 'Abort'; user: number }
+  | { type: 'LockRoom'; lock: boolean }
+  | { type: 'CycleRoom'; cycle: boolean };
+
+// Helper type for Result<T, String> pattern used in Rust
+export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
+
+// Source: phira-mp-common/src/command.rs:276-308
 export type ServerCommand =
   | { type: ServerCommandType.Pong }
-  | { type: ServerCommandType.Ping; timestamp: number }
-  | {
-      type: ServerCommandType.Authenticate;
-      success: boolean;
-      error?: string;
-      user?: UserInfo;
-      room?: ClientRoomState;
-    }
-  | { type: ServerCommandType.Chat; success: boolean; error?: string }
-  | { type: ServerCommandType.Message; message: string }
+  | { type: ServerCommandType.Authenticate; result: Result<[UserInfo, ClientRoomState | null]> }
+  | { type: ServerCommandType.Chat; result: Result<void> }
+  | { type: ServerCommandType.Touches; player: number; frames: unknown }
+  | { type: ServerCommandType.Judges; player: number; judges: unknown }
+  | { type: ServerCommandType.Message; message: Message }
   | { type: ServerCommandType.ChangeState; state: RoomState }
-  | { type: ServerCommandType.ChangeHost; newHostId: number }
-  | { type: ServerCommandType.CreateRoom; success: boolean; error?: string; room?: ClientRoomState }
-  | { type: ServerCommandType.JoinRoom; success: boolean; error?: string; room?: ClientRoomState }
+  | { type: ServerCommandType.ChangeHost; isHost: boolean }
+  | { type: ServerCommandType.CreateRoom; result: Result<void> }
+  | { type: ServerCommandType.JoinRoom; result: Result<JoinRoomResponse> }
   | { type: ServerCommandType.OnJoinRoom; user: UserInfo }
-  | { type: ServerCommandType.LeaveRoom; success: boolean; error?: string }
-  | { type: ServerCommandType.OnLeaveRoom; userId: number }
-  | { type: ServerCommandType.LockRoom; locked: boolean }
-  | { type: ServerCommandType.CycleRoom; cycle: boolean }
-  | { type: ServerCommandType.SelectChart; success: boolean; error?: string }
-  | { type: ServerCommandType.OnSelectChart; chartId: number }
-  | { type: ServerCommandType.RequestStart; success: boolean; error?: string }
-  | { type: ServerCommandType.OnRequestStart }
-  | { type: ServerCommandType.Ready; userId: number }
-  | { type: ServerCommandType.CancelReady; userId: number }
-  | { type: ServerCommandType.Played; userId: number; chartId: number }
-  | { type: ServerCommandType.Abort };
+  | { type: ServerCommandType.LeaveRoom; result: Result<void> }
+  | { type: ServerCommandType.LockRoom; result: Result<void> }
+  | { type: ServerCommandType.CycleRoom; result: Result<void> }
+  | { type: ServerCommandType.SelectChart; result: Result<void> }
+  | { type: ServerCommandType.RequestStart; result: Result<void> }
+  | { type: ServerCommandType.Ready; result: Result<void> }
+  | { type: ServerCommandType.CancelReady; result: Result<void> }
+  | { type: ServerCommandType.Played; result: Result<void> }
+  | { type: ServerCommandType.Abort; result: Result<void> };
 
 export interface ParsedClientCommand {
   rawType: number;
@@ -135,9 +160,6 @@ export class CommandParser {
     switch (commandType) {
       case ClientCommandType.Ping:
         return { rawType: commandType, command: { type: ClientCommandType.Ping } };
-
-      case ClientCommandType.Pong:
-        return { rawType: commandType, command: { type: ClientCommandType.Pong } };
 
       case ClientCommandType.Authenticate: {
         const token = reader.string();
@@ -224,44 +246,67 @@ export class CommandParser {
     }
   }
 
+  // Source: phira-mp-common/src/bin.rs (Result serialization pattern)
   static writeServerCommand(writer: BinaryWriter, command: ServerCommand): void {
     writer.u8(command.type);
 
     switch (command.type) {
       case ServerCommandType.Pong:
-        break;
-
-      case ServerCommandType.Ping:
-        writer.f64(command.timestamp);
+        // No payload
         break;
 
       case ServerCommandType.Authenticate:
-        if (command.success && command.user) {
+        // Result<(UserInfo, Option<ClientRoomState>), String>
+        if (command.result.ok) {
           writer.bool(true);
-          CommandParser.writeUserInfo(writer, command.user);
-          if (command.room) {
+          const [user, room] = command.result.value;
+          CommandParser.writeUserInfo(writer, user);
+          if (room) {
             writer.bool(true);
-            CommandParser.writeClientRoomState(writer, command.room);
+            CommandParser.writeClientRoomState(writer, room);
           } else {
             writer.bool(false);
           }
         } else {
           writer.bool(false);
-          writer.string(command.error || 'Authentication failed');
+          writer.string(command.result.error);
         }
         break;
 
       case ServerCommandType.Chat:
-        if (command.success) {
+      case ServerCommandType.CreateRoom:
+      case ServerCommandType.LeaveRoom:
+      case ServerCommandType.LockRoom:
+      case ServerCommandType.CycleRoom:
+      case ServerCommandType.SelectChart:
+      case ServerCommandType.RequestStart:
+      case ServerCommandType.Ready:
+      case ServerCommandType.CancelReady:
+      case ServerCommandType.Played:
+      case ServerCommandType.Abort:
+        // Result<(), String>
+        if (command.result.ok) {
           writer.bool(true);
+          // () has no payload
         } else {
           writer.bool(false);
-          writer.string(command.error || 'Chat failed');
+          writer.string(command.result.error);
+        }
+        break;
+
+      case ServerCommandType.JoinRoom:
+        // Result<JoinRoomResponse, String>
+        if (command.result.ok) {
+          writer.bool(true);
+          CommandParser.writeJoinRoomResponse(writer, command.result.value);
+        } else {
+          writer.bool(false);
+          writer.string(command.result.error);
         }
         break;
 
       case ServerCommandType.Message:
-        writer.string(command.message);
+        CommandParser.writeMessage(writer, command.message);
         break;
 
       case ServerCommandType.ChangeState:
@@ -269,94 +314,17 @@ export class CommandParser {
         break;
 
       case ServerCommandType.ChangeHost:
-        writer.i32(command.newHostId);
-        break;
-
-      case ServerCommandType.CreateRoom:
-        if (command.success && command.room) {
-          writer.bool(true);
-          CommandParser.writeClientRoomState(writer, command.room);
-        } else {
-          writer.bool(false);
-          writer.string(command.error || 'Failed to create room');
-        }
-        break;
-
-      case ServerCommandType.JoinRoom:
-        if (command.success && command.room) {
-          writer.bool(true);
-          CommandParser.writeClientRoomState(writer, command.room);
-        } else {
-          writer.bool(false);
-          writer.string(command.error || 'Failed to join room');
-        }
+        writer.bool(command.isHost);
         break;
 
       case ServerCommandType.OnJoinRoom:
         CommandParser.writeUserInfo(writer, command.user);
         break;
 
-      case ServerCommandType.LeaveRoom:
-        if (command.success) {
-          writer.bool(true);
-        } else {
-          writer.bool(false);
-          writer.string(command.error || 'Failed to leave room');
-        }
-        break;
-
-      case ServerCommandType.OnLeaveRoom:
-        writer.i32(command.userId);
-        break;
-
-      case ServerCommandType.LockRoom:
-        writer.bool(command.locked);
-        break;
-
-      case ServerCommandType.CycleRoom:
-        writer.bool(command.cycle);
-        break;
-
-      case ServerCommandType.SelectChart:
-        if (command.success) {
-          writer.bool(true);
-        } else {
-          writer.bool(false);
-          writer.string(command.error || 'Failed to select chart');
-        }
-        break;
-
-      case ServerCommandType.OnSelectChart:
-        writer.i32(command.chartId);
-        break;
-
-      case ServerCommandType.RequestStart:
-        if (command.success) {
-          writer.bool(true);
-        } else {
-          writer.bool(false);
-          writer.string(command.error || 'Failed to start game');
-        }
-        break;
-
-      case ServerCommandType.OnRequestStart:
-        break;
-
-      case ServerCommandType.Ready:
-        writer.i32(command.userId);
-        break;
-
-      case ServerCommandType.CancelReady:
-        writer.i32(command.userId);
-        break;
-
-      case ServerCommandType.Played:
-        writer.i32(command.userId);
-        writer.i32(command.chartId);
-        break;
-
-      case ServerCommandType.Abort:
-        break;
+      case ServerCommandType.Touches:
+      case ServerCommandType.Judges:
+        // Not implemented - these are monitor-only features
+        throw new Error('Touches/Judges not implemented');
 
       default:
         throw new Error('Unimplemented server command type');
@@ -370,10 +338,10 @@ export class CommandParser {
   }
 
   private static writeRoomState(writer: BinaryWriter, state: RoomState): void {
-    switch (state.state) {
+    switch (state.type) {
       case 'SelectChart':
         writer.u8(0);
-        if (typeof state.chartId === 'number') {
+        if (state.chartId !== null) {
           writer.bool(true);
           writer.i32(state.chartId);
         } else {
@@ -387,7 +355,7 @@ export class CommandParser {
         writer.u8(2);
         break;
       default:
-        throw new Error(`Unsupported room state: ${state.state}`);
+        throw new Error(`Unsupported room state: ${(state as any).type}`);
     }
   }
 
@@ -400,11 +368,99 @@ export class CommandParser {
     writer.bool(room.isHost);
     writer.bool(room.isReady);
 
+    // HashMap<i32, UserInfo>
     const entries = room.users instanceof Map ? Array.from(room.users.entries()) : [];
     writer.uleb(entries.length);
     for (const [userId, user] of entries) {
       writer.i32(userId);
       CommandParser.writeUserInfo(writer, user);
+    }
+  }
+
+  private static writeJoinRoomResponse(writer: BinaryWriter, response: JoinRoomResponse): void {
+    CommandParser.writeRoomState(writer, response.state);
+    writer.uleb(response.users.length);
+    for (const user of response.users) {
+      CommandParser.writeUserInfo(writer, user);
+    }
+    writer.bool(response.live);
+  }
+
+  private static writeMessage(writer: BinaryWriter, message: Message): void {
+    // Enum discriminant as u8
+    switch (message.type) {
+      case 'Chat':
+        writer.u8(0);
+        writer.i32(message.user);
+        writer.string(message.content);
+        break;
+      case 'CreateRoom':
+        writer.u8(1);
+        writer.i32(message.user);
+        break;
+      case 'JoinRoom':
+        writer.u8(2);
+        writer.i32(message.user);
+        writer.string(message.name);
+        break;
+      case 'LeaveRoom':
+        writer.u8(3);
+        writer.i32(message.user);
+        writer.string(message.name);
+        break;
+      case 'NewHost':
+        writer.u8(4);
+        writer.i32(message.user);
+        break;
+      case 'SelectChart':
+        writer.u8(5);
+        writer.i32(message.user);
+        writer.string(message.name);
+        writer.i32(message.id);
+        break;
+      case 'GameStart':
+        writer.u8(6);
+        writer.i32(message.user);
+        break;
+      case 'Ready':
+        writer.u8(7);
+        writer.i32(message.user);
+        break;
+      case 'CancelReady':
+        writer.u8(8);
+        writer.i32(message.user);
+        break;
+      case 'CancelGame':
+        writer.u8(9);
+        writer.i32(message.user);
+        break;
+      case 'StartPlaying':
+        writer.u8(10);
+        break;
+      case 'Played':
+        writer.u8(11);
+        writer.i32(message.user);
+        writer.i32(message.score);
+        writer.f32(message.accuracy);
+        writer.bool(message.fullCombo);
+        break;
+      case 'GameEnd':
+        writer.u8(12);
+        break;
+      case 'Abort':
+        writer.u8(13);
+        writer.i32(message.user);
+        break;
+      case 'LockRoom':
+        writer.u8(14);
+        writer.bool(message.lock);
+        break;
+      case 'CycleRoom':
+        writer.u8(15);
+        writer.bool(message.cycle);
+        break;
+      default:
+        throw new Error(`Unsupported message type: ${(message as any).type}`);
     }
   }
 }

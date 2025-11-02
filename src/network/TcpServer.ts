@@ -10,18 +10,17 @@ import { BinaryReader, BinaryWriter } from '../domain/protocol/BinaryProtocol';
 import { ClientCommandType, CommandParser, ServerCommand, ServerCommandType } from '../domain/protocol/Commands';
 
 const PROTOCOL_VERSION = 1;
-const SERVER_HEARTBEAT_INTERVAL_MS = 30_000;
-const SERVER_HEARTBEAT_TIMEOUT_MS = 10_000;
+
+// Source: phira-mp-common/src/lib.rs:17-19
+const HEARTBEAT_DISCONNECT_TIMEOUT_MS = 10_000; // 10 seconds
 
 interface ConnectionState {
   socket: Socket;
   versionReceived: boolean;
   buffer: Buffer;
   version?: number;
-  heartbeatInterval?: NodeJS.Timeout;
-  pongTimeout?: NodeJS.Timeout;
-  awaitingPong: boolean;
-  lastPingTimestamp?: number;
+  lastReceivedTime: number;
+  timeoutCheckInterval?: NodeJS.Timeout;
 }
 
 export class TcpServer {
@@ -65,7 +64,7 @@ export class TcpServer {
   stop(): Promise<void> {
     return new Promise((resolve) => {
       this.connections.forEach((state, connectionId) => {
-        this.clearHeartbeat(state);
+        this.clearTimeoutMonitor(state);
         state.socket.destroy();
         this.logger.debug('Connection closed during shutdown', { connectionId });
       });
@@ -92,7 +91,7 @@ export class TcpServer {
       socket,
       versionReceived: false,
       buffer: Buffer.alloc(0),
-      awaitingPong: false,
+      lastReceivedTime: Date.now(),
     };
 
     this.connections.set(connectionId, state);
@@ -104,10 +103,11 @@ export class TcpServer {
     });
 
     this.protocolHandler.handleConnection(connectionId);
-    this.startHeartbeat(connectionId, state);
+    this.startTimeoutMonitor(connectionId, state);
 
     socket.on('data', (data: Buffer) => {
       try {
+        state.lastReceivedTime = Date.now();
         state.buffer = Buffer.concat([state.buffer, data]);
 
         if (!state.versionReceived) {
@@ -141,7 +141,7 @@ export class TcpServer {
     });
 
     socket.on('close', () => {
-      this.clearHeartbeat(state);
+      this.clearTimeoutMonitor(state);
       this.connections.delete(connectionId);
       this.protocolHandler.handleDisconnection(connectionId);
       this.logger.info('TCP connection closed', { connectionId });
@@ -155,77 +155,31 @@ export class TcpServer {
     });
   }
 
-  private startHeartbeat(connectionId: string, state: ConnectionState): void {
-    this.clearHeartbeat(state);
+  // Source: phira-mp-server/src/session.rs:284-300
+  // Monitor last received time and disconnect after HEARTBEAT_DISCONNECT_TIMEOUT
+  private startTimeoutMonitor(connectionId: string, state: ConnectionState): void {
+    this.clearTimeoutMonitor(state);
 
-    state.heartbeatInterval = setInterval(() => {
-      this.sendHeartbeat(connectionId, state);
-    }, SERVER_HEARTBEAT_INTERVAL_MS);
+    // Check every second if we should disconnect
+    state.timeoutCheckInterval = setInterval(() => {
+      const timeSinceLastReceived = Date.now() - state.lastReceivedTime;
+      
+      if (timeSinceLastReceived > HEARTBEAT_DISCONNECT_TIMEOUT_MS) {
+        this.logger.warn('Connection timeout - no messages received', {
+          connectionId,
+          timeSinceLastReceived,
+          timeoutMs: HEARTBEAT_DISCONNECT_TIMEOUT_MS,
+        });
+        state.socket.destroy(new Error('Connection timeout'));
+      }
+    }, 1000);
   }
 
-  private sendHeartbeat(connectionId: string, state: ConnectionState): void {
-    if (state.socket.destroyed) {
-      this.clearHeartbeat(state);
-      return;
+  private clearTimeoutMonitor(state: ConnectionState): void {
+    if (state.timeoutCheckInterval) {
+      clearInterval(state.timeoutCheckInterval);
+      state.timeoutCheckInterval = undefined;
     }
-
-    if (state.awaitingPong) {
-      this.logger.warn('Skipping heartbeat; awaiting previous pong', { connectionId });
-      return;
-    }
-
-    const command: ServerCommand = {
-      type: ServerCommandType.Ping,
-      timestamp: Date.now(),
-    };
-
-    this.logger.debug('Sending heartbeat ping', { connectionId });
-
-    this.sendCommand(state.socket, command);
-    state.awaitingPong = true;
-    state.lastPingTimestamp = command.timestamp;
-
-    state.pongTimeout = setTimeout(() => {
-      state.awaitingPong = false;
-      state.pongTimeout = undefined;
-      this.logger.warn('Pong timeout, closing connection', { connectionId });
-      state.socket.destroy(new Error('Heartbeat timeout'));
-    }, SERVER_HEARTBEAT_TIMEOUT_MS);
-  }
-
-  private handleHeartbeatAck(connectionId: string, state: ConnectionState): void {
-    if (!state.awaitingPong) {
-      return;
-    }
-
-    state.awaitingPong = false;
-
-    if (state.pongTimeout) {
-      clearTimeout(state.pongTimeout);
-      state.pongTimeout = undefined;
-    }
-
-    const latency = state.lastPingTimestamp ? Date.now() - state.lastPingTimestamp : undefined;
-
-    this.logger.debug('Pong received from client', {
-      connectionId,
-      latency,
-    });
-  }
-
-  private clearHeartbeat(state: ConnectionState): void {
-    if (state.heartbeatInterval) {
-      clearInterval(state.heartbeatInterval);
-      state.heartbeatInterval = undefined;
-    }
-
-    if (state.pongTimeout) {
-      clearTimeout(state.pongTimeout);
-      state.pongTimeout = undefined;
-    }
-
-    state.awaitingPong = false;
-    state.lastPingTimestamp = undefined;
   }
 
   private processPackets(connectionId: string, state: ConnectionState): void {
@@ -253,13 +207,12 @@ export class TcpServer {
         const parsed = CommandParser.parseClientCommand(reader);
 
         if (parsed.command) {
-          if (parsed.command.type === ClientCommandType.Pong) {
-            this.handleHeartbeatAck(connectionId, state);
-            continue;
-          }
-
+          // Source: phira-mp-server/src/session.rs:164-166
+          // Client sends Ping, server responds with Pong immediately
           if (parsed.command.type === ClientCommandType.Ping) {
-            this.handleHeartbeatAck(connectionId, state);
+            this.logger.debug('Ping received, sending Pong', { connectionId });
+            this.sendCommand(state.socket, { type: ServerCommandType.Pong });
+            continue;
           }
 
           this.protocolHandler.handleMessage(

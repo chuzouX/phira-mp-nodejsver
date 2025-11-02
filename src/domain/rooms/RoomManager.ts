@@ -91,7 +91,7 @@ export class InMemoryRoomManager implements RoomManager {
       players,
       maxPlayers,
       password,
-      state: { state: 'SelectChart' },
+      state: { type: 'SelectChart', chartId: null },
       locked: false,
       cycle: false,
       live: true,
@@ -195,7 +195,7 @@ export class InMemoryRoomManager implements RoomManager {
     }
 
     room.state = state;
-    this.logger.debug('Room state changed', { roomId, state: state.state });
+    this.logger.debug('Room state changed', { roomId, state: state.type });
     return true;
   }
 
