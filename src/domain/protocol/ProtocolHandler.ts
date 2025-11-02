@@ -18,6 +18,8 @@ import {
   ClientRoomState,
   JoinRoomResponse,
   Message,
+  PlayerRanking,
+  PlayerScore,
 } from './Commands';
 
 interface UserSession {
@@ -84,6 +86,18 @@ export class ProtocolHandler {
     }
   }
 
+  private broadcastToRoomExcept(room: Room, excludeUserId: number, command: ServerCommand): void {
+    for (const [userId, playerInfo] of room.players.entries()) {
+      if (userId === excludeUserId) {
+        continue;
+      }
+      const callback = this.broadcastCallbacks.get(playerInfo.connectionId);
+      if (callback) {
+        callback(command);
+      }
+    }
+  }
+
   // Source: phira-mp-server/src/session.rs:559-592
   private async fetchChartInfo(chartId: number): Promise<ChartInfo> {
     // Using the same API endpoint as the Rust implementation
@@ -115,7 +129,15 @@ export class ProtocolHandler {
     if (session) {
       const room = this.roomManager.getRoomByUserId(session.userId);
       if (room) {
-        this.roomManager.removePlayerFromRoom(room.id, session.userId);
+        const roomId = room.id;
+        const wasPlaying = room.state.type === 'Playing';
+        this.roomManager.removePlayerFromRoom(roomId, session.userId);
+        if (wasPlaying) {
+          const updatedRoom = this.roomManager.getRoom(roomId);
+          if (updatedRoom) {
+            this.checkGameEnd(updatedRoom);
+          }
+        }
       }
       this.sessions.delete(connectionId);
     }
@@ -182,6 +204,10 @@ export class ProtocolHandler {
 
       case ClientCommandType.Played:
         this.handlePlayed(connectionId, message.id, sendResponse);
+        break;
+
+      case ClientCommandType.GameResult:
+        this.handleGameResult(connectionId, message, sendResponse);
         break;
 
       case ClientCommandType.Abort:
@@ -488,6 +514,7 @@ export class ProtocolHandler {
     });
 
     const wasHost = room.ownerId === session.userId;
+    const wasPlaying = room.state.type === 'Playing';
     
     this.broadcastMessage(room, {
       type: 'LeaveRoom',
@@ -516,6 +543,10 @@ export class ProtocolHandler {
           });
         }
       }
+    }
+
+    if (updatedRoom && wasPlaying) {
+      this.checkGameEnd(updatedRoom);
     }
 
     this.respond(connectionId, sendResponse, {
@@ -775,6 +806,12 @@ export class ProtocolHandler {
       roomId: room.id,
     });
 
+    for (const playerInfo of room.players.values()) {
+      playerInfo.isReady = false;
+      playerInfo.isFinished = false;
+      playerInfo.score = null;
+    }
+
     // Change to WaitingForReady state
     this.roomManager.setRoomState(room.id, { type: 'WaitingForReady' });
 
@@ -861,6 +898,12 @@ export class ProtocolHandler {
       .every((p) => p.isReady);
     if (allReady) {
       this.logger.debug('所有玩家已准备，开始游戏：', { roomId: room.id });
+
+      for (const playerInfo of room.players.values()) {
+        playerInfo.isFinished = false;
+        playerInfo.score = null;
+      }
+
       this.roomManager.setRoomState(room.id, { type: 'Playing' });
 
       this.broadcastMessage(room, { type: 'StartPlaying' });
@@ -934,6 +977,8 @@ export class ProtocolHandler {
     });
 
     this.roomManager.setPlayerReady(room.id, session.userId, false);
+    player.isFinished = false;
+    player.score = null;
 
     // If host cancels, cancel entire game
     if (room.ownerId === session.userId) {
@@ -942,6 +987,11 @@ export class ProtocolHandler {
       // Reset all ready states
       for (const playerId of room.players.keys()) {
         this.roomManager.setPlayerReady(room.id, playerId, false);
+      }
+
+      for (const playerInfo of room.players.values()) {
+        playerInfo.isFinished = false;
+        playerInfo.score = null;
       }
 
       this.broadcastMessage(room, {
@@ -1013,6 +1063,113 @@ export class ProtocolHandler {
     });
   }
 
+  private handleGameResult(
+    connectionId: string,
+    message: Extract<ClientCommand, { type: ClientCommandType.GameResult }>,
+    sendResponse: (response: ServerCommand) => void,
+  ): void {
+    const session = this.sessions.get(connectionId);
+    if (!session) {
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.GameResultReceived,
+        result: { ok: false, error: '未验证' },
+      });
+      return;
+    }
+
+    const room = this.roomManager.getRoomByUserId(session.userId);
+    if (!room) {
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.GameResultReceived,
+        result: { ok: false, error: '房间不存在喵' },
+      });
+      return;
+    }
+
+    if (room.state.type !== 'Playing') {
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.GameResultReceived,
+        result: { ok: false, error: 'Game not in progress' },
+      });
+      return;
+    }
+
+    const player = room.players.get(session.userId);
+    if (!player) {
+      this.logger.warn('Game result received but player not found in room', {
+        connectionId,
+        userId: session.userId,
+        roomId: room.id,
+      });
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.GameResultReceived,
+        result: { ok: false, error: 'Player not found in room' },
+      });
+      return;
+    }
+
+    if (player.isFinished) {
+      this.logger.debug('Duplicate game result submission ignored', {
+        connectionId,
+        userId: session.userId,
+        roomId: room.id,
+      });
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.GameResultReceived,
+        result: { ok: true, value: undefined },
+      });
+      return;
+    }
+
+    const playerScore: PlayerScore = {
+      score: message.score,
+      accuracy: message.accuracy,
+      perfect: message.perfect,
+      good: message.good,
+      bad: message.bad,
+      miss: message.miss,
+      maxCombo: message.maxCombo,
+      finishTime: Date.now(),
+    };
+
+    player.score = playerScore;
+    player.isFinished = true;
+
+    this.logger.info('Player finished game', {
+      connectionId,
+      roomId: room.id,
+      userId: session.userId,
+      score: playerScore.score,
+      accuracy: playerScore.accuracy,
+    });
+
+    const fullCombo = message.miss === 0 && message.bad === 0;
+
+    this.respond(connectionId, sendResponse, {
+      type: ServerCommandType.GameResultReceived,
+      result: { ok: true, value: undefined },
+    });
+
+    this.broadcastToRoomExcept(room, session.userId, {
+      type: ServerCommandType.PlayerFinished,
+      player: {
+        userId: session.userId,
+        userName: player.user.name,
+        score: { ...playerScore },
+      },
+    });
+
+    this.broadcastMessage(room, {
+      type: 'Played',
+      user: session.userId,
+      score: message.score,
+      accuracy: message.accuracy,
+      fullCombo,
+    });
+
+    this.checkGameEnd(room);
+  }
+
   // Source: phira-mp-server/src/session.rs:692-710
   private handleAbort(
     connectionId: string,
@@ -1050,6 +1207,102 @@ export class ProtocolHandler {
     this.respond(connectionId, sendResponse, {
       type: ServerCommandType.Abort,
       result: { ok: true, value: undefined },
+    });
+  }
+
+  private checkGameEnd(room: Room): void {
+    if (room.state.type !== 'Playing') {
+      return;
+    }
+
+    const activePlayers = Array.from(room.players.values()).filter((playerInfo) => !playerInfo.user.monitor);
+    if (activePlayers.length === 0) {
+      this.logger.info('No active players remaining, ending game', {
+        roomId: room.id,
+      });
+      this.endGame(room);
+      return;
+    }
+
+    const finishedPlayers = activePlayers.filter((playerInfo) => playerInfo.isFinished);
+    if (finishedPlayers.length !== activePlayers.length) {
+      this.logger.debug('Waiting for more players to finish', {
+        roomId: room.id,
+        finished: finishedPlayers.length,
+        total: activePlayers.length,
+      });
+      return;
+    }
+
+    this.logger.info('All players finished, ending game', {
+      roomId: room.id,
+      playerCount: activePlayers.length,
+    });
+
+    this.endGame(room);
+  }
+
+  private endGame(room: Room): void {
+    if (room.state.type !== 'Playing') {
+      this.logger.debug('endGame invoked but room not in playing state', {
+        roomId: room.id,
+        state: room.state.type,
+      });
+      return;
+    }
+
+    const endedAt = Date.now();
+    const activePlayers = Array.from(room.players.values()).filter((playerInfo) => !playerInfo.user.monitor);
+
+    const rankings: PlayerRanking[] = activePlayers
+      .map((playerInfo) => ({
+        rank: 0,
+        userId: playerInfo.user.id,
+        userName: playerInfo.user.name,
+        score: playerInfo.score ? { ...playerInfo.score } : null,
+      }))
+      .sort((a, b) => (b.score?.score ?? 0) - (a.score?.score ?? 0))
+      .map((entry, index) => ({
+        ...entry,
+        rank: index + 1,
+      }));
+
+    this.broadcastToRoom(room, {
+      type: ServerCommandType.GameEnded,
+      rankings,
+      chartId: room.selectedChart?.id ?? null,
+      endedAt,
+    });
+
+    this.broadcastMessage(room, { type: 'GameEnd' });
+
+    this.roomManager.setRoomState(room.id, {
+      type: 'SelectChart',
+      chartId: room.selectedChart?.id ?? null,
+    });
+
+    for (const playerInfo of room.players.values()) {
+      playerInfo.isReady = false;
+      playerInfo.isFinished = false;
+      playerInfo.score = null;
+    }
+
+    this.logger.info('Game ended, room reset to waiting', {
+      roomId: room.id,
+      rankings: rankings.map((entry) => ({
+        rank: entry.rank,
+        userId: entry.userId,
+        score: entry.score?.score ?? null,
+      })),
+    });
+
+    this.broadcastRoomUpdate(room);
+  }
+
+  private broadcastRoomUpdate(room: Room): void {
+    this.broadcastToRoom(room, {
+      type: ServerCommandType.ChangeState,
+      state: room.state,
     });
   }
 

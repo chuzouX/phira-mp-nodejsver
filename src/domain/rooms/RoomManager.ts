@@ -4,12 +4,14 @@
  */
 
 import { Logger } from '../../logging/logger';
-import { UserInfo, RoomState } from '../protocol/Commands';
+import { UserInfo, RoomState, PlayerScore } from '../protocol/Commands';
 
 export interface PlayerInfo {
   user: UserInfo;
   connectionId: string;
   isReady: boolean;
+  isFinished: boolean;
+  score: PlayerScore | null;
 }
 
 export interface ChartInfo {
@@ -82,6 +84,8 @@ export class InMemoryRoomManager implements RoomManager {
       user: ownerInfo,
       connectionId,
       isReady: false,
+      isFinished: false,
+      score: null,
     });
 
     const room: Room = {
@@ -152,6 +156,8 @@ export class InMemoryRoomManager implements RoomManager {
       user: userInfo,
       connectionId,
       isReady: false,
+      isFinished: false,
+      score: null,
     });
 
     this.logger.debug('已添加玩家到房间：', { roomId, userId, playerCount: room.players.size });

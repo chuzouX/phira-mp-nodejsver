@@ -135,7 +135,7 @@ describe('Room Owner Ready Logic', () => {
 
       expect(mockSendResponse).toHaveBeenCalledWith({
         type: ServerCommandType.CancelReady,
-        result: { ok: false, error: 'not ready' },
+        result: { ok: false, error: '你还未准备哦喵' },
       });
     });
 

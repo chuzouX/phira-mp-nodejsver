@@ -12,7 +12,10 @@ import { ClientCommandType, CommandParser, ServerCommand, ServerCommandType } fr
 const PROTOCOL_VERSION = 1;
 
 // Source: phira-mp-common/src/lib.rs:17-19
-const HEARTBEAT_DISCONNECT_TIMEOUT_MS = 10_000; // 10 seconds
+const HEARTBEAT_PING_INTERVAL_MS = 30_000; // 30 seconds
+const HEARTBEAT_PONG_TIMEOUT_MS = 10_000; // 10 seconds
+const HEARTBEAT_MAX_MISSED = 3;
+const HEARTBEAT_CHECK_INTERVAL_MS = 5_000;
 
 interface ConnectionState {
   socket: Socket;
@@ -20,6 +23,7 @@ interface ConnectionState {
   buffer: Buffer;
   version?: number;
   lastReceivedTime: number;
+  missedHeartbeats: number;
   timeoutCheckInterval?: NodeJS.Timeout;
 }
 
@@ -92,6 +96,7 @@ export class TcpServer {
       versionReceived: false,
       buffer: Buffer.alloc(0),
       lastReceivedTime: Date.now(),
+      missedHeartbeats: 0,
     };
 
     this.connections.set(connectionId, state);
@@ -108,6 +113,7 @@ export class TcpServer {
     socket.on('data', (data: Buffer) => {
       try {
         state.lastReceivedTime = Date.now();
+        state.missedHeartbeats = 0;
         state.buffer = Buffer.concat([state.buffer, data]);
 
         if (!state.versionReceived) {
@@ -156,23 +162,51 @@ export class TcpServer {
   }
 
   // Source: phira-mp-server/src/session.rs:284-300
-  // Monitor last received time and disconnect after HEARTBEAT_DISCONNECT_TIMEOUT
+  // Monitor last received time and disconnect after repeated heartbeat misses
   private startTimeoutMonitor(connectionId: string, state: ConnectionState): void {
     this.clearTimeoutMonitor(state);
 
-    // Check every second if we should disconnect
     state.timeoutCheckInterval = setInterval(() => {
-      const timeSinceLastReceived = Date.now() - state.lastReceivedTime;
-      
-      if (timeSinceLastReceived > HEARTBEAT_DISCONNECT_TIMEOUT_MS) {
-        this.logger.warn('Connection timeout - no messages received', {
-          connectionId,
-          timeSinceLastReceived,
-          timeoutMs: HEARTBEAT_DISCONNECT_TIMEOUT_MS,
-        });
-        state.socket.destroy(new Error('Connection timeout'));
+      if (state.socket.destroyed) {
+        this.clearTimeoutMonitor(state);
+        return;
       }
-    }, 1000);
+
+      const now = Date.now();
+      const timeSinceLastReceived = now - state.lastReceivedTime;
+      const allowableInactivity = HEARTBEAT_PING_INTERVAL_MS + HEARTBEAT_PONG_TIMEOUT_MS;
+
+      if (timeSinceLastReceived <= allowableInactivity) {
+        if (state.missedHeartbeats !== 0) {
+          this.logger.debug('Heartbeat recovered', {
+            connectionId,
+            missedHeartbeats: state.missedHeartbeats,
+            timeSinceLastReceived,
+          });
+          state.missedHeartbeats = 0;
+        }
+        return;
+      }
+
+      state.missedHeartbeats += 1;
+
+      this.logger.warn('Heartbeat timeout window exceeded', {
+        connectionId,
+        missedHeartbeats: state.missedHeartbeats,
+        timeSinceLastReceived,
+        allowableInactivity,
+        maxMissed: HEARTBEAT_MAX_MISSED,
+      });
+
+      if (state.missedHeartbeats >= HEARTBEAT_MAX_MISSED) {
+        this.logger.error('Max missed heartbeats reached, closing connection', {
+          connectionId,
+          missedHeartbeats: state.missedHeartbeats,
+        });
+        this.clearTimeoutMonitor(state);
+        state.socket.destroy(new Error('Heartbeat timeout'));
+      }
+    }, HEARTBEAT_CHECK_INTERVAL_MS);
   }
 
   private clearTimeoutMonitor(state: ConnectionState): void {

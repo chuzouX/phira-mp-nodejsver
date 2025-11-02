@@ -26,6 +26,7 @@ export enum ClientCommandType {
   CancelReady = 13,
   Played = 14,
   Abort = 15,
+  GameResult = 16,
 }
 
 // Source: phira-mp-common/src/command.rs:276-308
@@ -50,6 +51,9 @@ export enum ServerCommandType {
   CancelReady = 17,
   Played = 18,
   Abort = 19,
+  GameResultReceived = 20,
+  PlayerFinished = 21,
+  GameEnded = 22,
 }
 
 // Source: phira-mp-common/src/command.rs:157-178
@@ -69,13 +73,41 @@ export type ClientCommand =
   | { type: ClientCommandType.Ready }
   | { type: ClientCommandType.CancelReady }
   | { type: ClientCommandType.Played; id: number }
-  | { type: ClientCommandType.Abort };
+  | { type: ClientCommandType.Abort }
+  | {
+      type: ClientCommandType.GameResult;
+      score: number;
+      accuracy: number;
+      perfect: number;
+      good: number;
+      bad: number;
+      miss: number;
+      maxCombo: number;
+    };
 
 // Source: phira-mp-common/src/command.rs:250-254
 export interface UserInfo {
   id: number;
   name: string;
   monitor: boolean;
+}
+
+export interface PlayerScore {
+  score: number;
+  accuracy: number;
+  perfect: number;
+  good: number;
+  bad: number;
+  miss: number;
+  maxCombo: number;
+  finishTime: number;
+}
+
+export interface PlayerRanking {
+  rank: number;
+  userId: number;
+  userName: string;
+  score: PlayerScore | null;
 }
 
 // Source: phira-mp-common/src/command.rs:236-247
@@ -146,7 +178,13 @@ export type ServerCommand =
   | { type: ServerCommandType.Ready; result: Result<void> }
   | { type: ServerCommandType.CancelReady; result: Result<void> }
   | { type: ServerCommandType.Played; result: Result<void> }
-  | { type: ServerCommandType.Abort; result: Result<void> };
+  | { type: ServerCommandType.Abort; result: Result<void> }
+  | { type: ServerCommandType.GameResultReceived; result: Result<void> }
+  | {
+      type: ServerCommandType.PlayerFinished;
+      player: { userId: number; userName: string; score: PlayerScore | null };
+    }
+  | { type: ServerCommandType.GameEnded; rankings: PlayerRanking[]; chartId: number | null; endedAt: number };
 
 export interface ParsedClientCommand {
   rawType: number;
@@ -235,6 +273,29 @@ export class CommandParser {
       case ClientCommandType.Abort:
         return { rawType: commandType, command: { type: ClientCommandType.Abort } };
 
+      case ClientCommandType.GameResult: {
+        const score = reader.i32();
+        const accuracy = reader.f32();
+        const perfect = reader.i32();
+        const good = reader.i32();
+        const bad = reader.i32();
+        const miss = reader.i32();
+        const maxCombo = reader.i32();
+        return {
+          rawType: commandType,
+          command: {
+            type: ClientCommandType.GameResult,
+            score,
+            accuracy,
+            perfect,
+            good,
+            bad,
+            miss,
+            maxCombo,
+          },
+        };
+      }
+
       case ClientCommandType.Touches:
       case ClientCommandType.Judges:
         reader.readRemaining();
@@ -284,6 +345,7 @@ export class CommandParser {
       case ServerCommandType.CancelReady:
       case ServerCommandType.Played:
       case ServerCommandType.Abort:
+      case ServerCommandType.GameResultReceived:
         // Result<(), String>
         if (command.result.ok) {
           writer.bool(true);
@@ -321,6 +383,23 @@ export class CommandParser {
         CommandParser.writeUserInfo(writer, command.user);
         break;
 
+      case ServerCommandType.PlayerFinished:
+        writer.i32(command.player.userId);
+        writer.string(command.player.userName);
+        CommandParser.writePlayerScoreOption(writer, command.player.score);
+        break;
+
+      case ServerCommandType.GameEnded:
+        CommandParser.writeRankings(writer, command.rankings);
+        if (command.chartId !== null) {
+          writer.bool(true);
+          writer.i32(command.chartId);
+        } else {
+          writer.bool(false);
+        }
+        writer.u64(BigInt(Math.max(0, command.endedAt)));
+        break;
+
       case ServerCommandType.Touches:
       case ServerCommandType.Judges:
         // Not implemented - these are monitor-only features
@@ -335,6 +414,36 @@ export class CommandParser {
     writer.i32(user.id);
     writer.string(user.name);
     writer.bool(user.monitor);
+  }
+
+  private static writePlayerScoreOption(writer: BinaryWriter, score: PlayerScore | null): void {
+    if (score) {
+      writer.bool(true);
+      CommandParser.writePlayerScore(writer, score);
+    } else {
+      writer.bool(false);
+    }
+  }
+
+  private static writePlayerScore(writer: BinaryWriter, score: PlayerScore): void {
+    writer.i32(score.score);
+    writer.f32(score.accuracy);
+    writer.i32(score.perfect);
+    writer.i32(score.good);
+    writer.i32(score.bad);
+    writer.i32(score.miss);
+    writer.i32(score.maxCombo);
+    writer.u64(BigInt(Math.max(0, score.finishTime)));
+  }
+
+  private static writeRankings(writer: BinaryWriter, rankings: PlayerRanking[]): void {
+    writer.uleb(rankings.length);
+    for (const ranking of rankings) {
+      writer.u32(ranking.rank);
+      writer.i32(ranking.userId);
+      writer.string(ranking.userName);
+      CommandParser.writePlayerScoreOption(writer, ranking.score);
+    }
   }
 
   private static writeRoomState(writer: BinaryWriter, state: RoomState): void {
