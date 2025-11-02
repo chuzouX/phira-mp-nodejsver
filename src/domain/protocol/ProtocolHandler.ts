@@ -90,7 +90,7 @@ export class ProtocolHandler {
     const response = await fetch(`https://phira.5wyxi.com/chart/${chartId}`);
     
     if (!response.ok) {
-      throw new Error(`Chart API returned status ${response.status}`);
+      throw new Error(`API返回了一个神秘的状态： ${response.status}`);
     }
     
     const chartData = await response.json();
@@ -120,7 +120,7 @@ export class ProtocolHandler {
       this.sessions.delete(connectionId);
     }
     this.broadcastCallbacks.delete(connectionId);
-    this.logger.info('Protocol connection disconnected', { connectionId });
+    this.logger.info('协议连接断开：', { connectionId });
   }
 
   handleMessage(
@@ -128,7 +128,7 @@ export class ProtocolHandler {
     message: ClientCommand,
     sendResponse: (response: ServerCommand) => void,
   ): void {
-    this.logger.debug('Protocol message received', {
+    this.logger.debug('收到协议信息：', {
       connectionId,
       messageType: ClientCommandType[message.type],
     });
@@ -209,7 +209,7 @@ export class ProtocolHandler {
       this.logger.warn('重复验证尝试：', { connectionId });
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.Authenticate,
-        result: { ok: false, error: 'repeated authenticate' },
+        result: { ok: false, error: '重复的验证' },
       });
       return;
     }
@@ -218,7 +218,7 @@ export class ProtocolHandler {
       this.logger.warn('非法的 Token 长度', { connectionId, tokenLength: token.length });
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.Authenticate,
-        result: { ok: false, error: 'invalid token' },
+        result: { ok: false, error: '非法的 Token' },
       });
       return;
     }
@@ -273,7 +273,7 @@ export class ProtocolHandler {
     if (!session) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.Chat,
-        result: { ok: false, error: 'not authenticated' },
+        result: { ok: false, error: '未验证' },
       });
       return;
     }
@@ -282,7 +282,7 @@ export class ProtocolHandler {
     if (!room) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.Chat,
-        result: { ok: false, error: 'no room' },
+        result: { ok: false, error: '房间不存在喵' },
       });
       return;
     }
@@ -293,7 +293,7 @@ export class ProtocolHandler {
       content: message,
     });
 
-    this.logger.debug('Chat message sent', {
+    this.logger.debug('聊天消息已广播', {
       connectionId,
       userId: session.userId,
       message,
@@ -315,7 +315,7 @@ export class ProtocolHandler {
     if (!session) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.CreateRoom,
-        result: { ok: false, error: 'not authenticated' },
+        result: { ok: false, error: '未验证' },
       });
       return;
     }
@@ -324,7 +324,7 @@ export class ProtocolHandler {
     if (existingRoom) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.CreateRoom,
-        result: { ok: false, error: 'already in room' },
+        result: { ok: false, error: '你已经在房间了哦喵' },
       });
       return;
     }
@@ -343,11 +343,7 @@ export class ProtocolHandler {
         user: session.userId,
       });
 
-      this.logger.info('Room created successfully', {
-        connectionId,
-        userId: session.userId,
-        roomId: room.id,
-      });
+      this.logger.debug(`${session.userId} 创建房间 ${room.id} 成功`);
 
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.CreateRoom,
@@ -381,7 +377,7 @@ export class ProtocolHandler {
     if (!session) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.JoinRoom,
-        result: { ok: false, error: 'not authenticated' },
+        result: { ok: false, error: '未验证' },
       });
       return;
     }
@@ -390,7 +386,7 @@ export class ProtocolHandler {
     if (existingRoom) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.JoinRoom,
-        result: { ok: false, error: 'already in room' },
+        result: { ok: false, error: '已经在房间里哦喵' },
       });
       return;
     }
@@ -399,7 +395,7 @@ export class ProtocolHandler {
     if (!room) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.JoinRoom,
-        result: { ok: false, error: 'room not found' },
+        result: { ok: false, error: '找不到你想要的房间辣' },
       });
       return;
     }
@@ -407,7 +403,7 @@ export class ProtocolHandler {
     if (room.locked) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.JoinRoom,
-        result: { ok: false, error: 'room locked' },
+        result: { ok: false, error: '呜哇！房间锁住了哦，进不去' },
       });
       return;
     }
@@ -415,7 +411,7 @@ export class ProtocolHandler {
     if (room.state.type !== 'SelectChart') {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.JoinRoom,
-        result: { ok: false, error: 'game ongoing' },
+        result: { ok: false, error: '他们正在游戏中哦' },
       });
       return;
     }
@@ -471,7 +467,7 @@ export class ProtocolHandler {
     if (!session) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.LeaveRoom,
-        result: { ok: false, error: 'not authenticated' },
+        result: { ok: false, error: '未验证' },
       });
       return;
     }
@@ -480,7 +476,7 @@ export class ProtocolHandler {
     if (!room) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.LeaveRoom,
-        result: { ok: false, error: 'no room' },
+        result: { ok: false, error: '房间不存在喵' },
       });
       return;
     }
@@ -538,7 +534,7 @@ export class ProtocolHandler {
     if (!session) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.LockRoom,
-        result: { ok: false, error: 'not authenticated' },
+        result: { ok: false, error: '未验证' },
       });
       return;
     }
@@ -547,7 +543,7 @@ export class ProtocolHandler {
     if (!room) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.LockRoom,
-        result: { ok: false, error: 'no room' },
+        result: { ok: false, error: '房间不存在喵' },
       });
       return;
     }
@@ -555,12 +551,12 @@ export class ProtocolHandler {
     if (room.ownerId !== session.userId) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.LockRoom,
-        result: { ok: false, error: 'not host' },
+        result: { ok: false, error: 'baka!你不是房主喵' },
       });
       return;
     }
 
-    this.logger.info('Room lock changed', {
+    this.logger.info(`${session.userId} 将房间 ${room.id} 锁定模式修改为 ${lock}`, {
       connectionId,
       userId: session.userId,
       roomId: room.id,
@@ -590,7 +586,7 @@ export class ProtocolHandler {
     if (!session) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.CycleRoom,
-        result: { ok: false, error: 'not authenticated' },
+        result: { ok: false, error: '未验证' },
       });
       return;
     }
@@ -599,7 +595,7 @@ export class ProtocolHandler {
     if (!room) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.CycleRoom,
-        result: { ok: false, error: 'no room' },
+        result: { ok: false, error: '房间不存在喵' },
       });
       return;
     }
@@ -607,17 +603,12 @@ export class ProtocolHandler {
     if (room.ownerId !== session.userId) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.CycleRoom,
-        result: { ok: false, error: 'not host' },
+        result: { ok: false, error: 'baka!你不是房主喵' },
       });
       return;
     }
 
-    this.logger.info('Room cycle changed', {
-      connectionId,
-      userId: session.userId,
-      roomId: room.id,
-      cycle,
-    });
+    this.logger.info(`${session.userId}房间 ${room.id} 循环状态切换为 ${true}`);
 
     this.roomManager.setRoomCycle(room.id, cycle);
 
@@ -642,7 +633,7 @@ export class ProtocolHandler {
     if (!session) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.SelectChart,
-        result: { ok: false, error: 'not authenticated' },
+        result: { ok: false, error: '未验证' },
       });
       return;
     }
@@ -651,7 +642,7 @@ export class ProtocolHandler {
     if (!room) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.SelectChart,
-        result: { ok: false, error: 'no room' },
+        result: { ok: false, error: '房间不存在喵' },
       });
       return;
     }
@@ -659,7 +650,7 @@ export class ProtocolHandler {
     if (room.state.type !== 'SelectChart') {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.SelectChart,
-        result: { ok: false, error: 'invalid state' },
+        result: { ok: false, error: '非法的状态' },
       });
       return;
     }
@@ -667,12 +658,12 @@ export class ProtocolHandler {
     if (room.ownerId !== session.userId) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.SelectChart,
-        result: { ok: false, error: 'not host' },
+        result: { ok: false, error: 'baka!你不是房主喵' },
       });
       return;
     }
 
-    this.logger.info('Fetching chart', {
+    this.logger.debug('获取谱面信息：', {
       connectionId,
       userId: session.userId,
       roomId: room.id,
@@ -684,7 +675,7 @@ export class ProtocolHandler {
       try {
         const chart = await this.fetchChartInfo(chartId);
 
-        this.logger.info('Chart fetched successfully', {
+        this.logger.debug('谱面选择成功', {
           connectionId,
           chartId,
           chartName: chart.name,
@@ -715,7 +706,7 @@ export class ProtocolHandler {
         });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'failed to fetch chart';
-        this.logger.error('Failed to fetch chart', {
+        this.logger.error('获取谱面信息失败：', {
           connectionId,
           chartId,
           error: errorMessage,
@@ -740,7 +731,7 @@ export class ProtocolHandler {
     if (!session) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.RequestStart,
-        result: { ok: false, error: 'not authenticated' },
+        result: { ok: false, error: '未验证' },
       });
       return;
     }
@@ -749,7 +740,7 @@ export class ProtocolHandler {
     if (!room) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.RequestStart,
-        result: { ok: false, error: 'no room' },
+        result: { ok: false, error: '房间不存在喵' },
       });
       return;
     }
@@ -765,7 +756,7 @@ export class ProtocolHandler {
     if (room.ownerId !== session.userId) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.RequestStart,
-        result: { ok: false, error: 'not host' },
+        result: { ok: false, error: 'baka!你不是房主喵' },
       });
       return;
     }
@@ -778,7 +769,7 @@ export class ProtocolHandler {
       return;
     }
 
-    this.logger.info('Game start requested', {
+    this.logger.debug('游戏开始请求：', {
       connectionId,
       userId: session.userId,
       roomId: room.id,
@@ -812,7 +803,7 @@ export class ProtocolHandler {
     if (!session) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.Ready,
-        result: { ok: false, error: 'not authenticated' },
+        result: { ok: false, error: '未验证' },
       });
       return;
     }
@@ -821,7 +812,7 @@ export class ProtocolHandler {
     if (!room) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.Ready,
-        result: { ok: false, error: 'no room' },
+        result: { ok: false, error: '房间不存在喵' },
       });
       return;
     }
@@ -838,7 +829,7 @@ export class ProtocolHandler {
     if (!player) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.Ready,
-        result: { ok: false, error: 'not in room' },
+        result: { ok: false, error: '杂鱼~你没在房间喵' },
       });
       return;
     }
@@ -846,12 +837,12 @@ export class ProtocolHandler {
     if (player.isReady) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.Ready,
-        result: { ok: false, error: 'already ready' },
+        result: { ok: false, error: '你已经准备了喵' },
       });
       return;
     }
 
-    this.logger.info('Player ready', {
+    this.logger.info('玩家已准备：', {
       connectionId,
       userId: session.userId,
       roomId: room.id,
@@ -867,7 +858,7 @@ export class ProtocolHandler {
     // Check if all players are ready
     const allReady = Array.from(room.players.values()).every((p) => p.isReady);
     if (allReady) {
-      this.logger.info('All players ready, starting game', { roomId: room.id });
+      this.logger.debug('所有玩家已准备，开始游戏：', { roomId: room.id });
       this.roomManager.setRoomState(room.id, { type: 'Playing' });
 
       this.broadcastMessage(room, { type: 'StartPlaying' });
@@ -893,7 +884,7 @@ export class ProtocolHandler {
     if (!session) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.CancelReady,
-        result: { ok: false, error: 'not authenticated' },
+        result: { ok: false, error: '未验证' },
       });
       return;
     }
@@ -902,7 +893,7 @@ export class ProtocolHandler {
     if (!room) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.CancelReady,
-        result: { ok: false, error: 'no room' },
+        result: { ok: false, error: '房间不存在喵' },
       });
       return;
     }
@@ -910,7 +901,7 @@ export class ProtocolHandler {
     if (room.state.type !== 'WaitingForReady') {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.CancelReady,
-        result: { ok: false, error: 'invalid state' },
+        result: { ok: false, error: '非法的状态' },
       });
       return;
     }
@@ -919,7 +910,7 @@ export class ProtocolHandler {
     if (!player) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.CancelReady,
-        result: { ok: false, error: 'not in room' },
+        result: { ok: false, error: '杂鱼~你没在房间喵' },
       });
       return;
     }
@@ -927,12 +918,12 @@ export class ProtocolHandler {
     if (!player.isReady) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.CancelReady,
-        result: { ok: false, error: 'not ready' },
+        result: { ok: false, error: '你还未准备哦喵' },
       });
       return;
     }
 
-    this.logger.info('Player cancel ready', {
+    this.logger.debug('玩家取消了准备', {
       connectionId,
       userId: session.userId,
       roomId: room.id,
@@ -981,7 +972,7 @@ export class ProtocolHandler {
     if (!session) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.Played,
-        result: { ok: false, error: 'not authenticated' },
+        result: { ok: false, error: '未验证' },
       });
       return;
     }
@@ -990,7 +981,7 @@ export class ProtocolHandler {
     if (!room) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.Played,
-        result: { ok: false, error: 'no room' },
+        result: { ok: false, error: '房间不存在喵' },
       });
       return;
     }
@@ -1027,7 +1018,7 @@ export class ProtocolHandler {
     if (!session) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.Abort,
-        result: { ok: false, error: 'not authenticated' },
+        result: { ok: false, error: '未验证' },
       });
       return;
     }
@@ -1036,12 +1027,12 @@ export class ProtocolHandler {
     if (!room) {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.Abort,
-        result: { ok: false, error: 'no room' },
+        result: { ok: false, error: '房间不存在喵' },
       });
       return;
     }
 
-    this.logger.info('Player aborted', {
+    this.logger.info('玩家流产？（我也看不懂什么意思', {
       connectionId,
       userId: session.userId,
       roomId: room.id,

@@ -99,7 +99,7 @@ export class InMemoryRoomManager implements RoomManager {
     };
 
     this.rooms.set(id, room);
-    this.logger.info('房间已创建：', { id, name, ownerId, totalRooms: this.rooms.size });
+    this.logger.info(`${ownerId} 创建了房间 ${id}`, { id, name, ownerId, totalRooms: this.rooms.size });
 
     return room;
   }
@@ -112,7 +112,7 @@ export class InMemoryRoomManager implements RoomManager {
     const deleted = this.rooms.delete(id);
 
     if (deleted) {
-      this.logger.info(`删除房间：${id}`);
+      this.logger.info(`由于 ${id} 房间没有人，删除房间 ${id}`);
     }
 
     return deleted;
@@ -166,7 +166,7 @@ export class InMemoryRoomManager implements RoomManager {
 
     const removed = room.players.delete(userId);
     if (removed) {
-      this.logger.info(`从房间 ${roomId}移除玩家${userId}`);
+      this.logger.info(`从房间 ${roomId} 移除玩家 ${userId}`);
 
       if (room.players.size === 0) {
         this.deleteRoom(roomId);
