@@ -17,7 +17,12 @@
     "type": "git",
     "url": "git+https://github.com/Pimeng/phira-mp-nodejsver.git"
   },
-  "keywords": ["typescript", "nodejs", "server", "tcp"],
+  "keywords": [
+    "typescript",
+    "nodejs",
+    "server",
+    "tcp"
+  ],
   "author": "",
   "license": "MIT",
   "type": "commonjs",
@@ -25,9 +30,6 @@
     "url": "https://github.com/Pimeng/phira-mp-nodejsver/issues"
   },
   "homepage": "https://github.com/Pimeng/phira-mp-nodejsver#readme",
-  "dependencies": {
-    "dotenv": "^17.2.3"
-  },
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/node": "^24.9.2",
@@ -42,5 +44,8 @@
     "ts-jest": "^29.4.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "dotenv": "^16.0.3"
   }
 }
