@@ -139,7 +139,7 @@ export class ProtocolHandler {
         if (wasPlaying) {
           const player = room.players.get(session.userId);
           if (player && !player.isFinished) {
-            this.logger.info('[DISCONNECT] Player disconnected during game', {
+            this.logger.info('[断线] 玩家游戏中断线', {
               connectionId,
               userId: session.userId,
               roomId: room.id,
@@ -157,7 +157,7 @@ export class ProtocolHandler {
               finishTime: Date.now(),
             };
             
-            this.logger.info('[DISCONNECT] Player marked as abandoned', {
+            this.logger.info('[断线] 玩家标记为放弃', {
               connectionId,
               userId: session.userId,
               roomId: room.id,
@@ -1190,7 +1190,7 @@ export class ProtocolHandler {
     );
     const activePlayers = Array.from(room.players.values()).filter((p) => !p.user.monitor);
 
-    this.logger.info('[GAME_RESULT] Received', {
+    this.logger.info('[游戏结果] 已收到', {
       connectionId,
       roomId: room.id,
       userId: session.userId,
@@ -1275,7 +1275,7 @@ export class ProtocolHandler {
     const finishedPlayers = activePlayers.filter((playerInfo) => playerInfo.isFinished);
     const allFinished = finishedPlayers.length === activePlayers.length;
 
-    this.logger.info('[CHECK_END] Evaluating', {
+    this.logger.info('[检查结束] 正在评估', {
       roomId: room.id,
       onlinePlayers: activePlayers.length,
       finishedPlayers: finishedPlayers.length,
@@ -1283,7 +1283,7 @@ export class ProtocolHandler {
     });
 
     if (activePlayers.length === 0) {
-      this.logger.info('[CHECK_END] No active players, ending game', {
+      this.logger.info('[检查结束] 没有活跃玩家，结束游戏', {
         roomId: room.id,
       });
       this.endGame(room);
@@ -1291,7 +1291,7 @@ export class ProtocolHandler {
     }
 
     if (!allFinished) {
-      this.logger.debug('[CHECK_END] Waiting for more players', {
+      this.logger.debug('[检查结束] 等待更多玩家完成', {
         roomId: room.id,
         finished: finishedPlayers.length,
         total: activePlayers.length,
@@ -1299,7 +1299,7 @@ export class ProtocolHandler {
       return;
     }
 
-    this.logger.info('[CHECK_END] All players finished', {
+    this.logger.info('[检查结束] 所有玩家已完成', {
       roomId: room.id,
       playerCount: activePlayers.length,
     });
@@ -1309,14 +1309,14 @@ export class ProtocolHandler {
 
   private endGame(room: Room): void {
     if (room.state.type !== 'Playing') {
-      this.logger.debug('[END_GAME] Called but room not in Playing state', {
+      this.logger.debug('[结束游戏] 调用但房间不在游戏中状态', {
         roomId: room.id,
         currentState: room.state.type,
       });
       return;
     }
 
-    this.logger.info('[END_GAME] Starting', {
+    this.logger.info('[结束游戏] 开始', {
       roomId: room.id,
       currentStatus: room.state.type,
       playerCount: room.players.size,
@@ -1351,7 +1351,7 @@ export class ProtocolHandler {
     const oldState = room.state.type;
 
     if (room.cycle) {
-      this.logger.info('[END_GAME] Cycle mode enabled, keeping chart', {
+      this.logger.info('[结束游戏] 循环模式已开启，保留谱面', {
         roomId: room.id,
         chartId: room.selectedChart?.id ?? null,
       });
@@ -1360,7 +1360,7 @@ export class ProtocolHandler {
         type: 'WaitingForReady',
       });
       
-      this.logger.info('[STATUS_CHANGE]', {
+      this.logger.info('[状态变更]', {
         roomId: room.id,
         from: oldState,
         to: 'WaitingForReady',
@@ -1373,7 +1373,7 @@ export class ProtocolHandler {
       }
       
     } else {
-      this.logger.info('[END_GAME] Normal mode, clearing chart', {
+      this.logger.info('[结束游戏] 普通模式，清除谱面', {
         roomId: room.id,
       });
       
@@ -1382,7 +1382,7 @@ export class ProtocolHandler {
         chartId: null,
       });
       
-      this.logger.info('[STATUS_CHANGE]', {
+      this.logger.info('[状态变更]', {
         roomId: room.id,
         from: oldState,
         to: 'SelectChart',
@@ -1397,7 +1397,7 @@ export class ProtocolHandler {
       }
     }
 
-    this.logger.info('[END_GAME] Completed', {
+    this.logger.info('[结束游戏] 完成', {
       roomId: room.id,
       newStatus: room.state.type,
       hasChart: room.selectedChart !== undefined,
@@ -1413,7 +1413,7 @@ export class ProtocolHandler {
   }
 
   private broadcastRoomUpdate(room: Room): void {
-    this.logger.info('[BROADCAST] Room update', {
+    this.logger.info('[广播] 房间更新', {
       roomId: room.id,
       status: room.state.type,
       recipientCount: room.players.size,
