@@ -66,7 +66,9 @@ export interface RoomManager {
   changeRoomOwner(roomId: string, newOwnerId: number): boolean;
   setRoomChart(roomId: string, chart: ChartInfo | undefined): boolean;
   getRoomChart(roomId: string): ChartInfo | undefined;
+  getPlayerByConnectionId(connectionId: string): { player: PlayerInfo; room: Room } | null;
   cleanupEmptyRooms(): void;
+  migrateConnection(userId: number, oldConnectionId: string, newConnectionId: string): void;
 }
 
 export class InMemoryRoomManager implements RoomManager {
@@ -279,6 +281,17 @@ export class InMemoryRoomManager implements RoomManager {
     return room?.selectedChart;
   }
 
+  getPlayerByConnectionId(connectionId: string): { player: PlayerInfo; room: Room } | null {
+    for (const room of this.rooms.values()) {
+      for (const player of room.players.values()) {
+        if (player.connectionId === connectionId) {
+          return { player, room };
+        }
+      }
+    }
+    return null;
+  }
+
   cleanupEmptyRooms(): void {
     const emptyRooms: string[] = [];
     for (const [id, room] of this.rooms.entries()) {
@@ -291,5 +304,48 @@ export class InMemoryRoomManager implements RoomManager {
     if (emptyRooms.length > 0) {
       this.logger.info('清理空房间：', { count: emptyRooms.length });
     }
+  }
+
+  migrateConnection(userId: number, oldConnectionId: string, newConnectionId: string): void {
+    const room = this.getRoomByUserId(userId);
+    if (!room) {
+      this.logger.warn('[重连迁移] 找不到玩家的房间', {
+        userId,
+        oldConnectionId,
+        newConnectionId,
+      });
+      return;
+    }
+
+    const player = room.players.get(userId);
+    if (!player) {
+      this.logger.warn('[重连迁移] 房间中找不到玩家', {
+        userId,
+        roomId: room.id,
+        oldConnectionId,
+        newConnectionId,
+      });
+      return;
+    }
+
+    // 保存当前游戏状态
+    const preservedState = {
+      isFinished: player.isFinished,
+      score: player.score,
+      isReady: player.isReady,
+    };
+
+    // 更新连接ID，保留所有游戏状态
+    player.connectionId = newConnectionId;
+    player.isConnected = true;
+    player.disconnectTime = undefined;
+
+    this.logger.info('[重连迁移] 连接已迁移', {
+      userId,
+      roomId: room.id,
+      oldConnectionId,
+      newConnectionId,
+      preservedState,
+    });
   }
 }
