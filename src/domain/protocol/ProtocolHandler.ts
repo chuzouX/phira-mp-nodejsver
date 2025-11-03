@@ -256,7 +256,9 @@ export class ProtocolHandler {
         break;
 
       case ClientCommandType.Played:
-        this.handlePlayed(connectionId, message.id, sendResponse);
+        // handlePlayed is async but we don't await it (fire-and-forget)
+        // Errors are handled internally
+        void this.handlePlayed(connectionId, message.id, sendResponse);
         break;
 
       case ClientCommandType.GameResult:
@@ -1084,21 +1086,108 @@ export class ProtocolHandler {
       return;
     }
 
-    this.logger.debug('玩家游玩结束：', {
+    if (room.state.type !== 'Playing') {
+      this.logger.warn('[游戏结果] 房间不在游戏中', {
+        connectionId,
+        userId: session.userId,
+        roomId: room.id,
+        state: room.state.type,
+      });
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.Played,
+        result: { ok: false, error: '游戏未进行中' },
+      });
+      return;
+    }
+
+    const player = room.players.get(session.userId);
+    if (!player) {
+      this.logger.error('[游戏结果] 房间中找不到玩家', {
+        connectionId,
+        userId: session.userId,
+        roomId: room.id,
+      });
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.Played,
+        result: { ok: false, error: '房间中找不到玩家' },
+      });
+      return;
+    }
+
+    if (player.isFinished) {
+      this.logger.warn('[游戏结果] 玩家已经提交过成绩', {
+        connectionId,
+        userId: session.userId,
+        roomId: room.id,
+      });
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.Played,
+        result: { ok: true, value: undefined },
+      });
+      return;
+    }
+
+    this.logger.info('[游戏结果] 玩家游玩结束', {
       connectionId,
       userId: session.userId,
       roomId: room.id,
       recordId,
     });
 
-    const response = await fetch(`https://phira.5wyxi.com/record/${recordId}`)
+    let recordInfo;
+    try {
+      const response = await fetch(`https://phira.5wyxi.com/record/${recordId}`)
 
-    if (!response.ok) {
-      throw new Error(`API返回了一个神秘的状态： ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`API返回了一个神秘的状态： ${response.status}`);
+      }
+
+      recordInfo = await response.json();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch record';
+      this.logger.error('[游戏结果] 获取记录失败', {
+        connectionId,
+        userId: session.userId,
+        roomId: room.id,
+        recordId,
+        error: errorMessage,
+      });
+      
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.Played,
+        result: { ok: false, error: '获取成绩记录失败' },
+      });
+      return;
     }
 
-    const recordInfo = await response.json();
+    // 标记玩家完成并保存成绩
+    player.isFinished = true;
+    player.score = {
+      score: recordInfo.score ?? 0,
+      accuracy: recordInfo.accuracy ?? 0,
+      perfect: recordInfo.perfect ?? 0,
+      good: recordInfo.good ?? 0,
+      bad: recordInfo.bad ?? 0,
+      miss: recordInfo.miss ?? 0,
+      maxCombo: recordInfo.maxCombo ?? 0,
+      finishTime: Date.now(),
+    };
 
+    const activePlayers = Array.from(room.players.values()).filter((p) => !p.user.monitor);
+    const finishedPlayers = activePlayers.filter((p) => p.isFinished);
+
+    this.logger.info('[游戏结果] 已收到', {
+      connectionId,
+      userId: session.userId,
+      roomId: room.id,
+      recordId,
+      score: player.score.score,
+      accuracy: player.score.accuracy,
+      finishedCount: finishedPlayers.length,
+      totalPlayers: activePlayers.length,
+    });
+
+    // 广播 Played 消息给其他玩家
     this.broadcastMessage(room, {
       type: 'Played',
       user: session.userId,
@@ -1107,10 +1196,23 @@ export class ProtocolHandler {
       fullCombo: recordInfo.fullCombo,
     });
 
+    // 广播 PlayerFinished 给其他玩家
+    this.broadcastToRoomExcept(room, session.userId, {
+      type: ServerCommandType.PlayerFinished,
+      player: {
+        userId: session.userId,
+        userName: player.user.name,
+        score: { ...player.score },
+      },
+    });
+
     this.respond(connectionId, sendResponse, {
       type: ServerCommandType.Played,
       result: { ok: true, value: undefined },
     });
+
+    // 检查游戏是否结束
+    this.checkGameEnd(room);
   }
 
   private handleGameResult(

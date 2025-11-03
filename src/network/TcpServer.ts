@@ -12,10 +12,13 @@ import { ClientCommandType, CommandParser, ServerCommand, ServerCommandType } fr
 const PROTOCOL_VERSION = 1;
 
 // Source: phira-mp-common/src/lib.rs:17-19
-const HEARTBEAT_PING_INTERVAL_MS = 30_000; // 30 seconds
-const HEARTBEAT_PONG_TIMEOUT_MS = 10_000; // 10 seconds
-const HEARTBEAT_MAX_MISSED = 3;
-const HEARTBEAT_CHECK_INTERVAL_MS = 5_000;
+// Source: phira-mp-server/src/session.rs:164-166, 284-300
+// 心跳机制：客户端每30秒发送 Ping，服务端立即响应 Pong
+// 服务端监控最后收到消息的时间，超过40秒(30+10)无消息则认为心跳超时
+const HEARTBEAT_PING_INTERVAL_MS = 30_000; // 30 seconds - 客户端发送 Ping 的间隔
+const HEARTBEAT_PONG_TIMEOUT_MS = 10_000; // 10 seconds - 服务端等待下一个消息的容忍时间
+const HEARTBEAT_MAX_MISSED = 3; // 最多允许错过3次心跳
+const HEARTBEAT_CHECK_INTERVAL_MS = 5_000; // 每5秒检查一次超时
 
 interface ConnectionState {
   socket: Socket;
@@ -178,10 +181,10 @@ export class TcpServer {
 
       if (timeSinceLastReceived <= allowableInactivity) {
         if (state.missedHeartbeats !== 0) {
-          this.logger.debug('心跳恢复：', {
+          this.logger.debug('[心跳] 恢复正常', {
             connectionId,
             missedHeartbeats: state.missedHeartbeats,
-            timeSinceLastReceived,
+            timeSinceLastReceived: `${timeSinceLastReceived}ms`,
           });
           state.missedHeartbeats = 0;
         }
@@ -190,18 +193,19 @@ export class TcpServer {
 
       state.missedHeartbeats += 1;
 
-      this.logger.warn('超过心跳超时窗口：', {
+      this.logger.warn('[心跳] 超时警告', {
         connectionId,
         missedHeartbeats: state.missedHeartbeats,
-        timeSinceLastReceived,
-        allowableInactivity,
+        timeSinceLastReceived: `${timeSinceLastReceived}ms`,
+        allowableInactivity: `${allowableInactivity}ms`,
         maxMissed: HEARTBEAT_MAX_MISSED,
       });
 
       if (state.missedHeartbeats >= HEARTBEAT_MAX_MISSED) {
-        this.logger.error('错过了最大的心跳收到时间，关闭连接', {
+        this.logger.error('[心跳] 连续超时，断开连接', {
           connectionId,
           missedHeartbeats: state.missedHeartbeats,
+          timeSinceLastReceived: `${timeSinceLastReceived}ms`,
         });
         this.clearTimeoutMonitor(state);
         state.socket.destroy(new Error('心跳包超时'));
@@ -244,7 +248,10 @@ export class TcpServer {
           // Source: phira-mp-server/src/session.rs:164-166
           // Client sends Ping, server responds with Pong immediately
           if (parsed.command.type === ClientCommandType.Ping) {
-            this.logger.debug('收到 Ping 包，正在发送 Pong 包', { connectionId });
+            this.logger.debug('[心跳] 收到客户端 Ping，立即响应 Pong', { 
+              connectionId,
+              timeSinceLastReceived: Date.now() - state.lastReceivedTime,
+            });
             this.sendCommand(state.socket, { type: ServerCommandType.Pong });
             continue;
           }
@@ -257,6 +264,13 @@ export class TcpServer {
             },
           );
         } else {
+          // Source: phira-mp-common/src/command.rs:157-178
+          // Touches (3) and Judges (4) are monitor-only features, silently ignore
+          if (parsed.rawType === ClientCommandType.Touches || parsed.rawType === ClientCommandType.Judges) {
+            // 静默忽略观战功能消息（Touches/Judges）
+            continue;
+          }
+          
           this.logger.debug('未处理的命令类型：', {
             connectionId,
             rawType: parsed.rawType,
