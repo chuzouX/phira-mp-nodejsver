@@ -446,12 +446,7 @@ export class ProtocolHandler {
     const success = this.roomManager.addPlayerToRoom(roomId, session.userId, userInfo, connectionId);
 
     if (success) {
-      this.logger.info('玩家加入房间：', {
-        connectionId,
-        userId: session.userId,
-        roomId,
-        monitor,
-      });
+      this.logger.info(`玩家 ${session.userId} 加入房间 ${roomId}`);
 
       // Broadcast to all members that user joined
       this.broadcastToRoom(room, {
@@ -479,7 +474,7 @@ export class ProtocolHandler {
     } else {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.JoinRoom,
-        result: { ok: false, error: 'room full' },
+        result: { ok: false, error: '杂鱼~你要加入的房间满了哦' },
       });
     }
   }

@@ -138,17 +138,17 @@ export class InMemoryRoomManager implements RoomManager {
   ): boolean {
     const room = this.rooms.get(roomId);
     if (!room) {
-      this.logger.warn('Cannot add player to non-existent room', { roomId, userId });
+      this.logger.warn(`无法将玩家 ${userId} 添加到不存在的房间 ${roomId}`);
       return false;
     }
 
     if (room.players.size >= room.maxPlayers) {
-      this.logger.warn('Cannot add player to full room', { roomId, userId, maxPlayers: room.maxPlayers });
+      this.logger.warn(`无法将玩家 ${userId} 加入到满人房 ${roomId}`, );
       return false;
     }
 
     if (room.locked) {
-      this.logger.warn('Cannot add player to locked room', { roomId, userId });
+      this.logger.warn(`无法将玩家 ${userId} 加入到锁定的房间 ${roomId}`);
       return false;
     }
 
@@ -201,7 +201,7 @@ export class InMemoryRoomManager implements RoomManager {
     }
 
     room.state = state;
-    this.logger.debug('Room state changed', { roomId, state: state.type });
+    this.logger.debug('房间状态改变：', { roomId, state: state.type });
     return true;
   }
 
@@ -212,7 +212,7 @@ export class InMemoryRoomManager implements RoomManager {
     }
 
     room.locked = locked;
-    this.logger.debug('Room lock changed', { roomId, locked });
+    this.logger.debug('房间锁定状态改变：', { roomId, locked });
     return true;
   }
 
@@ -223,7 +223,7 @@ export class InMemoryRoomManager implements RoomManager {
     }
 
     room.cycle = cycle;
-    this.logger.debug('Room cycle changed', { roomId, cycle });
+    this.logger.debug('房间循环状态改变：', { roomId, cycle });
     return true;
   }
 
@@ -239,7 +239,7 @@ export class InMemoryRoomManager implements RoomManager {
     }
 
     player.isReady = ready;
-    this.logger.debug('Player ready state changed', { roomId, userId, ready });
+    this.logger.debug('玩家准备状态改变：', { roomId, userId, ready });
     return true;
   }
 
@@ -266,7 +266,7 @@ export class InMemoryRoomManager implements RoomManager {
     }
 
     room.selectedChart = chart;
-    this.logger.debug('Room chart changed', { roomId, chartId: chart?.id });
+    this.logger.debug('房间谱面已更改：', { roomId, chartId: chart?.id });
     return true;
   }
 

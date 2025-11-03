@@ -24,7 +24,7 @@ export interface ServerConfig {
 }
 
 const defaultConfig: ServerConfig = {
-  port: 3000,
+  port: 12346,
   host: '0.0.0.0',
   protocol: {
     tcp: true,

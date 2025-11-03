@@ -178,7 +178,7 @@ export class TcpServer {
 
       if (timeSinceLastReceived <= allowableInactivity) {
         if (state.missedHeartbeats !== 0) {
-          this.logger.debug('Heartbeat recovered', {
+          this.logger.debug('心跳恢复：', {
             connectionId,
             missedHeartbeats: state.missedHeartbeats,
             timeSinceLastReceived,
@@ -190,7 +190,7 @@ export class TcpServer {
 
       state.missedHeartbeats += 1;
 
-      this.logger.warn('Heartbeat timeout window exceeded', {
+      this.logger.warn('超过心跳超时窗口：', {
         connectionId,
         missedHeartbeats: state.missedHeartbeats,
         timeSinceLastReceived,
@@ -199,12 +199,12 @@ export class TcpServer {
       });
 
       if (state.missedHeartbeats >= HEARTBEAT_MAX_MISSED) {
-        this.logger.error('Max missed heartbeats reached, closing connection', {
+        this.logger.error('错过了最大的心跳收到时间，关闭连接', {
           connectionId,
           missedHeartbeats: state.missedHeartbeats,
         });
         this.clearTimeoutMonitor(state);
-        state.socket.destroy(new Error('Heartbeat timeout'));
+        state.socket.destroy(new Error('心跳包超时'));
       }
     }, HEARTBEAT_CHECK_INTERVAL_MS);
   }
@@ -244,7 +244,7 @@ export class TcpServer {
           // Source: phira-mp-server/src/session.rs:164-166
           // Client sends Ping, server responds with Pong immediately
           if (parsed.command.type === ClientCommandType.Ping) {
-            this.logger.debug('Ping received, sending Pong', { connectionId });
+            this.logger.debug('收到 Ping 包，正在发送 Pong 包', { connectionId });
             this.sendCommand(state.socket, { type: ServerCommandType.Pong });
             continue;
           }
@@ -335,7 +335,7 @@ export class TcpServer {
   }
 
   private generateConnectionId(): string {
-    return `conn-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    return `连接-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   }
 
   getServer(): NetServer | undefined {
