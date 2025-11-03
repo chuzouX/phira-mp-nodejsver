@@ -139,11 +139,10 @@ export class ProtocolHandler {
         if (wasPlaying) {
           const player = room.players.get(session.userId);
           if (player && !player.isFinished) {
-            this.logger.info('[断线] 玩家游戏中断线', {
+            this.logger.info('[断线] 玩家游戏中断线并标记为放弃', {
               connectionId,
               userId: session.userId,
               roomId: room.id,
-              timestamp: Date.now(),
             });
 
             player.isFinished = true;
@@ -157,12 +156,6 @@ export class ProtocolHandler {
               maxCombo: 0,
               finishTime: Date.now(),
             };
-            
-            this.logger.info('[断线] 玩家标记为放弃', {
-              connectionId,
-              userId: session.userId,
-              roomId: room.id,
-            });
             
             this.broadcastToRoomExcept(room, session.userId, {
               type: ServerCommandType.PlayerFinished,
@@ -199,7 +192,6 @@ export class ProtocolHandler {
     this.logger.info('[断线] 连接断开', { 
       connectionId,
       userId: session?.userId,
-      timestamp: Date.now(),
     });
   }
 
@@ -1102,14 +1094,11 @@ export class ProtocolHandler {
     recordId: number,
     sendResponse: (response: ServerCommand) => void,
   ): Promise<void> {
-    const startTime = Date.now();
-    
     const session = this.sessions.get(connectionId);
     if (!session) {
       this.logger.warn('[游戏结果] 未验证的Played消息', {
         connectionId,
         recordId,
-        timestamp: startTime,
       });
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.Played,
@@ -1124,7 +1113,6 @@ export class ProtocolHandler {
         connectionId,
         userId: session.userId,
         recordId,
-        timestamp: startTime,
       });
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.Played,
@@ -1140,7 +1128,6 @@ export class ProtocolHandler {
         roomId: room.id,
         recordId,
         currentState: room.state.type,
-        timestamp: startTime,
       });
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.Played,
@@ -1176,47 +1163,16 @@ export class ProtocolHandler {
       return;
     }
 
-    this.logger.info('[游戏结果] 玩家游玩结束', {
-      connectionId,
-      userId: session.userId,
-      roomId: room.id,
-      recordId,
-      timestamp: startTime,
-    });
-
     let recordInfo;
-    const apiStartTime = Date.now();
     try {
-      this.logger.debug('[游戏结果] 开始获取记录', {
-        connectionId,
-        userId: session.userId,
-        roomId: room.id,
-        recordId,
-        apiStartTime,
-      });
-
       const response = await fetch(`https://phira.5wyxi.com/record/${recordId}`)
-      const apiEndTime = Date.now();
-      const apiDuration = apiEndTime - apiStartTime;
 
       if (!response.ok) {
         throw new Error(`API返回了一个神秘的状态： ${response.status}`);
       }
 
       recordInfo = await response.json();
-      
-      this.logger.debug('[游戏结果] 获取记录成功', {
-        connectionId,
-        userId: session.userId,
-        roomId: room.id,
-        recordId,
-        apiDuration,
-        score: recordInfo.score,
-        accuracy: recordInfo.accuracy,
-      });
     } catch (error) {
-      const apiEndTime = Date.now();
-      const apiDuration = apiEndTime - apiStartTime;
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch record';
       
       this.logger.error('[游戏结果] 获取记录失败', {
@@ -1224,9 +1180,7 @@ export class ProtocolHandler {
         userId: session.userId,
         roomId: room.id,
         recordId,
-        apiDuration,
         error: errorMessage,
-        timestamp: apiEndTime,
       });
       
       this.respond(connectionId, sendResponse, {
@@ -1252,8 +1206,6 @@ export class ProtocolHandler {
     const activePlayers = Array.from(room.players.values()).filter((p) => !p.user.monitor);
     const finishedPlayers = activePlayers.filter((p) => p.isFinished);
 
-    const totalProcessingTime = Date.now() - startTime;
-
     this.logger.info('[游戏结果] 已收到', {
       connectionId,
       userId: session.userId,
@@ -1263,7 +1215,6 @@ export class ProtocolHandler {
       accuracy: player.score.accuracy,
       finishedCount: finishedPlayers.length,
       totalPlayers: activePlayers.length,
-      totalProcessingTime,
     });
 
     // 广播 Played 消息给其他玩家
@@ -1288,14 +1239,6 @@ export class ProtocolHandler {
     this.respond(connectionId, sendResponse, {
       type: ServerCommandType.Played,
       result: { ok: true, value: undefined },
-    });
-
-    this.logger.debug('[游戏结果] Played消息处理完成', {
-      connectionId,
-      userId: session.userId,
-      roomId: room.id,
-      recordId,
-      totalProcessingTime,
     });
 
     // 检查游戏是否结束
@@ -1422,10 +1365,6 @@ export class ProtocolHandler {
   ): void {
     const session = this.sessions.get(connectionId);
     if (!session) {
-      this.logger.warn('[游戏结果] 未验证的Abort消息', {
-        connectionId,
-        timestamp: Date.now(),
-      });
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.Abort,
         result: { ok: false, error: '未验证' },
@@ -1435,11 +1374,6 @@ export class ProtocolHandler {
 
     const room = this.roomManager.getRoomByUserId(session.userId);
     if (!room) {
-      this.logger.warn('[游戏结果] Abort消息但房间不存在', {
-        connectionId,
-        userId: session.userId,
-        timestamp: Date.now(),
-      });
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.Abort,
         result: { ok: false, error: '房间不存在喵' },
@@ -1447,13 +1381,9 @@ export class ProtocolHandler {
       return;
     }
 
-    this.logger.info('[游戏结果] 玩家主动放弃游戏', {
-      connectionId,
+    this.logger.debug('[游戏结果] 玩家主动放弃', {
       userId: session.userId,
       roomId: room.id,
-      roomState: room.state.type,
-      isPlaying: room.state.type === 'Playing',
-      timestamp: Date.now(),
     });
 
     this.broadcastMessage(room, {
