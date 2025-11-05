@@ -454,4 +454,93 @@ describe('Game result flow', () => {
       }),
     );
   });
+
+  it('should end game when a player aborts and other players finish', () => {
+    const ownerConnection = 'conn-owner';
+    const guestConnection = 'conn-guest';
+    const ownerId = 1;
+    const guestId = 2;
+    const roomId = 'room-1';
+
+    // Seed sessions
+    (protocolHandler as any).sessions.set(ownerConnection, {
+      userId: ownerId,
+      userInfo: { id: ownerId, name: 'Owner', monitor: false },
+      connectionId: ownerConnection,
+    });
+
+    (protocolHandler as any).sessions.set(guestConnection, {
+      userId: guestId,
+      userInfo: { id: guestId, name: 'Guest', monitor: false },
+      connectionId: guestConnection,
+    });
+
+    // Create room and populate players
+    roomManager.createRoom({
+      id: roomId,
+      name: roomId,
+      ownerId,
+      ownerInfo: { id: ownerId, name: 'Owner', monitor: false },
+      connectionId: ownerConnection,
+    });
+
+    roomManager.addPlayerToRoom(roomId, guestId, { id: guestId, name: 'Guest', monitor: false }, guestConnection);
+
+    const room = roomManager.getRoom(roomId);
+    expect(room).not.toBeUndefined();
+    if (!room) {
+      throw new Error('Room not created');
+    }
+
+    room.selectedChart = { id: 42, name: 'Test Chart' };
+    roomManager.setRoomState(roomId, { type: 'Playing' });
+
+    // Register broadcast callbacks
+    (protocolHandler as any).broadcastCallbacks.set(ownerConnection, mockSendResponseOwner);
+    (protocolHandler as any).broadcastCallbacks.set(guestConnection, mockSendResponseGuest);
+
+    // Owner aborts
+    protocolHandler.handleMessage(
+      ownerConnection,
+      {
+        type: ClientCommandType.Abort,
+      },
+      mockSendResponseOwner,
+    );
+
+    // Verify owner is marked as finished
+    const ownerPlayer = room.players.get(ownerId);
+    expect(ownerPlayer?.isFinished).toBe(true);
+    expect(ownerPlayer?.score?.score).toBe(0);
+
+    // Clear mocks for next phase
+    mockSendResponseOwner.mockClear();
+    mockSendResponseGuest.mockClear();
+
+    // Guest submits result, game should end
+    protocolHandler.handleMessage(
+      guestConnection,
+      {
+        type: ClientCommandType.GameResult,
+        score: 750_000,
+        accuracy: 95.2,
+        perfect: 420,
+        good: 60,
+        bad: 10,
+        miss: 8,
+        maxCombo: 450,
+      },
+      mockSendResponseGuest,
+    );
+
+    // Verify game ended
+    const guestCallTypes = mockSendResponseGuest.mock.calls.map((call) => call[0].type);
+    expect(guestCallTypes).toContain(ServerCommandType.GameEnded);
+
+    const ownerCallTypes = mockSendResponseOwner.mock.calls.map((call) => call[0].type);
+    expect(ownerCallTypes).toContain(ServerCommandType.GameEnded);
+
+    // Verify state changed to SelectChart
+    expect(room.state.type).toBe('SelectChart');
+  });
 });

@@ -306,17 +306,18 @@ export class ProtocolHandler {
 
         const existingConnectionId = this.userConnections.get(userInfo.id);
         if (existingConnectionId && existingConnectionId !== connectionId) {
-          // 检查玩家是否在Playing状态的房间中
+          // 检查玩家是否在房间中
           const existingRoom = this.roomManager.getRoomByUserId(userInfo.id);
-          const isPlaying = existingRoom?.state.type === 'Playing';
           
-          if (isPlaying) {
-            // Playing状态：执行优雅的连接迁移
-            this.logger.info('[重连迁移] Playing状态下的连接迁移', {
+          if (existingRoom) {
+            // 玩家在任何房间中，都应该迁移连接而不是移除
+            const roomStatus = existingRoom.state.type;
+            this.logger.info('[重连迁移] 保留房间成员', {
               userId: userInfo.id,
+              roomId: existingRoom.id,
+              roomStatus,
               oldConnectionId: existingConnectionId,
               newConnectionId: connectionId,
-              roomId: existingRoom.id,
             });
             
             // 执行连接迁移，保留游戏状态
@@ -332,9 +333,14 @@ export class ProtocolHandler {
             this.sessions.delete(existingConnectionId);
             this.broadcastCallbacks.delete(existingConnectionId);
             this.connectionClosers.delete(existingConnectionId);
+            
+            // 如果不是Playing状态，广播房间更新
+            if (roomStatus !== 'Playing') {
+              this.broadcastRoomUpdate(existingRoom);
+            }
           } else {
-            // 其他状态：正常踢出旧连接
-            this.logger.warn('用户已在其他连接登录，踢出旧连接：', {
+            // 玩家不在房间中，正常踢出
+            this.logger.warn('用户已在其他连接登录，踢出旧连接', {
               userId: userInfo.id,
               oldConnectionId: existingConnectionId,
               newConnectionId: connectionId,
@@ -1381,15 +1387,52 @@ export class ProtocolHandler {
       return;
     }
 
-    this.logger.debug('[游戏结果] 玩家主动放弃', {
+    this.logger.info('[游戏结果] 玩家主动放弃', {
       userId: session.userId,
       roomId: room.id,
+      roomStatus: room.state.type,
     });
 
     this.broadcastMessage(room, {
       type: 'Abort',
       user: session.userId,
     });
+
+    // 标记玩家为已完成，分数为0
+    if (room.state.type === 'Playing') {
+      const player = room.players.get(session.userId);
+      if (player && !player.isFinished) {
+        player.isFinished = true;
+        player.score = {
+          score: 0,
+          accuracy: 0,
+          perfect: 0,
+          good: 0,
+          bad: 0,
+          miss: 0,
+          maxCombo: 0,
+          finishTime: Date.now(),
+        };
+
+        this.logger.info('[游戏结果] 已标记为放弃', {
+          userId: session.userId,
+          roomId: room.id,
+        });
+
+        // 广播玩家完成消息
+        this.broadcastToRoomExcept(room, session.userId, {
+          type: ServerCommandType.PlayerFinished,
+          player: {
+            userId: session.userId,
+            userName: player.user.name,
+            score: null,
+          },
+        });
+
+        // 检查游戏是否结束
+        this.checkGameEnd(room);
+      }
+    }
 
     this.respond(connectionId, sendResponse, {
       type: ServerCommandType.Abort,

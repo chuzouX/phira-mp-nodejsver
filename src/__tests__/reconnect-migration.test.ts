@@ -118,7 +118,7 @@ describe('重连迁移功能测试', () => {
     expect(finalRoom?.players.size).toBe(1);
   });
 
-  it('非Playing状态下应该正常踢出旧连接', async () => {
+  it('非Playing状态下应该迁移连接而不是踢出', async () => {
     const firstConnectionId = 'conn-1';
     const secondConnectionId = 'conn-2';
 
@@ -158,13 +158,17 @@ describe('重连迁移功能测试', () => {
     // 等待异步认证完成
     await new Promise(resolve => setTimeout(resolve, 50));
 
-    // 在非Playing状态下，正常踢出旧连接会从房间移除玩家
-    // 这是正确的行为，因为玩家需要重新加入房间
+    // 在非Playing状态下，应该迁移连接而不是踢出
     const updatedRoom = roomManager.getRoomByUserId(mockUserInfo.id);
 
-    // 玩家应该被从房间移除（需要重新加入）
-    expect(updatedRoom).toBeUndefined();
-    expect(roomManager.count()).toBe(0); // 房间应该被删除（因为是空房间）
+    // 玩家应该仍然在房间中（连接已迁移）
+    expect(updatedRoom).not.toBeUndefined();
+    expect(updatedRoom?.id).toBe('test-room');
+    
+    // 验证连接已迁移
+    const player = updatedRoom?.players.get(mockUserInfo.id);
+    expect(player?.connectionId).toBe(secondConnectionId);
+    expect(updatedRoom?.players.size).toBe(1);
   });
 
     it('应该正确处理migrateConnection方法的边界情况', () => {
