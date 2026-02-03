@@ -3,21 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>All Players - Admin</title>
+    <title>All Players - FunXLink Studio Phira Server</title>
+    <link rel="icon" href="logo.png" type="image/png">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>All Players (Admin View)</h1>
+            <h1>Online Players</h1>
+            <div id="total-players"></div>
+            <div class="connection-status" id="connection-status">Connecting...</div>
+            <a href="/" class="back-link">Back to Home</a>
         </header>
         <main>
-            <a href="/" class="back-link">&larr; Back to Room List</a>
-            <div id="all-players-list" class="detail-card full-width">
-                <!-- Player list will be injected here -->
+            <div id="all-players-list">
+                Loading players...
             </div>
         </main>
+        <footer>
+            <p>Game Server IP:</p>
+            <div class="server-ip-container" id="copy-ip" title="Click to copy">
+                <code id="server-ip">phira.funxlink.fun:19723</code>
+                <span class="copy-icon">&#128203;</span>
+            </div>
+        </footer>
     </div>
     <script src="players.js"></script>
+    <script>
+        document.getElementById('copy-ip').addEventListener('click', () => {
+            const ip = document.getElementById('server-ip').textContent;
+            navigator.clipboard.writeText(ip).then(() => {
+                alert('服务器 IP 已复制到剪贴板！');
+            }).catch(err => {
+                console.error('复制失败: ', err);
+            });
+        });
+    </script>
 </body>
 </html>

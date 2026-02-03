@@ -3,22 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Login</title>
+    <title>Admin Login - FunXLink Studio Phira Server</title>
+    <link rel="icon" href="logo.png" type="image/png">
     <link rel="stylesheet" href="style.css">
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     <style>
-        .login-wrapper {
+        body {
             display: flex;
             justify-content: center;
             align-items: center;
-            padding-top: 50px;
+            height: 100vh;
+            background-color: #f4f7f9;
         }
-        .login-container {
-            max-width: 400px;
-            width: 100%;
-            background-color: #fff;
-            padding: 20px 30px;
+        .login-card {
+            background: white;
+            padding: 30px;
             border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 400px;
+        }
+        .login-card h2 {
+            margin-top: 0;
+            color: #2c3e50;
+            text-align: center;
         }
         .form-group {
             margin-bottom: 15px;
@@ -26,8 +34,7 @@
         .form-group label {
             display: block;
             margin-bottom: 5px;
-            font-weight: bold;
-            color: #555;
+            color: #34495e;
         }
         .form-group input {
             width: 100%;
@@ -36,45 +43,69 @@
             border-radius: 4px;
             box-sizing: border-box;
         }
-        .login-button {
+        button {
             width: 100%;
-            padding: 12px;
+            padding: 10px;
             background-color: #3498db;
             color: white;
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 1.1em;
-            font-weight: bold;
+            font-size: 1em;
         }
-        .login-button:hover {
+        button:hover {
             background-color: #2980b9;
+        }
+        .back-link {
+            display: block;
+            text-align: center;
+            margin-top: 15px;
+            color: #7f8c8d;
+            text-decoration: none;
+        }
+        .turnstile-container {
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: center;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Admin Login</h1>
-        </header>
-        <main>
-            <a href="/" class="back-link">&larr; Back to Room List</a>
-            <div class="login-wrapper">
-                <div class="login-container">
-                    <form action="/login" method="POST">
-                        <div class="form-group">
-                            <label for="username">Username</label>
-                            <input type="text" id="username" name="username" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="password">Password</label>
-                            <input type="password" id="password" name="password" required>
-                        </div>
-                        <button type="submit" class="login-button">Login</button>
-                    </form>
-                </div>
+    <div class="login-card">
+        <h2>Admin Login</h2>
+        <form action="/login" method="POST" id="login-form">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required>
             </div>
-        </main>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <!-- Turnstile Widget Container -->
+            <div class="turnstile-container" id="turnstile-widget"></div>
+            
+            <button type="submit">Login</button>
+        </form>
+        <a href="/" class="back-link">&larr; Back to Home</a>
     </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const response = await fetch('/api/config/public');
+                const config = await response.json();
+                
+                if (config.turnstileSiteKey) {
+                    turnstile.render('#turnstile-widget', {
+                        sitekey: config.turnstileSiteKey,
+                        theme: 'light',
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load public config:', error);
+            }
+        });
+    </script>
 </body>
 </html>

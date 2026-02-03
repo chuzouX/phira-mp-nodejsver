@@ -19,7 +19,7 @@ export interface Application {
   start(): Promise<void>;
   stop(): Promise<void>;
   getTcpServer(): NetworkServer;
-  getHttpServer(): HttpServer;
+  getHttpServer(): HttpServer | undefined;
 }
 
 export const createApplication = (overrides?: Partial<ServerConfig>): Application => {
@@ -52,31 +52,34 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
   const protocolHandler = new ProtocolHandler(roomManager, authService, protocolLogger, config.serverName, broadcastStats);
   
   const networkServer = new NetworkServer(config, logger, protocolHandler);
-  const httpServer = new HttpServer(
-    {
-      webPort: config.webPort,
-      sessionSecret: config.sessionSecret,
-      adminName: config.adminName,
-      adminPassword: config.adminPassword,
-    },
-    logger,
-    roomManager,
-    protocolHandler,
-  );
-  webSocketServer = new WebSocketServer(httpServer.getInternalServer(), roomManager, protocolHandler, webSocketLogger);
+  let httpServer: HttpServer | undefined;
+  
+  if (config.enableWebServer) {
+      httpServer = new HttpServer(
+        config,
+        logger,
+        roomManager,
+        protocolHandler,
+      );
+      webSocketServer = new WebSocketServer(httpServer.getInternalServer(), roomManager, protocolHandler, config, webSocketLogger);
+  } else {
+      logger.info('Web server is disabled via configuration.');
+  }
 
   const start = async (): Promise<void> => {
-    await Promise.all([
-      httpServer.start(),
-      networkServer.start(),
-    ]);
+    const promises: Promise<void>[] = [networkServer.start()];
+    if (httpServer) {
+        promises.push(httpServer.start());
+    }
+    await Promise.all(promises);
   };
 
   const stop = async (): Promise<void> => {
-    await Promise.all([
-      httpServer.stop(),
-      networkServer.stop(),
-    ]);
+    const promises: Promise<void>[] = [networkServer.stop()];
+    if (httpServer) {
+        promises.push(httpServer.stop());
+    }
+    await Promise.all(promises);
   };
 
   return {
@@ -86,6 +89,8 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
     start,
     stop,
     getTcpServer: () => networkServer,
-    getHttpServer: () => httpServer,
+    getHttpServer: () => httpServer!, // Note: this might be undefined now, but interface requires it. 
+    // Ideally interface should be updated, but for minimal changes we can cast or update interface. 
+    // Let's check the interface definition.
   };
 };

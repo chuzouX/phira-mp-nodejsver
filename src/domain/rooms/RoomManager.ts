@@ -4,11 +4,12 @@
  */
 
 import { Logger } from '../../logging/logger';
-import { UserInfo, RoomState, PlayerScore } from '../protocol/Commands';
+import { UserInfo, RoomState, PlayerScore, Message } from '../protocol/Commands';
 
 export interface PlayerInfo {
   user: UserInfo;
   connectionId: string;
+  avatar?: string;
   isReady: boolean;
   isFinished: boolean;
   score: PlayerScore | null;
@@ -21,6 +22,20 @@ export interface ChartInfo {
   name: string;
   charter?: string;
   level?: string;
+  difficulty?: number;
+  composer?: string;
+  illustration?: string;
+  file?: string;
+  uploader?: number;
+  rating?: number;
+  ratingCount?: number;
+  uploaderInfo?: {
+      id: number;
+      name: string;
+      avatar: string;
+      rks: number;
+      bio?: string;
+  };
   // Add other chart fields as needed from the API response
 }
 
@@ -36,8 +51,12 @@ export interface Room {
   cycle: boolean;
   live: boolean;
   selectedChart?: ChartInfo;
+  lastGameChart?: ChartInfo;
   createdAt: number;
   soloConfirmPending?: boolean;
+  messages: Message[];
+  blacklist: number[];
+  whitelist: number[];
 }
 
 export interface CreateRoomOptions {
@@ -62,6 +81,7 @@ export interface RoomManager {
   setRoomState(roomId: string, state: RoomState): boolean;
   setRoomLocked(roomId: string, locked: boolean): boolean;
   setRoomCycle(roomId: string, cycle: boolean): boolean;
+  setRoomMaxPlayers(roomId: string, maxPlayers: number): boolean;
   setPlayerReady(roomId: string, userId: number, ready: boolean): boolean;
   isRoomOwner(roomId: string, userId: number): boolean;
   changeRoomOwner(roomId: string, newOwnerId: number): boolean;
@@ -72,6 +92,10 @@ export interface RoomManager {
   migrateConnection(userId: number, oldConnectionId: string, newConnectionId: string): void;
   setSoloConfirmPending(roomId: string, pending: boolean): boolean;
   isSoloConfirmPending(roomId: string): boolean;
+  addMessageToRoom(roomId: string, message: Message): void;
+  setRoomBlacklist(roomId: string, userIds: number[]): boolean;
+  isUserBlacklisted(roomId: string, userId: number): boolean;
+  setRoomWhitelist(roomId: string, userIds: number[]): boolean;
   getAllPlayers(): { id: number; name: string; roomId: string; roomName: string }[];
 }
 
@@ -120,6 +144,7 @@ export class InMemoryRoomManager implements RoomManager {
     players.set(ownerId, {
       user: ownerInfo,
       connectionId,
+      avatar: ownerInfo.avatar,
       isReady: false,
       isFinished: false,
       score: null,
@@ -139,6 +164,9 @@ export class InMemoryRoomManager implements RoomManager {
       live: false,
       createdAt: Date.now(),
       soloConfirmPending: false,
+      messages: [],
+      blacklist: [],
+      whitelist: [],
     };
 
     this.rooms.set(id, room);
@@ -193,6 +221,16 @@ export class InMemoryRoomManager implements RoomManager {
       return false;
     }
 
+    if (room.blacklist.includes(userId)) {
+      this.logger.warn(`无法将玩家 ${userId} 加入到黑名单中的房间 ${roomId}`);
+      return false;
+    }
+
+    if (room.whitelist.length > 0 && !room.whitelist.includes(userId)) {
+      this.logger.warn(`无法将玩家 ${userId} 加入到有白名单限制的房间 ${roomId} (不在名单内)`);
+      return false;
+    }
+
     if (room.soloConfirmPending) {
       room.soloConfirmPending = false;
     }
@@ -200,6 +238,7 @@ export class InMemoryRoomManager implements RoomManager {
     room.players.set(userId, {
       user: userInfo,
       connectionId,
+      avatar: userInfo.avatar,
       isReady: false,
       isFinished: false,
       score: null,
@@ -274,6 +313,18 @@ export class InMemoryRoomManager implements RoomManager {
 
     room.cycle = cycle;
     this.logger.debug('房间循环状态改变：', { roomId, cycle });
+    return true;
+  }
+
+  setRoomMaxPlayers(roomId: string, maxPlayers: number): boolean {
+    const room = this.rooms.get(roomId);
+    if (!room) {
+      return false;
+    }
+
+    room.maxPlayers = maxPlayers;
+    this.logger.debug('房间最大人数改变：', { roomId, maxPlayers });
+    this.notifyRoomsChanged();
     return true;
   }
 
@@ -405,5 +456,38 @@ export class InMemoryRoomManager implements RoomManager {
   isSoloConfirmPending(roomId: string): boolean {
     const room = this.rooms.get(roomId);
     return room?.soloConfirmPending ?? false;
+  }
+
+  addMessageToRoom(roomId: string, message: Message): void {
+    const room = this.rooms.get(roomId);
+    if (room) {
+      room.messages.push(message);
+      if (room.messages.length > 50) {
+        room.messages.shift();
+      }
+      this.notifyRoomsChanged();
+    }
+  }
+
+  setRoomBlacklist(roomId: string, userIds: number[]): boolean {
+    const room = this.rooms.get(roomId);
+    if (!room) return false;
+    room.blacklist = userIds;
+    this.logger.debug(`Room ${roomId} blacklist updated`, { count: userIds.length });
+    return true;
+  }
+
+  isUserBlacklisted(roomId: string, userId: number): boolean {
+    const room = this.rooms.get(roomId);
+    if (!room) return false;
+    return room.blacklist.includes(userId);
+  }
+
+  setRoomWhitelist(roomId: string, userIds: number[]): boolean {
+    const room = this.rooms.get(roomId);
+    if (!room) return false;
+    room.whitelist = userIds;
+    this.logger.debug(`Room ${roomId} whitelist updated`, { count: userIds.length });
+    return true;
   }
 }

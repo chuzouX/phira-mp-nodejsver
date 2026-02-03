@@ -9,6 +9,7 @@ import { UserInfo } from '../protocol/Commands';
 interface PhiraUserResponse {
   id: number;
   name: string;
+  avatar?: string;
   language?: string;
 }
 
@@ -33,6 +34,7 @@ export class PhiraAuthService implements AuthService {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${token}`,
+          'User-Agent': 'PhiraServer/1.0',
         },
       });
 
@@ -56,6 +58,7 @@ export class PhiraAuthService implements AuthService {
       return {
         id: userData.id,
         name: userData.name,
+        avatar: userData.avatar ?? 'https://api.phira.cn/files/6ad662de-b505-4725-a7ef-72d65f32b404',
         monitor: false,
       };
     } catch (error) {

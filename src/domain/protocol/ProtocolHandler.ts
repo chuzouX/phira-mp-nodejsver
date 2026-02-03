@@ -45,6 +45,333 @@ export class ProtocolHandler {
     return this.sessions.size;
   }
 
+  public sendServerMessage(roomId: string, content: string): void {
+    const room = this.roomManager.getRoom(roomId);
+    if (room) {
+      this.broadcastMessage(room, {
+        type: 'Chat',
+        user: -1,
+        content: content,
+      });
+      this.logger.info(`Admin sent server message to room ${roomId}: ${content}`);
+    }
+  }
+
+  public kickPlayer(userId: number): boolean {
+    const room = this.roomManager.getRoomByUserId(userId);
+    if (!room) return false;
+
+    const connectionId = this.userConnections.get(userId);
+    const userInfo = room.players.get(userId)?.user;
+    const userName = userInfo?.name || `ID: ${userId}`;
+    const wasHost = room.ownerId === userId;
+
+    // 1. Notify the room with standard LeaveRoom message
+    this.broadcastMessage(room, {
+      type: 'LeaveRoom',
+      user: userId,
+      name: userName,
+    });
+
+    // 2. Also send a system chat for clarity
+    this.broadcastMessage(room, {
+      type: 'Chat',
+      user: -1,
+      content: `【系统】管理员已将玩家 ${userName} 移出房间`,
+    });
+
+    // 3. Force the player's client to leave by sending the LeaveRoom response
+    if (connectionId) {
+      const callback = this.broadcastCallbacks.get(connectionId);
+      if (callback) {
+        callback({
+          type: ServerCommandType.LeaveRoom,
+          result: { ok: true, value: undefined },
+        });
+      }
+    }
+
+    // 4. Remove from room
+    this.roomManager.removePlayerFromRoom(room.id, userId);
+
+    // 5. Handle Host Migration if necessary (reusing logic from handleLeaveRoom)
+    const updatedRoom = this.roomManager.getRoom(room.id);
+    if (updatedRoom && wasHost && updatedRoom.ownerId !== userId) {
+      this.broadcastMessage(updatedRoom, {
+        type: 'NewHost',
+        user: updatedRoom.ownerId,
+      });
+
+      for (const playerInfo of updatedRoom.players.values()) {
+        const isHost = playerInfo.user.id === updatedRoom.ownerId;
+        const callback = this.broadcastCallbacks.get(playerInfo.connectionId);
+        if (callback) {
+          callback({
+            type: ServerCommandType.ChangeHost,
+            isHost,
+          });
+        }
+      }
+    }
+
+    this.logger.info(`Admin kicked player ${userId} (${userName}) from room ${room.id}`);
+    return true;
+  }
+
+  public forceStartGame(roomId: string): boolean {
+    const room = this.roomManager.getRoom(roomId);
+    if (!room || (room.state.type !== 'WaitingForReady' && room.state.type !== 'SelectChart')) {
+      return false;
+    }
+
+    if (!room.selectedChart) return false;
+
+    this.logger.info(`Admin forcing game start in room ${roomId}`);
+
+    // Process players
+    for (const playerInfo of room.players.values()) {
+      if (playerInfo.isReady || playerInfo.user.id === room.ownerId) {
+        // Ready or Host: reset for normal play
+        playerInfo.isReady = false;
+        playerInfo.isFinished = false;
+        playerInfo.score = null;
+      } else {
+        // Not ready: treat as aborted/given up
+        playerInfo.isReady = false;
+        playerInfo.isFinished = true;
+        playerInfo.score = {
+          score: 0,
+          accuracy: 0,
+          perfect: 0,
+          good: 0,
+          bad: 0,
+          miss: 0,
+          maxCombo: 0,
+          finishTime: Date.now(),
+        };
+        
+        this.broadcastMessage(room, {
+          type: 'Abort',
+          user: playerInfo.user.id,
+        });
+      }
+    }
+
+    this.roomManager.setRoomState(room.id, { type: 'Playing' });
+    
+    // Broadcast messages to the room
+    this.broadcastMessage(room, {
+      type: 'Chat',
+      user: -1,
+      content: '【系统】管理员已强制开始游戏',
+    });
+    
+    this.broadcastMessage(room, { type: 'StartPlaying' });
+    
+    this.broadcastToRoom(room, {
+      type: ServerCommandType.ChangeState,
+      state: { type: 'Playing' },
+    });
+
+    return true;
+  }
+
+  public toggleRoomLock(roomId: string): boolean {
+    const room = this.roomManager.getRoom(roomId);
+    if (!room) return false;
+
+    const newLockState = !room.locked;
+    this.roomManager.setRoomLocked(roomId, newLockState);
+
+    // 1. Notify the room with standard LockRoom message (if applicable)
+    this.broadcastMessage(room, {
+      type: 'LockRoom',
+      lock: newLockState,
+    });
+
+    // 2. Also send a system chat for clarity
+    this.broadcastMessage(room, {
+      type: 'Chat',
+      user: -1,
+      content: `【系统】管理员已${newLockState ? '锁定' : '解锁'}了房间`,
+    });
+
+    this.logger.info(`Admin toggled lock for room ${roomId} to ${newLockState}`);
+    return true;
+  }
+
+  public setRoomMaxPlayers(roomId: string, maxPlayers: number): boolean {
+    const room = this.roomManager.getRoom(roomId);
+    if (!room) return false;
+
+    this.roomManager.setRoomMaxPlayers(roomId, maxPlayers);
+
+    // Notify the room
+    this.broadcastMessage(room, {
+      type: 'Chat',
+      user: -1,
+      content: `【系统】管理员已将房间最大人数修改为 ${maxPlayers}`,
+    });
+
+    this.logger.info(`Admin set max players for room ${roomId} to ${maxPlayers}`);
+    return true;
+  }
+
+  public closeRoomByAdmin(roomId: string): boolean {
+    const room = this.roomManager.getRoom(roomId);
+    if (!room) return false;
+
+    // 1. Notify and kick everyone
+    const players = Array.from(room.players.values());
+    for (const playerInfo of players) {
+      const callback = this.broadcastCallbacks.get(playerInfo.connectionId);
+      if (callback) {
+        callback({
+          type: ServerCommandType.LeaveRoom,
+          result: { ok: true, value: undefined },
+        });
+      }
+    }
+
+    // 2. Actually delete the room
+    this.roomManager.deleteRoom(roomId);
+    this.logger.info(`Admin forcibly closed room ${roomId}`);
+    return true;
+  }
+
+  public toggleRoomMode(roomId: string): boolean {
+    const room = this.roomManager.getRoom(roomId);
+    if (!room) return false;
+
+    const newCycleState = !room.cycle;
+    this.roomManager.setRoomCycle(roomId, newCycleState);
+
+    // 1. Notify the room via standard Message (if applicable)
+    this.broadcastMessage(room, {
+      type: 'CycleRoom',
+      cycle: newCycleState,
+    });
+
+    // 2. Send a system chat message
+    const modeName = newCycleState ? '循环模式' : '普通模式';
+    this.broadcastMessage(room, {
+      type: 'Chat',
+      user: -1,
+      content: `【系统】管理员已将房间模式更改为 ${modeName}`,
+    });
+
+    this.logger.info(`Admin toggled cycle mode for room ${roomId} to ${newCycleState}`);
+    return true;
+  }
+
+  public async setRoomBlacklistByAdmin(roomId: string, userIds: number[]): Promise<boolean> {
+    const room = this.roomManager.getRoom(roomId);
+    if (!room) return false;
+
+    // Update the blacklist
+    this.roomManager.setRoomBlacklist(roomId, userIds);
+
+    // Fetch names for the blacklist report
+    const blacklistDetails: string[] = [];
+    for (const id of userIds) {
+        try {
+            const response = await fetch(`https://api.phira.cn/user/${id}`, {
+                headers: { 'User-Agent': 'PhiraServer/1.0' }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                blacklistDetails.push(`${data.name} (${id})`);
+            } else {
+                blacklistDetails.push(`未知用户 (${id})`);
+            }
+        } catch (error) {
+            blacklistDetails.push(`获取失败 (${id})`);
+        }
+    }
+
+    // Broadcast update message
+    let content = `【系统】黑名单已被更新，目前有 ${userIds.length} 人，分别是：`;
+    if (blacklistDetails.length > 0) {
+        content += `\n=========BlackList==========\n${blacklistDetails.join('\n')}\n=========BlackList==========`;
+    } else {
+        content += ' (空)';
+    }
+
+    this.broadcastMessage(room, {
+        type: 'Chat',
+        user: -1,
+        content: content
+    });
+
+    // Check currently in-room players and kick if blacklisted
+    const currentPlayers = Array.from(room.players.values());
+    for (const player of currentPlayers) {
+      if (userIds.includes(player.user.id)) {
+        this.logger.info(`Admin set blacklist: kicking player ${player.user.id} from room ${roomId}`);
+        this.kickPlayer(player.user.id);
+      }
+    }
+
+    this.logger.info(`Admin updated blacklist for room ${roomId} with ${userIds.length} IDs`);
+    return true;
+  }
+
+  public async setRoomWhitelistByAdmin(roomId: string, userIds: number[]): Promise<boolean> {
+    const room = this.roomManager.getRoom(roomId);
+    if (!room) return false;
+
+    // Update the whitelist
+    this.roomManager.setRoomWhitelist(roomId, userIds);
+
+    // Fetch names for the whitelist report
+    const whitelistDetails: string[] = [];
+    for (const id of userIds) {
+        try {
+            const response = await fetch(`https://api.phira.cn/user/${id}`, {
+                headers: { 'User-Agent': 'PhiraServer/1.0' }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                whitelistDetails.push(`${data.name} (${id})`);
+            } else {
+                whitelistDetails.push(`未知用户 (${id})`);
+            }
+        } catch (error) {
+            whitelistDetails.push(`获取失败 (${id})`);
+        }
+    }
+
+    // Broadcast update message
+    let content = `【系统】白名单已被更新，目前有 ${userIds.length} 人，分别是：`;
+    if (whitelistDetails.length > 0) {
+        content += `\n=========WhiteList==========\n${whitelistDetails.join('\n')}\n=========WhiteList==========`;
+    } else {
+        content += ' (空，全员可进)';
+    }
+
+    this.broadcastMessage(room, {
+        type: 'Chat',
+        user: -1,
+        content: content
+    });
+
+    // Enforcement: Kick anyone NOT in the whitelist (if whitelist is active)
+    if (userIds.length > 0) {
+        const currentPlayers = Array.from(room.players.values());
+        for (const player of currentPlayers) {
+            const userId = player.user.id;
+            // Don't kick the room owner or the server user (-1) or those in whitelist
+            if (userId !== room.ownerId && userId !== -1 && !userIds.includes(userId)) {
+                this.logger.info(`Admin set whitelist: kicking player ${userId} from room ${roomId} (not in whitelist)`);
+                this.kickPlayer(userId);
+            }
+        }
+    }
+
+    this.logger.info(`Admin updated whitelist for room ${roomId} with ${userIds.length} IDs`);
+    return true;
+  }
+
   public getAllSessions(): { id: number; name: string; roomId?: string; roomName?: string }[] {
     const sessions: { id: number; name: string; roomId?: string; roomName?: string }[] = [];
     for (const session of this.sessions.values()) {
@@ -80,6 +407,9 @@ export class ProtocolHandler {
   }
 
   private broadcastMessage(room: Room, message: Message): void {
+    // Save message to room history
+    this.roomManager.addMessageToRoom(room.id, message);
+
     const serverCmd: ServerCommand = {
       type: ServerCommandType.Message,
       message,
@@ -110,7 +440,11 @@ export class ProtocolHandler {
   }
 
   private async fetchChartInfo(chartId: number): Promise<ChartInfo> {
-    const response = await fetch(`https://phira.5wyxi.com/chart/${chartId}`);
+    this.logger.debug(`Fetching chart info for ID: ${chartId}`);
+    
+    const response = await fetch(`https://api.phira.cn/chart/${chartId}`, {
+        headers: { 'User-Agent': 'PhiraServer/1.0' }
+    });
     
     if (!response.ok) {
       throw new Error(`API返回了一个神秘的状态： ${response.status}`);
@@ -118,11 +452,55 @@ export class ProtocolHandler {
     
     const chartData = await response.json();
     
+    // Explicitly extract uploader ID as a number
+    const rawUploader = chartData.uploader ?? chartData.uploaderId;
+    const uploaderId = rawUploader !== undefined && rawUploader !== null ? Number(rawUploader) : undefined;
+    
+    this.logger.debug(`Chart API Response for ID ${chartId}:`, { 
+        name: chartData.name, 
+        uploaderId: uploaderId,
+        hasRawUploader: rawUploader !== undefined
+    });
+    
+    let uploaderInfo;
+    if (uploaderId && !isNaN(uploaderId)) {
+        try {
+            const userResponse = await fetch(`https://api.phira.cn/user/${uploaderId}`, {
+                headers: { 'User-Agent': 'PhiraServer/1.0' }
+            });
+            if (userResponse.ok) {
+                const userData = await userResponse.json();
+                uploaderInfo = {
+                    id: userData.id,
+                    name: userData.name,
+                    avatar: userData.avatar ?? 'https://api.phira.cn/files/6ad662de-b505-4725-a7ef-72d65f32b404',
+                    rks: userData.rks ?? 0,
+                    bio: userData.bio,
+                };
+                this.logger.debug(`Successfully fetched info for uploader ${uploaderId}: ${userData.name}`);
+            } else {
+                this.logger.warn(`User API returned ${userResponse.status} for ID ${uploaderId}`);
+            }
+        } catch (error) {
+            this.logger.error(`Error fetching uploader info for ID ${uploaderId}:`, { 
+                error: error instanceof Error ? error.message : String(error) 
+            });
+        }
+    }
+
     return {
       id: chartData.id,
       name: chartData.name,
       charter: chartData.charter,
       level: chartData.level,
+      difficulty: chartData.difficulty,
+      composer: chartData.composer,
+      illustration: chartData.illustration,
+      file: chartData.file,
+      rating: chartData.rating,
+      ratingCount: chartData.ratingCount,
+      uploader: uploaderId,
+      uploaderInfo,
     };
   }
 
@@ -380,6 +758,16 @@ export class ProtocolHandler {
           type: ServerCommandType.Authenticate,
           result: { ok: true, value: [userInfo, roomState] },
         });
+
+
+        this.respond(connectionId, sendResponse, {
+          type: ServerCommandType.Message,
+          message: {
+            type: 'Chat',
+            user: -1,
+            content: `\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nHi,${userInfo.name}！欢迎来到 ${this.serverName} 服务器，希望你能在这里玩的开心呢\n=========公告==========\nFunXLink Studio Phira Server\n1. 服务器ip：phira.funxlink.fun:19723\n2. 服务器QQ群：762722951\n3. 服务器捐赠链接：https://afdian.com/a/chuzouX\n=========公告==========\n\n=========游玩须知==========\n1. 联机大厅【官方】：https://phi.funxlink.fun\n2. 联机大厅【dmocken】：https://phira.dmocken.top/mulity\n3. 默认开房间是在联机大厅公开房间号的\n4. 如果你不想让你的房间公布 请使用sm开头作为房间号\n=========游玩须知==========\n\nEnjoy~`,
+          },
+        });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Authentication failed';
         this.logger.warn('验证失败：', {
@@ -472,35 +860,40 @@ export class ProtocolHandler {
 
       this.logger.debug(`${session.userId} 创建房间 ${room.id} 成功`);
 
-      // 1. Respond with success so the client can transition to the room screen.
-      this.respond(connectionId, sendResponse, {
-        type: ServerCommandType.CreateRoom,
-        result: { ok: true, value: undefined },
-      });
-
-      // 2. Force the client to process its own join and the server user's join
-      // to ensure the user list is populated before other messages arrive.
+      // 1. Broadcast joins first so client has user info before transitioning
       this.broadcastToRoom(room, {
         type: ServerCommandType.OnJoinRoom,
         user: session.userInfo,
       });
-      this.broadcastToRoom(room, {
-        type: ServerCommandType.OnJoinRoom,
-        user: { id: -1, name: this.serverName, monitor: true },
+
+      // 2. Respond with success so the client can transition to the room screen.
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.CreateRoom,
+        result: { ok: true, value: undefined },
       });
       
-      // 3. Now, broadcast that the room was created. The client should have the user name now.
-      this.broadcastMessage(room, {
-        type: 'CreateRoom',
-        user: session.userId,
-      });
+      // 3. Now, broadcast that the room was created. 
+      // Delay to ensure client processed OnJoinRoom/Scene Transition and knows the user name.
+      setTimeout(() => {
+          // Send server user join AFTER client has transitioned
+                this.broadcastToRoom(room, {
+                  type: ServerCommandType.OnJoinRoom,
+                  user: { id: -1, name: this.serverName, avatar: 'https://api.phira.cn/files/6ad662de-b505-4725-a7ef-72d65f32b404', monitor: true },
+                });
+          this.broadcastMessage(room, {
+            type: 'CreateRoom',
+            user: session.userId,
+          });
 
-      // 4. Send announcement
-      this.broadcastMessage(room, {
-        type: 'Chat',
-        user: -1,
-        content: '【公告】服务器在处于开发阶段 如果出现断开连接或重连属于正常现象',
-      });
+          // 4. Send Room Welcome and announcement
+          const isPrivate = roomId.startsWith('sm');
+          const roomTypeText = isPrivate ? '私密' : '公开';
+          this.broadcastMessage(room, {
+            type: 'Chat',
+            user: -1,
+            content: `Hi,${session.userInfo.name}！此房间为${roomTypeText}房间，房间号为${roomId}，祝您玩的开心！`,
+          });
+      }, 250);
     } catch (error) {
       const errorMessage = (error as Error).message;
 
@@ -584,15 +977,10 @@ export class ProtocolHandler {
         name: session.userInfo.name,
       });
 
-      // Send announcement to the whole room
-      this.broadcastMessage(room, {
-        type: 'Chat',
-        user: -1, // System User
-        content: '【公告】服务器在处于开发阶段 如果出现断开连接或重连属于正常现象',
-      });
+      // Delay announcement slightly
 
       const usersInRoom = Array.from(room.players.values()).map((p) => p.user);
-      const serverUser: UserInfo = { id: -1, name: this.serverName, monitor: true };
+      const serverUser: UserInfo = { id: -1, name: this.serverName, avatar: 'https://api.phira.cn/files/6ad662de-b505-4725-a7ef-72d65f32b404', monitor: true };
       
       const joinResponse: JoinRoomResponse = {
         state: room.state,
@@ -609,7 +997,7 @@ export class ProtocolHandler {
     } else {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.JoinRoom,
-        result: { ok: false, error: '杂鱼~你要加入的房间满了哦' },
+        result: { ok: false, error: '杂鱼~你要加入的房间满了或杂鱼无权进入' },
       });
     }
   }
@@ -934,7 +1322,7 @@ export class ProtocolHandler {
 
     if (room.players.size > 1) {
       for (const playerInfo of room.players.values()) {
-        playerInfo.isReady = false;
+        playerInfo.isReady = playerInfo.user.id === room.ownerId; // Host is ready by default
         playerInfo.isFinished = false;
         playerInfo.score = null;
       }
@@ -1447,6 +1835,14 @@ export class ProtocolHandler {
 
     this.broadcastMessage(room, { type: 'GameEnd' });
 
+    // Push a summary message to the public screen history
+    const summary = rankings.map(r => `${r.rank}. ${r.userName}: ${r.score?.score.toLocaleString() ?? '0'} (${((r.score?.accuracy ?? 0) * 100).toFixed(2)}%)`).join('\n');
+    this.roomManager.addMessageToRoom(room.id, {
+        type: 'Chat',
+        user: -1,
+        content: `【游戏结算】\n${summary}`
+    });
+
     const oldState = room.state.type;
 
     if (room.cycle) {
@@ -1509,7 +1905,7 @@ export class ProtocolHandler {
       for (const playerInfo of room.players.values()) {
         playerInfo.isReady = false;
         playerInfo.isFinished = false;
-        playerInfo.score = null;
+        // playerInfo.score = null; // Keep score for display
       }
       
     } else {
@@ -1517,9 +1913,12 @@ export class ProtocolHandler {
         roomId: room.id,
       });
       
+      // Save current chart as last game chart before clearing
+      room.lastGameChart = room.selectedChart;
+
       this.roomManager.setRoomState(room.id, {
         type: 'SelectChart',
-        chartId: null,
+        chartId: room.selectedChart?.id ?? null, // Preserve chart ID
       });
       this.roomManager.setSoloConfirmPending(room.id, false);
       
@@ -1529,12 +1928,12 @@ export class ProtocolHandler {
         to: 'SelectChart',
       });
       
-      this.roomManager.setRoomChart(room.id, undefined);
+      // this.roomManager.setRoomChart(room.id, undefined); // Preserve chart info
       
       for (const playerInfo of room.players.values()) {
         playerInfo.isReady = false;
         playerInfo.isFinished = false;
-        playerInfo.score = null;
+        // playerInfo.score = null; // Keep score for display
       }
     }
 
@@ -1572,7 +1971,7 @@ export class ProtocolHandler {
       users.set(id, playerInfo.user);
     }
     // Add special server user info (ID -1, name from config)
-    users.set(-1, { id: -1, name: this.serverName, monitor: true });
+    users.set(-1, { id: -1, name: this.serverName, avatar: 'https://api.phira.cn/files/6ad662de-b505-4725-a7ef-72d65f32b404', monitor: true });
 
     const player = room.players.get(userId);
 

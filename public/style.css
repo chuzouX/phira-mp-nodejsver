@@ -1,4 +1,3 @@
-
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     background-color: #f4f7f9;
@@ -6,27 +5,40 @@ body {
     margin: 0;
     padding: 20px;
     display: flex;
-    justify-content: center;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    box-sizing: border-box;
 }
 
 .container {
     width: 100%;
-    max-width: 800px;
+    max-width: 900px; /* Further reduced from 1100px to tighten boundaries */
+    transition: max-width 0.3s ease;
+    flex: 1; /* Push the footer down */
+}
+
+/* Room page specific container expansion */
+body:has(.details-grid) .container {
+    max-width: 1400px;
 }
 
 header {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end; /* Align items to the right by default, H1 will push */
     align-items: center;
     margin-bottom: 20px;
     padding-bottom: 10px;
     border-bottom: 2px solid #e0e0e0;
+    flex-wrap: wrap;
+    gap: 15px;
 }
 
 h1 {
     margin: 0;
     font-size: 1.8em;
     color: #2c3e50;
+    margin-right: auto; /* Push H1 to the left, others to the right */
 }
 
 .connection-status {
@@ -68,6 +80,7 @@ h1 {
     margin: 0 0 10px 0;
     font-size: 1.2em;
     color: #3498db;
+    word-break: break-all;
 }
 
 .room-info {
@@ -92,22 +105,42 @@ h1 {
     color: #2ecc71;
 }
 
-/* Room Detail Page Styles */
+/* Back Button Styling - Professional Button Look */
 .back-link {
-    display: inline-block;
-    margin-bottom: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #fff;
     color: #3498db;
+    padding: 8px 18px;
+    border-radius: 8px;
     text-decoration: none;
     font-weight: bold;
+    font-size: 0.9em;
+    border: 1px solid #3498db;
+    transition: all 0.2s;
+    height: fit-content;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
 }
 
 .back-link:hover {
-    text-decoration: underline;
+    background-color: #3498db;
+    color: #fff;
+    text-decoration: none;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
 }
 
 .details-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 260px 1fr 480px;
+    gap: 20px;
+    align-items: start;
+}
+
+.left-sidebar, .center-column, .right-sidebar {
+    display: flex;
+    flex-direction: column;
     gap: 20px;
 }
 
@@ -116,10 +149,7 @@ h1 {
     border: 1px solid #ddd;
     border-radius: 8px;
     padding: 20px;
-}
-
-.detail-card.full-width {
-    grid-column: 1 / -1;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
 }
 
 .detail-card h3 {
@@ -132,6 +162,104 @@ h1 {
 .detail-card p {
     display: flex;
     justify-content: space-between;
+    margin: 8px 0;
+}
+
+/* Results Table */
+.results-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    font-size: 0.9em;
+}
+
+.results-table th, .results-table td {
+    padding: 10px 8px;
+    text-align: center;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.results-table th {
+    background-color: #f8f9fa;
+    color: #34495e;
+    font-weight: bold;
+}
+
+.results-table tr:last-child td {
+    border-bottom: none;
+}
+
+.rank-1 { color: #f1c40f; font-weight: bold; }
+.rank-2 { color: #95a5a6; font-weight: bold; }
+.rank-3 { color: #d35400; font-weight: bold; }
+
+.val-gold { color: #f1c40f; font-weight: bold; text-shadow: 0 0 1px rgba(241, 196, 15, 0.2); }
+.val-green { color: #2ecc71; font-weight: bold; }
+.val-red { color: #e74c3c; font-weight: bold; }
+
+.score-val { font-family: monospace; font-weight: bold; }
+
+/* Public Screen / Chat Styles */
+.message-container {
+    height: 300px; /* Fixed height for approx 10 messages */
+    overflow-y: auto;
+    background-color: #f9f9f9;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    padding: 10px;
+    font-size: 0.9em;
+    display: flex;
+    flex-direction: column;
+}
+
+.message-item {
+    margin-bottom: 6px;
+    padding: 4px 0;
+    border-bottom: 1px solid #f0f0f0;
+    line-height: 1.4;
+}
+
+.message-item:last-child {
+    border-bottom: none;
+}
+
+/* Scrollable containers for List and Results */
+.player-list-scroll {
+    height: 300px; /* Approx 9 players */
+    overflow-y: auto;
+}
+
+.results-scroll {
+    height: 370px; /* Approx 8 players + header */
+    overflow-y: auto;
+}
+
+.msg-user {
+    font-weight: bold;
+    color: #2980b9;
+}
+
+.msg-chat {
+    color: #333;
+}
+
+.msg-system {
+    color: #7f8c8d;
+    font-style: italic;
+}
+
+.msg-ready {
+    color: #27ae60;
+    font-weight: bold;
+}
+
+.msg-playing {
+    color: #e67e22;
+    font-weight: bold;
+}
+
+.msg-abort {
+    color: #e74c3c;
 }
 
 .player-list {
@@ -141,7 +269,7 @@ h1 {
 }
 
 .player-item {
-    padding: 10px;
+    padding: 6px 10px; /* Reduced vertical padding */
     border-bottom: 1px solid #f0f0f0;
     display: flex;
     justify-content: space-between;
@@ -152,38 +280,74 @@ h1 {
     border-bottom: none;
 }
 
-.player-item.owner {
+.player-item.owner .player-name {
     font-weight: bold;
 }
 
-.player-item.ready .player-status {
-    color: #27ae60;
+.player-status {
+    font-style: normal;
+    color: #95a5a6;
+    font-size: 0.9em;
 }
 
-.player-status {
-    font-style: italic;
-    color: #95a5a6;
+.status-ready {
+    color: #27ae60 !important;
+    font-weight: bold;
+}
+
+.status-not-ready {
+    color: #e74c3c !important;
+    font-weight: bold;
 }
 
 .player-name {
     text-decoration: none;
     color: inherit;
+    word-break: break-all;
 }
 
 .player-name:hover {
     text-decoration: underline;
 }
 
-#total-players {
-    padding: 5px 10px;
-    background-color: #ecf0f1;
-    color: #34495e;
-    border-radius: 5px;
-    font-size: 0.9em;
+.name-bot {
+    color: #7f8c8d !important; /* Grey for bot */
 }
-#total-players a {
-    color: inherit;
-    text-decoration: none;
+
+.name-owner {
+    color: #f1c40f !important; /* Gold for room owner */
+    font-weight: bold;
+}
+
+.player-avatar-small {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    margin-right: 10px;
+    object-fit: cover;
+    border: 1px solid #ddd;
+    flex-shrink: 0;
+}
+
+.name-prefix {
+    font-weight: bold;
+    margin-right: 2px;
+}
+
+.prefix-owner {
+    color: #f1c40f; /* Gold */
+}
+
+.prefix-admin {
+    color: #3498db; /* Blue */
+}
+
+.prefix-player {
+    color: #95a5a6; /* Greyish */
+}
+
+.prefix-bot {
+    color: #7f8c8d; /* Grey */
 }
 
 .player-info-left {
@@ -195,6 +359,291 @@ h1 {
     width: 25px;
     text-align: center;
     display: inline-block;
+    flex-shrink: 0;
+}
+
+/* Chart and Uploader Box Styles */
+.chart-details-box, .uploader-box {
+    border: 1px solid #eef2f3;
+    border-radius: 8px;
+    padding: 15px;
+    background-color: #fafbfc;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.chart-details-box h4, .uploader-box h4 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #3498db;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 5px;
+}
+
+.download-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #3498db;
+    color: white;
+    padding: 12px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: bold;
+    margin-top: 5px;
+    transition: background-color 0.2s;
+    width: 100%;
+    box-sizing: border-box;
+    gap: 8px;
+}
+
+.download-button:hover {
+    background-color: #2980b9;
+}
+
+.download-button.placeholder {
+    background-color: #95a5a6;
+}
+
+.download-button.placeholder:hover {
+    background-color: #7f8c8d;
+}
+
+.uploader-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center; /* Center content vertically */
+    min-height: 305px; /* Enforce standard height as requested */
+    box-sizing: border-box;
+}
+
+.uploader-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-bottom: 15px;
+    border: 3px solid #fff;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+
+.uploader-name {
+    font-weight: bold;
+    font-size: 1.2em;
+    margin: 5px 0;
+}
+
+.uploader-rks {
+    color: #2980b9;
+    font-weight: bold;
+    font-size: 1em;
+    margin: 5px 0;
+}
+
+.uploader-bio {
+    font-size: 0.85em;
+    color: #7f8c8d;
+    font-style: italic;
+    margin: 15px 0 0 0;
+    line-height: 1.5;
+    word-break: break-word;
+    border-top: 1px dashed #eee;
+    padding-top: 15px;
+    width: 100%;
+    text-align: left;
+    max-height: 100px;
+    overflow-y: auto; /* Handle long bios without breaking card height */
+}
+
+.uploader-id {
+    color: #bdc3c7;
+    font-size: 0.8em;
+    margin-top: 10px;
+}
+
+/* Other Rooms Styles */
+.other-rooms-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.other-rooms-scroll {
+    height: 225px; /* Fixed height for 5 items (approx 45px each) */
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.other-room-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 10px;
+    border-bottom: 1px solid #f0f0f0;
+    text-decoration: none;
+    color: #333;
+    transition: all 0.2s;
+    font-size: 0.95em;
+    height: 45px;
+    box-sizing: border-box;
+}
+
+
+
+.other-room-id {
+    font-family: monospace;
+    color: #7f8c8d;
+    width: 50px;
+}
+
+.other-room-name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin: 0 10px;
+    font-weight: bold;
+}
+
+.other-room-count {
+    font-size: 0.85em;
+    color: #95a5a6;
+    width: 40px;
+    text-align: right;
+}
+
+.refresh-rooms-btn {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    margin-top: 10px;
+    background-color: #ecf0f1;
+    border: none;
+    border-radius: 6px;
+    color: #34495e;
+    cursor: pointer;
+    font-size: 0.9em;
+    font-weight: bold;
+    transition: background-color 0.2s;
+}
+
+.refresh-rooms-btn:hover {
+    background-color: #bdc3c7;
+}
+
+/* Admin Panel Styles */
+.admin-panel-card {
+    border: 2px dashed #e74c3c;
+    padding: 15px !important;
+}
+
+.admin-category {
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.admin-category:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.admin-category-title {
+    font-size: 0.8em;
+    text-transform: uppercase;
+    color: #95a5a6;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+    font-weight: bold;
+}
+
+.admin-buttons-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+.admin-btn {
+    padding: 8px 5px;
+    background-color: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    color: #333;
+    font-size: 0.85em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.admin-btn:hover {
+    background-color: #e9ecef;
+    border-color: #adb5bd;
+}
+
+.admin-btn.action-primary {
+    background-color: #3498db;
+    color: white;
+    border-color: #2980b9;
+}
+
+.admin-btn.action-primary:hover {
+    background-color: #2980b9;
+}
+
+.admin-btn.action-danger {
+    background-color: #e74c3c;
+    color: white;
+    border-color: #c0392b;
+}
+
+.admin-btn.action-danger:hover {
+    background-color: #c0392b;
+}
+
+.admin-btn.action-warning {
+    background-color: #f39c12;
+    color: white;
+    border-color: #d35400;
+}
+
+.admin-btn.action-warning:hover {
+    background-color: #d35400;
+}
+
+.chart-container {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.chart-illustration img {
+    max-height: 220px;
+    width: 100%;
+    object-fit: cover;
+    border-radius: 8px;
+}
+
+#total-players {
+    padding: 5px 10px;
+    background-color: #ecf0f1;
+    color: #34495e;
+    border-radius: 5px;
+    font-size: 0.9em;
+}
+
+#total-players a {
+    color: inherit;
+    text-decoration: none;
+}
+
+#total-players a:visited, #total-players a:hover, #total-players a:active {
+    color: inherit;
+    text-decoration: none;
 }
 
 .logout-icon {
@@ -205,4 +654,213 @@ h1 {
 
 .logout-icon:hover {
     color: #e74c3c;
+}
+
+/* Footer Styles */
+footer {
+    margin-top: 100px;
+    padding: 20px 0;
+    text-align: center;
+    border-top: 1px solid #e0e0e0;
+    color: #7f8c8d;
+    font-size: 0.9em;
+}
+
+.server-ip-container {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background-color: #ecf0f1;
+    padding: 8px 15px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    user-select: all;
+}
+
+.server-ip-container:hover {
+    background-color: #dcdde1;
+}
+
+.copy-icon {
+    font-size: 1.1em;
+}
+
+/* Rating Stars */
+.star-filled { color: #f1c40f; }
+.star-empty { color: #bdc3c7; }
+.star-half {
+    position: relative;
+    display: inline-block;
+    color: #bdc3c7;
+}
+.star-half::after {
+    content: "\2605";
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 50%;
+    overflow: hidden;
+    color: #f1c40f;
+}
+
+/* Remove full-width class constraints or repurpose them */
+.detail-card.full-width {
+    grid-column: auto; 
+}
+
+/* Mobile Responsive Styles */
+@media (max-width: 1100px) {
+    .details-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+    .details-grid > div:last-child { /* Chart card */
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 800px) {
+    body {
+        padding: 10px;
+    }
+
+    .container {
+        width: 100%;
+        max-width: 100% !important;
+        padding: 0;
+    }
+
+    body:has(.details-grid) .container {
+        max-width: 100%;
+    }
+
+    header {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 12px;
+        padding: 0 5px;
+    }
+
+    header h1 {
+        font-size: 1.4em;
+        width: 100%;
+        text-align: center;
+        margin-right: 0;
+    }
+
+    .room-list {
+        grid-template-columns: 1fr;
+        width: 100%;
+        gap: 15px;
+    }
+
+    .details-grid {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        gap: 15px;
+    }
+
+    .admin-buttons-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .detail-card {
+        width: 100%;
+        box-sizing: border-box;
+        border-radius: 8px;
+        padding: 15px;
+    }
+    
+    .center-column, .left-sidebar {
+        width: 100%;
+        box-sizing: border-box;
+    }
+    
+    /* Reorder for Mobile: Player List (1), Chart (2), Uploader (3), Room Info (4) */
+    .center-column {
+        order: 1;
+    }
+    
+    .details-grid > div:nth-child(3) {
+        order: 2;
+    }
+    
+    .left-sidebar {
+        display: flex;
+        flex-direction: column;
+        order: 3;
+        gap: 15px;
+    }
+    
+    .left-sidebar .detail-card:first-child {
+        order: 2; /* Room Info */
+    }
+    .left-sidebar .detail-card:last-child {
+        order: 1; /* Chart Uploader */
+    }
+
+    .back-link {
+        display: flex;
+        width: 100%;
+        text-align: center;
+        background: #fff;
+        padding: 12px;
+        border-radius: 8px;
+        box-sizing: border-box;
+        margin-bottom: 15px;
+        order: -1; /* In case it's in a flex container like header */
+    }
+
+    .player-item {
+        padding: 10px 5px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+    }
+    
+    .player-info-left {
+        width: 100%;
+    }
+    
+    .player-status {
+        align-self: flex-end;
+        font-size: 0.8em;
+    }
+
+    .results-table {
+        font-size: 0.8em;
+    }
+
+    .results-table th, .results-table td {
+        padding: 6px 4px;
+    }
+
+    .chart-illustration img {
+        max-height: 180px;
+    }
+
+    #total-players {
+        width: 100%;
+        text-align: center;
+        padding: 8px;
+    }
+
+    .connection-status {
+        width: 100%;
+        text-align: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .results-table th:nth-child(5), 
+    .results-table td:nth-child(5) {
+        display: none;
+    }
+    
+    .results-table th:nth-child(6), 
+    .results-table td:nth-child(6) {
+        display: none;
+    }
 }

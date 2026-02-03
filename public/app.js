@@ -82,10 +82,13 @@ function renderRooms(rooms) {
 
             const lockIcon = room.locked ? '&#128274;' : '&#128275;';
             const lockStatusClass = room.locked ? 'locked-status' : 'unlocked-status';
+            const roomMode = room.cycle ? '循环模式' : '普通模式';
 
             roomCard.innerHTML = `
-                <h2>${room.name} (ID: ${room.id})</h2>
+                <h2>房间号#${room.id}</h2>
                 <div class="room-info">
+                    <p>Mode: <span style="font-weight:bold; color:#3498db;">${roomMode}</span></p>
+                    <p>Host: <span>${room.ownerName} (ID: ${room.ownerId})</span></p>
                     <p>Players: <span>${room.playerCount} / ${room.maxPlayers}</span></p>
                     <p>Status: <span>${room.state.type}</span></p>
                     <p>Locked: <span class="${lockStatusClass}">${lockIcon}</span></p>

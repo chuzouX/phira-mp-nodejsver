@@ -4,6 +4,7 @@ import { WebSocketServer as WsServer, WebSocket } from 'ws';
 import { Logger } from '../logging/logger';
 import { RoomManager, Room, PlayerInfo } from '../domain/rooms/RoomManager';
 import { ProtocolHandler } from '../domain/protocol/ProtocolHandler';
+import { ServerConfig } from '../config/config';
 
 // Define the structure of messages between client and server
 interface WebSocketMessage {
@@ -18,6 +19,7 @@ export class WebSocketServer {
     server: HttpServer,
     private readonly roomManager: RoomManager,
     private readonly protocolHandler: ProtocolHandler,
+    private readonly config: ServerConfig,
     private readonly logger: Logger,
   ) {
     this.wss = new WsServer({ server });
@@ -74,7 +76,25 @@ export class WebSocketServer {
 
   private sendRoomDetails(ws: WebSocket, roomId: string): void {
     const room = this.roomManager.getRoom(roomId);
+    
+    // Check access logic similar to list filtering for security/consistency
     if (room) {
+        let isVisible = true;
+        if (this.config.enablePubWeb) {
+            if (!room.id.startsWith(this.config.pubPrefix)) isVisible = false;
+        } else if (this.config.enablePriWeb) {
+            if (room.id.startsWith(this.config.priPrefix)) isVisible = false;
+        }
+
+        if (!isVisible) {
+             const message: WebSocketMessage = {
+                type: 'roomDetails',
+                payload: null, // Treat hidden rooms as non-existent for web users
+            };
+            ws.send(JSON.stringify(message));
+            return;
+        }
+
       const details = this.getSanitizedRoomDetails(room);
       const message: WebSocketMessage = {
         type: 'roomDetails',
@@ -92,17 +112,59 @@ export class WebSocketServer {
   }
 
   private getSanitizedRoomList(): Partial<Room>[] {
-    return this.roomManager.listRooms().map(room => ({
-      id: room.id,
-      name: room.name,
-      playerCount: room.players.size,
-      maxPlayers: room.maxPlayers,
-      state: room.state,
-      locked: room.locked,
-    }));
+    return this.roomManager.listRooms()
+      .filter(room => {
+        // Mode 1: Public Web Only (Whitelist)
+        if (this.config.enablePubWeb) {
+          return room.id.startsWith(this.config.pubPrefix);
+        }
+        // Mode 2: Private Web Exclusion (Blacklist)
+        if (this.config.enablePriWeb) {
+          return !room.id.startsWith(this.config.priPrefix);
+        }
+        // Default: Show all
+        return true;
+      })
+      .map(room => {
+        const owner = room.players.get(room.ownerId);
+        return {
+            id: room.id,
+            name: room.name,
+            ownerId: room.ownerId,
+            ownerName: owner ? owner.user.name : 'Unknown',
+            playerCount: room.players.size,
+            maxPlayers: room.maxPlayers,
+            state: room.state,
+            locked: room.locked,
+            cycle: room.cycle,
+        };
+      });
   }
 
   private getSanitizedRoomDetails(room: Room) {
+    const players = Array.from(room.players.values()).map(p => ({
+        id: p.user.id,
+        name: p.user.name,
+        avatar: p.avatar,
+        isReady: p.isReady,
+        isFinished: p.isFinished,
+        score: p.score,
+        isAdmin: this.config.adminPhiraId.includes(p.user.id),
+        isOwner: this.config.ownerPhiraId.includes(p.user.id),
+    }));
+
+    // Add Server user manually as it's not in room.players
+    players.unshift({
+        id: -1,
+        name: this.config.serverName,
+        avatar: 'https://api.phira.cn/files/6ad662de-b505-4725-a7ef-72d65f32b404',
+        isReady: false,
+        isFinished: false,
+        score: null,
+        isAdmin: false,
+        isOwner: false,
+    });
+
     return {
         id: room.id,
         name: room.name,
@@ -112,11 +174,29 @@ export class WebSocketServer {
         state: room.state,
         locked: room.locked,
         selectedChart: room.selectedChart,
-        players: Array.from(room.players.values()).map(p => ({
-            id: p.user.id,
-            name: p.user.name,
-            isReady: p.isReady,
-        })),
+        lastGameChart: room.lastGameChart,
+        messages: room.messages.map(m => {
+            const userId = (m as any).user;
+            let userName = '';
+            if (userId !== undefined) {
+                const user = room.players.get(userId);
+                userName = userId === -1 ? this.config.serverName : (user ? user.user.name : `ID: ${userId}`);
+            }
+            return {
+                ...m,
+                userName
+            };
+        }),
+        players: players,
+        otherRooms: this.roomManager.listRooms()
+            .filter(r => r.id !== room.id)
+            .map(r => ({
+                id: r.id,
+                name: r.name,
+                playerCount: r.players.size,
+                maxPlayers: r.maxPlayers,
+                state: r.state
+            })),
     };
   }
 

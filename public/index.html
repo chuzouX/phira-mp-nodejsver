@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Phira Server - Room List</title>
+    <title>FunXLink Studio Phira Server - Room List</title>
+    <link rel="icon" href="logo.png" type="image/png">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -16,7 +17,24 @@
         <main id="room-list" class="room-list">
             <!-- Rooms will be injected here by JavaScript -->
         </main>
+        <footer>
+            <p>Game Server IP:</p>
+            <div class="server-ip-container" id="copy-ip" title="Click to copy">
+                <code id="server-ip">phira.funxlink.fun:19723</code>
+                <span class="copy-icon">&#128203;</span>
+            </div>
+        </footer>
     </div>
     <script src="app.js"></script>
+    <script>
+        document.getElementById('copy-ip').addEventListener('click', () => {
+            const ip = document.getElementById('server-ip').textContent;
+            navigator.clipboard.writeText(ip).then(() => {
+                alert('服务器 IP 已复制到剪贴板！');
+            }).catch(err => {
+                console.error('复制失败: ', err);
+            });
+        });
+    </script>
 </body>
 </html>

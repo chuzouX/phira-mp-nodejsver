@@ -1,6 +1,64 @@
 
 document.addEventListener('DOMContentLoaded', () => {
     const playerListDiv = document.getElementById('all-players-list');
+    const totalPlayersDiv = document.getElementById('total-players');
+    let socket;
+    let isAdmin = false;
+    let currentTotalPlayers = 0;
+
+    async function checkAdminStatus() {
+        try {
+            const response = await fetch('/check-auth');
+            const data = await response.json();
+            isAdmin = data.isAdmin;
+        } catch (error) {
+            console.error('Failed to check admin status:', error);
+            isAdmin = false;
+        }
+        updateTotalPlayers(currentTotalPlayers);
+    }
+
+    function updateTotalPlayers(count) {
+        currentTotalPlayers = count;
+        totalPlayersDiv.innerHTML = `<strong>Total Players Online:</strong> ${count}`;
+    }
+
+    function connectWebSocket() {
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.host}`;
+        const connectionStatus = document.getElementById('connection-status');
+
+        socket = new WebSocket(wsUrl);
+
+        socket.onopen = () => {
+            console.log('WebSocket connection established');
+            if (connectionStatus) {
+                connectionStatus.textContent = 'Connected';
+                connectionStatus.className = 'connection-status connected';
+            }
+            checkAdminStatus();
+        };
+
+        socket.onmessage = (event) => {
+            try {
+                const message = JSON.parse(event.data);
+                if (message.type === 'serverStats') {
+                    updateTotalPlayers(message.payload.totalPlayers);
+                }
+            } catch (error) {
+                console.error('Error parsing WebSocket message:', error);
+            }
+        };
+
+        socket.onclose = () => {
+            console.log('WebSocket connection closed. Reconnecting in 3 seconds...');
+            if (connectionStatus) {
+                connectionStatus.textContent = 'Disconnected';
+                connectionStatus.className = 'connection-status disconnected';
+            }
+            setTimeout(connectWebSocket, 3000);
+        };
+    }
 
     async function fetchAllPlayers() {
         try {
@@ -26,15 +84,44 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const playerListHtml = players.map(p => {
+        // Filter out bots (ID -1) and Sort
+        const sortedPlayers = players
+            .filter(p => p.id !== -1)
+            .sort((a, b) => {
+                // Priority: Server Owner > Admin > Regular
+                const getWeight = (p) => {
+                    if (p.isOwner) return 2;
+                    if (p.isAdmin) return 1;
+                    return 0;
+                };
+
+                const weightA = getWeight(a);
+                const weightB = getWeight(b);
+
+                return weightB - weightA; // Descending weight
+            });
+
+        const playerListHtml = sortedPlayers.map(p => {
             const locationHtml = p.roomId 
                 ? `In Room: <a href="room.html?id=${p.roomId}">${p.roomName}</a>`
                 : 'In Lobby';
             
+            let userIcon = '&#128100;'; // Regular Person
+            let nameClass = 'player-name';
+
+            if (p.isOwner) {
+                userIcon = '&#127775;'; // Glowing Star
+                nameClass += ' server-owner';
+            } else if (p.isAdmin) {
+                userIcon = '&#128110;'; // Police Officer
+                nameClass += ' admin';
+            }
+            
             return `
             <li class="player-item">
-                <div>
-                    <a class="player-name" href="https://phira.moe/user/${p.id}" target="_blank">${p.name} (ID: ${p.id})</a>
+                <div class="player-info-left">
+                    <span class="player-icon"></span>
+                    <a class="${nameClass}" href="https://phira.moe/user/${p.id}" target="_blank">${userIcon} ${p.name} (ID: ${p.id})</a>
                 </div>
                 <span>${locationHtml}</span>
             </li>
@@ -50,4 +137,5 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     fetchAllPlayers();
+    connectWebSocket();
 });
