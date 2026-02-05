@@ -1,6 +1,10 @@
 # Phira Multiplayer Server
 
+[中文说明](README-CN.md) | English
+
 TypeScript-based Node.js server with TCP support for multiplayer gaming.
+
+> **Note**: Some parts of the code in this project were completed with the assistance of AI.
 
 ## Features
 
@@ -13,6 +17,15 @@ TypeScript-based Node.js server with TCP support for multiplayer gaming.
 - ✅ Protocol handling layer
 - ✅ Unit testing with Jest
 - ✅ Code quality with ESLint and Prettier
+
+### Enhanced Features (by chuzouX)
+
+- 🖥️ **Web Dashboard & Admin System**: A complete responsive web interface for server management and room monitoring.
+- 🎨 **Enhanced UI/UX**: Support for Dark Mode and multi-language internationalization (i18n).
+- 🔐 **Hidden Management Portal**: Secure hidden access for super administrators.
+- 🆔 **Server Identity Customization**: Customizable server broadcast names and room size limits via environment variables.
+- ⚙️ **Optimized Room Logic**: Improved handling for solo rooms and server-side announcements.
+- 🛡️ **Security & Authentication**: Integrated admin login system with session management and multi-provider captcha support (Cloudflare Turnstile / Aliyun).
 
 ## Project Structure
 
