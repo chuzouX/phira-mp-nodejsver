@@ -30,16 +30,18 @@
 ## 项目结构
 
 ```
-src/
-├── config/         # 配置管理
-├── logging/        # 日志工具
-├── network/        # TCP 服务器组件
-├── domain/
-│   ├── rooms/      # 房间管理
-│   └── protocol/   # 协议处理
-├── __tests__/      # 测试文件
-├── app.ts          # 应用引导
-└── index.ts        # 入口文件
+.
+├── public/         # Web 仪表盘资源 (HTML, JS, CSS, 多语言)
+└── src/
+    ├── config/     # 配置管理
+    ├── logging/    # 日志工具
+    ├── network/    # TCP、HTTP 和 WebSocket 服务器实现
+    ├── domain/
+    │   ├── auth/     # 玩家身份验证服务
+    │   ├── rooms/    # 房间管理逻辑
+    │   └── protocol/ # 二进制协议处理与指令定义
+    ├── app.ts      # 应用工厂 (组件装配)
+    └── index.ts    # 程序入口
 ```
 
 ## 快速开始

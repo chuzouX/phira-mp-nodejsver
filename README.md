@@ -30,16 +30,18 @@ TypeScript-based Node.js server with TCP support for multiplayer gaming.
 ## Project Structure
 
 ```
-src/
-├── config/         # Configuration management
-├── logging/        # Logging utilities
-├── network/        # TCP server components
-├── domain/
-│   ├── rooms/      # Room management
-│   └── protocol/   # Protocol handling
-├── __tests__/      # Test files
-├── app.ts          # Application bootstrap
-└── index.ts        # Entry point
+.
+├── public/         # Web dashboard assets (HTML, JS, CSS, Locales)
+└── src/
+    ├── config/     # Configuration management
+    ├── logging/    # Logging utilities
+    ├── network/    # TCP, HTTP, and WebSocket server implementations
+    ├── domain/
+    │   ├── auth/     # Player authentication services
+    │   ├── rooms/    # Room management logic
+    │   └── protocol/ # Binary protocol handling & commands
+    ├── app.ts      # Application factory (wiring components)
+    └── index.ts    # Main entry point
 ```
 
 ## Getting Started
