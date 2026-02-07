@@ -203,6 +203,10 @@ client.on('data', (data) => {
 });
 ```
 
+## 相关项目
+
+- [nonebot_plugin_nodejsphira](https://github.com/chuzouX/nonebot_plugin_nodejsphira)：适用于本项目的 NoneBot2 机器人插件。提供实时房间查询、网页截图监控、服务器节点状态查看以及完善的远程管理功能。
+
 ## 开源协议
 
 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件。

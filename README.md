@@ -203,6 +203,10 @@ client.on('data', (data) => {
 });
 ```
 
+## Related Projects
+
+- [nonebot_plugin_nodejsphira](https://github.com/chuzouX/nonebot_plugin_nodejsphira): A bot plugin for NoneBot2 that manages and monitors the Phira Multiplayer (Node.js version) backend. It offers real-time room queries, web screenshot monitoring, server node status viewing, and comprehensive remote administration functions.
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) file for details.
