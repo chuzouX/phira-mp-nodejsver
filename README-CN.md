@@ -139,7 +139,8 @@ npm run format
 管理类接口要求通过以下任一方式进行鉴权：
 
 1.  **Session (浏览器)**：通过 `/admin` 页面登录。后续请求将通过 Cookie 自动鉴权。
-2.  **动态管理密钥 (Admin Secret)**：适用于外部脚本或机器人。需发送基于 `.env` 中 `ADMIN_SECRET` 加密后的字符串。
+2.  **本地访问**: 来自 `127.0.0.1` 或 `::1` 的请求会被自动授权为管理员（前提是你的 HTTP 不走代理）。
+3.  **动态管理密钥 (Admin Secret)**：适用于外部脚本或机器人。需发送基于 `.env` 中 `ADMIN_SECRET` 加密后的字符串。
     *   **Header**: `X-Admin-Secret: <加密十六进制串>`
     *   **URL 参数**: `?admin_secret=<加密十六进制串>`
 
@@ -150,33 +151,92 @@ npm run format
 #### **服务器状态**
 返回服务器信息、在线人数及房间列表。
 - **URL**: `GET /api/status`
-- **示例**: `curl http://localhost:8080/api/status`
+- **响应**: 包含 `serverName`、`onlinePlayers`、`roomCount` 和 `rooms` 数组的 JSON。
+
+#### **公共配置**
+返回公共配置，如验证码提供商。
+- **URL**: `GET /api/config/public`
+
+#### **验证码测试**
+验证验证码 Token。
+- **URL**: `POST /api/test/verify-captcha`
 
 ### 管理员接口
 
 需要鉴权。
 
 #### **所有玩家**
-列出全服所有房间内当前连接的玩家。
+列出全服所有在线玩家（包括大厅中）。
 - **URL**: `GET /api/all-players`
 
-#### **系统广播**
-向所有房间或指定房间发送系统消息。
+#### **检查权限**
+返回当前管理员鉴权状态。
+- **URL**: `GET /check-auth`
+
+#### **服务器消息**
+向指定房间发送系统消息。
+- **URL**: `POST /api/admin/server-message`
+- **JSON 参数**: `{"roomId": "123", "content": "消息内容"}`
+
+#### **全服广播**
+向所有或指定房间发送广播。
 - **URL**: `POST /api/admin/broadcast`
 - **JSON 参数**:
   - `content`: 消息内容。
-  - `target` (可选): 以 `#` 开头的房间 ID，例如 `#room1,room2`。
+  - `target` (可选): `"all"` 或以 `#` 开头的房间 ID，例如 `"#room1,room2"`。
+
+#### **批量操作**
+同时对多个房间执行操作。
+- **URL**: `POST /api/admin/bulk-action`
+- **JSON 参数**:
+  - `action`: `"close_all"`, `"lock_all"`, `"unlock_all"`, `"set_max_players"`, `"disable_room_creation"`, `"enable_room_creation"`。
+  - `target`: `"all"` 或以 `#` 开头的房间 ID。
+  - `value`: 可选参数（如修改人数时的具体数值）。
 
 #### **踢出玩家**
-强制将指定 ID 的玩家移出服务器。
+强制将玩家移出服务器并切断其连接。
 - **URL**: `POST /api/admin/kick-player`
 - **JSON 参数**: `{"userId": 12345}`
 
-#### **房间管理**
-- **强制开始**: `POST /api/admin/force-start` - `{"roomId": "123"}`
-- **切换锁定**: `POST /api/admin/toggle-lock` - `{"roomId": "123"}`
-- **设置人数上限**: `POST /api/admin/set-max-players` - `{"roomId": "123", "maxPlayers": 8}`
-- **关闭房间**: `POST /api/admin/close-room` - `{"roomId": "123"}`
+#### **强制开始**
+强制开始指定房间的游戏。
+- **URL**: `POST /api/admin/force-start`
+- **JSON 参数**: `{"roomId": "123"}`
+
+#### **切换锁定**
+切换房间的锁定状态。
+- **URL**: `POST /api/admin/toggle-lock`
+- **JSON 参数**: `{"roomId": "123"}`
+
+#### **设置人数上限**
+修改房间最大玩家数。
+- **URL**: `POST /api/admin/set-max-players`
+- **JSON 参数**: `{"roomId": "123", "maxPlayers": 8}`
+
+#### **关闭房间**
+强制关闭指定房间。
+- **URL**: `POST /api/admin/close-room`
+- **JSON 参数**: `{"roomId": "123"}`
+
+#### **切换模式**
+在普通模式和循环模式间切换。
+- **URL**: `POST /api/admin/toggle-mode`
+- **JSON 参数**: `{"roomId": "123"}`
+
+#### **房间黑/白名单管理**
+管理特定房间的访问名单。
+- **获取黑名单**: `GET /api/admin/room-blacklist?roomId=123`
+- **设置黑名单**: `POST /api/admin/set-room-blacklist` - 参数: `{"roomId": "123", "userIds": [1, 2]}`
+- **获取白名单**: `GET /api/admin/room-whitelist?roomId=123`
+- **设置白名单**: `POST /api/admin/set-room-whitelist` - 参数: `{"roomId": "123", "userIds": [1, 2]}`
+
+#### **全局封禁管理**
+管理服务器级别的用户 ID 封禁和控制台 IP 封禁。
+- **列出封禁**: `GET /api/admin/bans`
+- **执行封禁**: `POST /api/admin/ban`
+  - 参数: `{"type": "id"|"ip", "target": "id/ip", "duration": 秒数|null, "reason": "原因"}`
+- **解除封禁**: `POST /api/admin/unban`
+  - 参数: `{"type": "id"|"ip", "target": "id/ip"}`
 
 ## TCP 协议
 
