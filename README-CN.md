@@ -11,7 +11,7 @@
 - ✅ 支持 TypeScript，具备严格的类型检查
 - ✅ 基于 TCP 套接字的实时通信服务器
 - ✅ 通过环境变量进行配置管理
-- ✅ 结构化日志记录
+- ✅ 具备**洪泛保护**的结构化日志记录
 - ✅ 易于依赖注入的架构设计
 - ✅ 完善的房间管理系统
 - ✅ 协议处理层
@@ -20,252 +20,65 @@
 
 ### 新增增强功能 (由 chuzouX 贡献)
 
-- 🖥️ **Web 仪表盘与管理系统**：提供完善的响应式 Web 界面，用于服务器管理和房间监控。
+- 🖥️ **管理后台**：独立的 `/panel` 页面，用于服务器管理和实时监控。
 - 🎨 **UI/UX 增强**：支持深色模式（Dark Mode）和多语言国际化（i18n）。
-- 🔐 **隐藏管理入口**：为超级管理员提供的安全隐藏访问通道。
-- 🆔 **服务器身份自定义**：可通过环境变量自定义服务器播报名称和房间人数限制。
-- ⚙️ **优化的房间逻辑**：改进了单人房间的处理逻辑及服务器端公告系统。
-- 🛡️ **安全性与认证**：集成了管理员登录系统，支持会话管理及多平台验证码（Cloudflare Turnstile / 阿里云验证码 2.0）。
+- 🔐 **隐藏入口**：通过点击标题 5 次触发的管理员安全访问通道。
+- ⚙️ **优化的房间逻辑**：改进了单人房间处理及全服广播系统。
+- 🛡️ **安全防护**：非法包即时切断、自动 IP 封禁、以及 Nginx 真实 IP 识别。
 
-## 项目结构
+## 环境变量配置 (.env)
 
-```
-.
-├── public/         # Web 仪表盘资源 (HTML, JS, CSS, 多语言)
-└── src/
-    ├── config/     # 配置管理
-    ├── logging/    # 日志工具
-    ├── network/    # TCP、HTTP 和 WebSocket 服务器实现
-    ├── domain/
-    │   ├── auth/     # 玩家身份验证服务
-    │   ├── rooms/    # 房间管理逻辑
-    │   └── protocol/ # 二进制协议处理与指令定义
-    ├── app.ts      # 应用工厂 (组件装配)
-    └── index.ts    # 程序入口
-```
-
-## 快速开始
-
-### 前置条件
-
-- Node.js 18+ 
-- npm 或 pnpm
-
-### 安装
-
-```bash
-npm install
-```
-
-### 配置
-
-复制示例环境配置文件：
-
-```bash
-cp .env.example .env
-```
-
-可用配置选项：
-
-- `PORT`: 服务器端口（默认：3000）
-- `HOST`: 服务器主机（默认：0.0.0.0）
-- `TCP_ENABLED`: 启用 TCP 服务器（默认：true）
-- `LOG_LEVEL`: 日志级别（默认：info）
-
-### 开发模式
-
-启动带热重载的开发服务器：
-
-```bash
-npm run dev
-```
-
-### 构建
-
-编译 TypeScript 项目：
-
-```bash
-npm run build
-```
-
-### 生产环境
-
-启动构建后的应用：
-
-```bash
-npm start
-```
-
-### 测试
-
-运行测试：
-
-```bash
-npm test
-```
-
-以监听模式运行测试：
-
-```bash
-npm run test:watch
-```
-
-### 代码检查与格式化
-
-检查代码质量：
-
-```bash
-npm run lint
-```
-
-修复 lint 问题：
-
-```bash
-npm run lint:fix
-```
-
-格式化代码：
-
-```bash
-npm run format
-```
+| 变量名 | 描述 | 默认值 |
+| :--- | :--- | :--- |
+| `PORT` | 游戏 TCP 服务器监听端口 | `12346` |
+| `WEB_PORT` | HTTP/WS 管理服务器端口 | `8080` |
+| `TCP_ENABLED` | 是否启用 TCP 游戏服务器 | `true` |
+| `ENABLE_WEB_SERVER` | 是否启用 Web 管理服务器 | `true` |
+| `SERVER_NAME` | 服务器在游戏内显示的播报名称 | `Server` |
+| `PHIRA_API_URL` | Phira 官方 API 地址 | `https://phira.5wyxi.com` |
+| `ROOM_SIZE` | 默认房间最大玩家人数 | `8` |
+| `ADMIN_NAME` | 管理后台登录用户名 | `admin` |
+| `ADMIN_PASSWORD` | 管理后台登录密码 | `password` |
+| `ADMIN_SECRET` | 外部脚本使用的加密密钥 | (空) |
+| `ADMIN_PHIRA_ID` | 管理员 Phira ID 列表 (逗号分隔) | (空) |
+| `OWNER_PHIRA_ID` | 所有者 Phira ID 列表 (逗号分隔) | (空) |
+| `SILENT_PHIRA_IDS` | **静默用户** ID 列表 (不产生日志) | (空) |
+| `SESSION_SECRET` | 会话加密密钥 | (默认不安全值) |
+| `LOG_LEVEL` | 日志级别 (`debug`, `info`, `warn`, `error`) | `info` |
+| `CAPTCHA_PROVIDER` | 验证码提供商 (`geetest` 或 `none`) | `none` |
 
 ## Web API
 
-服务器提供 Web API 用于状态监控和管理操作。
-
-### 鉴权方式
-
-管理类接口要求通过以下任一方式进行鉴权：
-
-1.  **Session (浏览器)**：通过 `/admin` 页面登录。后续请求将通过 Cookie 自动鉴权。
-2.  **本地访问**: 来自 `127.0.0.1` 或 `::1` 的请求会被自动授权为管理员（前提是你的 HTTP 不走代理）。
-3.  **动态管理密钥 (Admin Secret)**：适用于外部脚本或机器人。需发送基于 `.env` 中 `ADMIN_SECRET` 加密后的字符串。
-    *   **Header**: `X-Admin-Secret: <加密十六进制串>`
-    *   **URL 参数**: `?admin_secret=<加密十六进制串>`
-
-请使用根目录下的 `generate_secret.py` 工具生成**当日有效**的加密串。
-
 ### 公开接口
 
-#### **服务器状态**
-返回服务器信息、在线人数及房间列表。
-- **URL**: `GET /api/status`
-- **响应**: 包含 `serverName`、`onlinePlayers`、`roomCount` 和 `rooms` 数组的 JSON。
+| 方法 | URL | 描述 |
+| :--- | :--- | :--- |
+| `GET` | `/api/status` | 返回服务器信息、在线人数及房间列表 |
+| `GET` | `/api/config/public` | 返回公共配置（如验证码类型） |
+| `POST` | `/api/test/verify-captcha` | 验证验证码 Token |
+| `GET` | `/check-auth` | 返回当前管理员鉴权状态 |
 
-#### **公共配置**
-返回公共配置，如验证码提供商。
-- **URL**: `GET /api/config/public`
+### 管理员接口 (需要鉴权)
 
-#### **验证码测试**
-验证验证码 Token。
-- **URL**: `POST /api/test/verify-captcha`
-
-### 管理员接口
-
-需要鉴权。
-
-#### **所有玩家**
-列出全服所有在线玩家（包括大厅中）。
-- **URL**: `GET /api/all-players`
-
-#### **检查权限**
-返回当前管理员鉴权状态。
-- **URL**: `GET /check-auth`
-
-#### **服务器消息**
-向指定房间发送系统消息。
-- **URL**: `POST /api/admin/server-message`
-- **JSON 参数**: `{"roomId": "123", "content": "消息内容"}`
-
-#### **全服广播**
-向所有或指定房间发送广播。
-- **URL**: `POST /api/admin/broadcast`
-- **JSON 参数**:
-  - `content`: 消息内容。
-  - `target` (可选): `"all"` 或以 `#` 开头的房间 ID，例如 `"#room1,room2"`。
-
-#### **批量操作**
-同时对多个房间执行操作。
-- **URL**: `POST /api/admin/bulk-action`
-- **JSON 参数**:
-  - `action`: `"close_all"`, `"lock_all"`, `"unlock_all"`, `"set_max_players"`, `"disable_room_creation"`, `"enable_room_creation"`。
-  - `target`: `"all"` 或以 `#` 开头的房间 ID。
-  - `value`: 可选参数（如修改人数时的具体数值）。
-
-#### **踢出玩家**
-强制将玩家移出服务器并切断其连接。
-- **URL**: `POST /api/admin/kick-player`
-- **JSON 参数**: `{"userId": 12345}`
-
-#### **强制开始**
-强制开始指定房间的游戏。
-- **URL**: `POST /api/admin/force-start`
-- **JSON 参数**: `{"roomId": "123"}`
-
-#### **切换锁定**
-切换房间的锁定状态。
-- **URL**: `POST /api/admin/toggle-lock`
-- **JSON 参数**: `{"roomId": "123"}`
-
-#### **设置人数上限**
-修改房间最大玩家数。
-- **URL**: `POST /api/admin/set-max-players`
-- **JSON 参数**: `{"roomId": "123", "maxPlayers": 8}`
-
-#### **关闭房间**
-强制关闭指定房间。
-- **URL**: `POST /api/admin/close-room`
-- **JSON 参数**: `{"roomId": "123"}`
-
-#### **切换模式**
-在普通模式和循环模式间切换。
-- **URL**: `POST /api/admin/toggle-mode`
-- **JSON 参数**: `{"roomId": "123"}`
-
-#### **房间黑/白名单管理**
-管理特定房间的访问名单。
-- **获取黑名单**: `GET /api/admin/room-blacklist?roomId=123`
-- **设置黑名单**: `POST /api/admin/set-room-blacklist` - 参数: `{"roomId": "123", "userIds": [1, 2]}`
-- **获取白名单**: `GET /api/admin/room-whitelist?roomId=123`
-- **设置白名单**: `POST /api/admin/set-room-whitelist` - 参数: `{"roomId": "123", "userIds": [1, 2]}`
-
-#### **全局封禁管理**
-管理服务器级别的用户 ID 封禁和控制台 IP 封禁。
-- **列出封禁**: `GET /api/admin/bans`
-- **执行封禁**: `POST /api/admin/ban`
-  - 参数: `{"type": "id"|"ip", "target": "id/ip", "duration": 秒数|null, "reason": "原因"}`
-- **解除封禁**: `POST /api/admin/unban`
-  - 参数: `{"type": "id"|"ip", "target": "id/ip"}`
-
-## TCP 协议
-
-服务器使用 TCP 套接字进行通信。客户端可以使用 TCP 套接字连接到服务器并发送 JSON 格式的消息。
-
-完整示例请参阅 `examples/tcp-client.ts`。
-
-连接示例：
-```typescript
-import { createConnection } from 'net';
-
-const client = createConnection({ port: 3000, host: 'localhost' });
-
-client.on('connect', () => {
-  console.log('Connected to Phira server');
-  
-  // 发送消息
-  const message = JSON.stringify({ type: 'join', payload: { roomId: 'example' } });
-  client.write(message);
-});
-
-client.on('data', (data) => {
-  console.log('Received:', data.toString());
-});
-```
+| 方法 | URL | 描述 |
+| :--- | :--- | :--- |
+| `GET` | `/api/all-players` | 列出全服所有在线玩家（含大厅） |
+| `POST` | `/api/admin/server-message` | 向指定房间发送系统消息 |
+| `POST` | `/api/admin/broadcast` | 向全服或指定房间发送广播 |
+| `POST` | `/api/admin/bulk-action` | 批量关闭/锁定/解锁房间或修改人数 |
+| `POST` | `/api/admin/kick-player` | 踢出玩家并切断其网络连接 |
+| `POST` | `/api/admin/force-start` | 强制开始指定房间的游戏 |
+| `POST` | `/api/admin/toggle-lock` | 切换房间锁定状态 |
+| `POST` | `/api/admin/set-max-players` | 修改房间人数上限 |
+| `POST` | `/api/admin/close-room` | 强制关闭指定房间 |
+| `POST` | `/api/admin/toggle-mode` | 切换房间模式（普通/循环） |
+| `GET` | `/api/admin/bans` | 列出所有用户 ID 和控制台 IP 封禁 |
+| `POST` | `/api/admin/ban` | 执行新的封禁（限时或永久） |
+| `POST` | `/api/admin/unban` | 解除对指定 ID 或 IP 的封禁 |
 
 ## 相关项目
 
-- [nonebot_plugin_nodejsphira](https://github.com/chuzouX/nonebot_plugin_nodejsphira)：适用于本项目的 NoneBot2 机器人插件。提供实时房间查询、网页截图监控、服务器节点状态查看以及完善的远程管理功能。
+- [nonebot_plugin_nodejsphira](https://github.com/chuzouX/nonebot_plugin_nodejsphira)：适用于本项目的 NoneBot2 机器人管理插件。
 
 ## 开源协议
 
