@@ -136,10 +136,11 @@ The server provides a Web API for status monitoring and administration.
 
 ### Authentication
 
-Administrative endpoints require authentication via one of two methods:
+Administrative endpoints require authentication via one of three methods:
 
 1.  **Session (Browser)**: Log in via the `/admin` portal. Subsequent requests will be authenticated via cookies.
-2.  **Dynamic Admin Secret**: For external scripts/bots. Send an encrypted string using the `ADMIN_SECRET` configured in `.env`.
+2.  **Local Access**: Requests originating from `127.0.0.1` or `::1` are automatically authorized as administrator.
+3.  **Dynamic Admin Secret**: For external scripts/bots. Send an encrypted string using the `ADMIN_SECRET` configured in `.env`.
     *   **Header**: `X-Admin-Secret: <ENCRYPTED_HEX>`
     *   **Query**: `?admin_secret=<ENCRYPTED_HEX>`
 
@@ -150,33 +151,93 @@ Use the `generate_secret.py` tool in the root directory to generate the required
 #### **Server Status**
 Returns server information, player count, and room list.
 - **URL**: `GET /api/status`
-- **Example**: `curl http://localhost:8080/api/status`
+- **Response**: JSON containing `serverName`, `onlinePlayers`, `roomCount`, and `rooms` array.
+
+#### **Public Config**
+Returns public configuration like captcha provider.
+- **URL**: `GET /api/config/public`
+
+#### **Captcha Test**
+Verifies a captcha token.
+- **URL**: `POST /api/test/verify-captcha`
+- **Body**: Captcha parameters (Geetest).
 
 ### Administrative Endpoints
 
 Requires authentication.
 
 #### **All Players**
-List all currently connected players across all rooms.
+List all currently connected players across all rooms and lobby.
 - **URL**: `GET /api/all-players`
+
+#### **Check Auth**
+Returns current administrative status.
+- **URL**: `GET /check-auth`
+
+#### **Server Message**
+Send a system message to a specific room.
+- **URL**: `POST /api/admin/server-message`
+- **Body**: `{"roomId": "123", "content": "Message"}`
 
 #### **Broadcast Message**
 Send a system message to all rooms or specific rooms.
 - **URL**: `POST /api/admin/broadcast`
-- **Body (JSON)**:
+- **Body**:
   - `content`: Message text.
-  - `target` (optional): Room IDs starting with `#`, e.g., `#room1,room2`.
+  - `target` (optional): `"all"` or room IDs starting with `#`, e.g., `"#room1,room2"`.
+
+#### **Bulk Action**
+Perform actions on multiple rooms at once.
+- **URL**: `POST /api/admin/bulk-action`
+- **Body**:
+  - `action`: `"close_all"`, `"lock_all"`, `"unlock_all"`, `"set_max_players"`, `"disable_room_creation"`, `"enable_room_creation"`.
+  - `target`: `"all"` or room IDs starting with `#`.
+  - `value`: Optional value (e.g., for `set_max_players`).
 
 #### **Kick Player**
-Forcefully remove a player from the server.
+Forcefully remove a player from the server and terminate their connection.
 - **URL**: `POST /api/admin/kick-player`
-- **Body (JSON)**: `{"userId": 12345}`
+- **Body**: `{"userId": 12345}`
 
-#### **Room Management**
-- **Force Start**: `POST /api/admin/force-start` - `{"roomId": "123"}`
-- **Toggle Lock**: `POST /api/admin/toggle-lock` - `{"roomId": "123"}`
-- **Set Max Players**: `POST /api/admin/set-max-players` - `{"roomId": "123", "maxPlayers": 8}`
-- **Close Room**: `POST /api/admin/close-room` - `{"roomId": "123"}`
+#### **Force Start**
+Forcefully start a game in a room.
+- **URL**: `POST /api/admin/force-start`
+- **Body**: `{"roomId": "123"}`
+
+#### **Toggle Lock**
+Toggle the lock status of a room.
+- **URL**: `POST /api/admin/toggle-lock`
+- **Body**: `{"roomId": "123"}`
+
+#### **Set Max Players**
+Update the maximum number of players for a room.
+- **URL**: `POST /api/admin/set-max-players`
+- **Body**: `{"roomId": "123", "maxPlayers": 8}`
+
+#### **Close Room**
+Forcefully close a specific room.
+- **URL**: `POST /api/admin/close-room`
+- **Body**: `{"roomId": "123"}`
+
+#### **Toggle Mode**
+Toggle room mode between normal and cycle.
+- **URL**: `POST /api/admin/toggle-mode`
+- **Body**: `{"roomId": "123"}`
+
+#### **Room Blacklist/Whitelist**
+Manage room-specific access lists.
+- **Get Blacklist**: `GET /api/admin/room-blacklist?roomId=123`
+- **Set Blacklist**: `POST /api/admin/set-room-blacklist` - Body: `{"roomId": "123", "userIds": [1, 2, 3]}`
+- **Get Whitelist**: `GET /api/admin/room-whitelist?roomId=123`
+- **Set Whitelist**: `POST /api/admin/set-room-whitelist` - Body: `{"roomId": "123", "userIds": [1, 2, 3]}`
+
+#### **Global Ban Management**
+Manage server-wide bans for User IDs and Console access.
+- **List Bans**: `GET /api/admin/bans`
+- **Issue Ban**: `POST /api/admin/ban`
+  - Body: `{"type": "id"|"ip", "target": "id/ip", "duration": seconds|null, "reason": "text"}`
+- **Remove Ban**: `POST /api/admin/unban`
+  - Body: `{"type": "id"|"ip", "target": "id/ip"}`
 
 ## TCP Protocol
 

@@ -7,6 +7,7 @@ import { ConfigService, ServerConfig } from './config/config';
 import { ConsoleLogger, Logger } from './logging/logger';
 import { InMemoryRoomManager, RoomManager } from './domain/rooms/RoomManager';
 import { PhiraAuthService } from './domain/auth/AuthService';
+import { BanManager } from './domain/auth/BanManager';
 import { ProtocolHandler } from './domain/protocol/ProtocolHandler';
 import { NetworkServer } from './network/NetworkServer';
 import { HttpServer } from './network/HttpServer';
@@ -33,6 +34,10 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
   const protocolLogger = new ConsoleLogger('协议', logLevel);
   const webSocketLogger = new ConsoleLogger('WebSocket', logLevel);
 
+  [logger, roomLogger, authLogger, protocolLogger, webSocketLogger].forEach(l => {
+    l.setSilentIds(config.silentPhiraIds);
+  });
+
   let webSocketServer: WebSocketServer;
 
   const broadcastRooms = () => {
@@ -49,7 +54,8 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
 
   const roomManager = new InMemoryRoomManager(roomLogger, config.roomSize, broadcastRooms);
   const authService = new PhiraAuthService(config.phiraApiUrl, authLogger);
-  const protocolHandler = new ProtocolHandler(roomManager, authService, protocolLogger, config.serverName, config.phiraApiUrl, broadcastStats);
+  const banManager = new BanManager(authLogger);
+  const protocolHandler = new ProtocolHandler(roomManager, authService, protocolLogger, config.serverName, config.phiraApiUrl, broadcastStats, banManager);
   
   const networkServer = new NetworkServer(config, logger, protocolHandler);
   let httpServer: HttpServer | undefined;
@@ -60,6 +66,7 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
         logger,
         roomManager,
         protocolHandler,
+        banManager,
       );
       webSocketServer = new WebSocketServer(
         httpServer.getInternalServer(),

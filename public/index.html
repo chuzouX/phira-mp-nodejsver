@@ -14,21 +14,6 @@
         I18n.init(); // Initialize translations early
     })()</script>
     <div class="container">
-        <!-- Secret Admin Modal -->
-        <div id="admin-secret-modal" class="admin-modal-overlay">
-            <div class="admin-modal">
-                <button class="admin-modal-close" onclick="document.getElementById('admin-secret-modal').style.display='none'">&times;</button>
-                <div class="admin-modal-header">
-                    <div class="admin-modal-title">Admin Management Panel</div>
-                </div>
-                <div class="admin-modal-body">
-                    <div class="admin-modal-grid" id="admin-modal-buttons">
-                        <!-- Buttons 1-20 will be injected here -->
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <header>
             <h1 data-i18n="index.title">Phira Server Rooms</h1>
             <div id="total-players"></div>
@@ -113,121 +98,11 @@
                             const res = await fetch('/check-auth');
                             const auth = await res.json();
                             if (auth.isAdmin) {
-                                showSecretAdminModal();
+                                window.location.href = '/panel';
                             }
                         } catch (e) {}
                     }
                 });
-            }
-
-            function showSecretAdminModal() {
-                const modal = document.getElementById('admin-secret-modal');
-                const grid = document.getElementById('admin-modal-buttons');
-                if (!modal || !grid) return;
-
-                grid.innerHTML = '';
-                for (let i = 1; i <= 20; i++) {
-                    const btn = document.createElement('button');
-                    btn.className = 'admin-btn';
-                    
-                    if (i === 1) {
-                        btn.textContent = I18n.currentLang === 'zh' ? '全服播报' : 'Global Broadcast';
-                        btn.classList.add('action-primary');
-                        btn.onclick = async () => {
-                            const target = prompt(I18n.currentLang === 'zh' ? '请输入范围 (直接回车全部，或输入 #ID1,ID2)：' : 'Enter target (Enter for all, or #ID1,ID2):', 'all');
-                            if (target === null) return;
-                            const content = prompt(I18n.currentLang === 'zh' ? '请输入播报内容：' : 'Enter broadcast content:');
-                            if (!content || !content.trim()) return;
-                            try {
-                                const res = await fetch('/api/admin/broadcast', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ content, target })
-                                });
-                                const result = await res.json();
-                                if (result.success) alert(I18n.t('room.admin.success'));
-                            } catch (e) { alert('Failed'); }
-                        };
-                    } else if (i === 2) {
-                        btn.textContent = I18n.currentLang === 'zh' ? '关闭房间' : 'Close Room';
-                        btn.classList.add('action-danger');
-                        btn.onclick = async () => {
-                            const target = prompt(I18n.currentLang === 'zh' ? '请输入范围 (输入 "all" 或 "#ID1,ID2")：' : 'Enter target ("all" or "#ID1,ID2"):');
-                            if (!target || !target.trim()) return;
-                            if (!confirm(I18n.currentLang === 'zh' ? `确认执行此操作？范围: ${target}` : `Confirm action for: ${target}`)) return;
-                            try {
-                                await fetch('/api/admin/bulk-action', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ action: 'close_all', target })
-                                });
-                                location.reload();
-                            } catch (e) { alert('Failed'); }
-                        };
-                    } else if (i === 3 || i === 4) {
-                        const isLock = i === 3;
-                        btn.textContent = isLock 
-                            ? (I18n.currentLang === 'zh' ? '锁定所有房间' : 'Lock All Rooms')
-                            : (I18n.currentLang === 'zh' ? '解锁所有房间' : 'Unlock All Rooms');
-                        btn.classList.add(isLock ? 'action-warning' : 'action-success');
-                        btn.onclick = async () => {
-                            const target = prompt(I18n.currentLang === 'zh' ? '请输入范围 (输入 "all" 或 "#ID1,ID2")：' : 'Enter target ("all" or "#ID1,ID2"):', 'all');
-                            if (!target || !target.trim()) return;
-                            if (!confirm(I18n.currentLang === 'zh' ? `确认执行此操作？范围: ${target}` : `Confirm action for: ${target}`)) return;
-                            try {
-                                await fetch('/api/admin/bulk-action', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ action: isLock ? 'lock_all' : 'unlock_all', target })
-                                });
-                                alert(I18n.t('room.admin.success'));
-                            } catch (e) { alert('Failed'); }
-                        };
-                    } else if (i === 5) {
-                        btn.textContent = I18n.currentLang === 'zh' ? '批量修改人数' : 'Bulk Set Size';
-                        btn.classList.add('action-warning');
-                        btn.onclick = async () => {
-                            const target = prompt(I18n.currentLang === 'zh' ? '请输入范围 (输入 "all" 或 "#ID1,ID2")：' : 'Enter target ("all" or "#ID1,ID2"):', 'all');
-                            if (!target || !target.trim()) return;
-                            const value = prompt(I18n.currentLang === 'zh' ? '请输入统一的人数上限：' : 'Enter max players:');
-                            if (!value || isNaN(parseInt(value))) return;
-                            try {
-                                await fetch('/api/admin/bulk-action', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ action: 'set_max_players', value: parseInt(value), target })
-                                });
-                                alert(I18n.t('room.admin.success'));
-                            } catch (e) { alert('Failed'); }
-                        };
-                    } else if (i === 7 || i === 8) {
-                        const isDisable = i === 7;
-                        btn.textContent = isDisable 
-                            ? (I18n.currentLang === 'zh' ? '禁止创建房间' : 'Disable Room Creation')
-                            : (I18n.currentLang === 'zh' ? '允许创建房间' : 'Enable Room Creation');
-                        btn.classList.add(isDisable ? 'action-warning' : 'action-success');
-                        btn.onclick = async () => {
-                            const msg = isDisable 
-                                ? (I18n.currentLang === 'zh' ? '确定要禁止创建新房间吗？' : 'Disable NEW rooms?')
-                                : (I18n.currentLang === 'zh' ? '确定要允许创建新房间吗？' : 'Enable NEW rooms?');
-                            if (!confirm(msg)) return;
-                            try {
-                                await fetch('/api/admin/bulk-action', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ action: isDisable ? 'disable_room_creation' : 'enable_room_creation' })
-                                });
-                                alert(I18n.t('room.admin.success'));
-                            } catch (e) { alert('Failed'); }
-                        };
-                    } else {
-                        btn.textContent = (I18n.currentLang === 'zh' ? '功能 ' : 'Function ') + i;
-                        btn.onclick = () => alert(btn.textContent + ' clicked!');
-                    }
-                    grid.appendChild(btn);
-                }
-
-                modal.style.display = 'flex';
             }
         })();
     </script>

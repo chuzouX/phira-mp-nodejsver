@@ -88,7 +88,8 @@
       "lock": "锁定/解锁",
       "kick": "踢出玩家",
       "blacklist": "黑名单",
-      "whitelist": "白名单"
+      "whitelist": "白名单",
+      "bulk_action": "批量房间管理"
     }
   },
   "admin": {
@@ -97,13 +98,50 @@
     "password": "密码",
     "login_btn": "登录",
     "captcha_error": "验证码错误，请刷新页面。",
-    "access_denied": "访问拒绝。您必须是管理员才能查看此页面。"
+    "access_denied": "访问拒绝。您必须是管理员才能查看此页面。",
+    "panel_title": "管理后台",
+    "server_control": "服务器控制",
+    "room_creation": "房间创建",
+    "enable": "启用",
+    "disable": "禁用",
+    "bulk_target": "目标房间",
+    "close_all": "关闭全部",
+    "lock_all": "锁定全部",
+    "unlock_all": "解锁全部",
+    "set_size": "设置人数",
+    "send": "发送",
+    "content_required": "请输入内容",
+    "target_required": "请输入目标",
+    "invalid_size": "人数格式不正确",
+    "action_failed": "操作失败",
+    "confirm_bulk": "确定要对范围 “{target}” 执行此操作吗？",
+    "footer_version": "FunXLink Studio Phira 管理后台 v1.0"
   },
   "players": {
     "title": "在线玩家列表",
     "all_players": "所有在线玩家",
     "no_players": "当前没有玩家在线",
     "in_room": "房间中",
-    "in_lobby": "大厅中"
+    "in_lobby": "大厅中",
+    "ban": "封禁",
+    "unban": "解封"
+  },
+  "ban": {
+    "manage_title": "封禁列表管理",
+    "user_id_bans": "用户 ID 封禁",
+    "ip_bans": "控制台登录IP 封禁",
+    "target": "目标",
+    "reason": "原因",
+    "expires": "过期时间",
+    "permanent": "永久",
+    "admin": "管理员",
+    "no_bans": "列表中没有封禁记录",
+    "ban_user": "封禁用户/IP",
+    "type_user_id": "用户 ID",
+    "type_console_ip": "控制台登录 IP",
+    "ban_ip": "封禁 IP",
+    "duration_placeholder": "时长 (秒，留空为永久)",
+    "reason_placeholder": "请输入封禁原因",
+    "confirm_unban": "确定要解封 {target} 吗？"
   }
 }

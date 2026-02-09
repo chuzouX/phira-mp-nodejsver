@@ -417,6 +417,40 @@ footer { margin-top: 80px; padding: 60px 0; text-align: center; border-top: 1px 
     transform: scale(1.05);
 }
 
+.player-admin-actions {
+    display: flex;
+    gap: 8px;
+    margin-left: 10px;
+}
+
+.kick-btn {
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: var(--transition);
+    border: 1px solid rgba(231, 76, 60, 0.2);
+    background: rgba(231, 76, 60, 0.1);
+    color: var(--danger-color);
+}
+
+.kick-btn:hover {
+    background: var(--danger-color);
+    color: white;
+    transform: translateY(-1px);
+}
+
+.kick-btn.action-orange {
+    background: rgba(230, 126, 34, 0.1);
+    color: #e67e22;
+    border-color: rgba(230, 126, 34, 0.2);
+}
+
+.kick-btn.action-orange:hover {
+    background: #e67e22;
+    color: white;
+}
 
 /* Room Go Button & Lobby Tag in Players List */
 .room-go-btn {

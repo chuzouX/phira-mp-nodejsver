@@ -44,6 +44,7 @@ export interface ServerConfig {
   adminSecret: string;
   adminPhiraId: number[];
   ownerPhiraId: number[];
+  silentPhiraIds: number[];
   sessionSecret: string;
   captchaProvider: 'geetest' | 'none';
   geetestId?: string;
@@ -73,6 +74,7 @@ const defaultConfig: ServerConfig = {
   adminSecret: '',
   adminPhiraId: [],
   ownerPhiraId: [],
+  silentPhiraIds: [],
   sessionSecret: 'a-very-insecure-secret-change-it',
   captchaProvider: 'none',
 };
@@ -117,6 +119,7 @@ export const env = {
   adminSecret: process.env.ADMIN_SECRET || '',
   adminPhiraId: parseNumberList(process.env.ADMIN_PHIRA_ID, []),
   ownerPhiraId: parseNumberList(process.env.OWNER_PHIRA_ID, []),
+  silentPhiraIds: parseNumberList(process.env.SILENT_PHIRA_IDS, []),
   sessionSecret: process.env.SESSION_SECRET || 'a-very-insecure-secret-change-it',
   
 
@@ -171,6 +174,7 @@ export const createServerConfig = (overrides: Partial<ServerConfig> = {}): Serve
     adminSecret: process.env.ADMIN_SECRET ?? defaultConfig.adminSecret,
     adminPhiraId: parseNumberList(process.env.ADMIN_PHIRA_ID, defaultConfig.adminPhiraId),
     ownerPhiraId: parseNumberList(process.env.OWNER_PHIRA_ID, defaultConfig.ownerPhiraId),
+    silentPhiraIds: parseNumberList(process.env.SILENT_PHIRA_IDS, defaultConfig.silentPhiraIds),
     sessionSecret: process.env.SESSION_SECRET ?? defaultConfig.sessionSecret,
     captchaProvider: (process.env.CAPTCHA_PROVIDER || 'none').toLowerCase() as  'geetest' | 'none',
     geetestId: process.env.GEETEST_ID,

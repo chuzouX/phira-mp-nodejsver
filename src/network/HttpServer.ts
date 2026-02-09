@@ -8,6 +8,7 @@ import { Logger } from '../logging/logger';
 import { ServerConfig } from '../config/config';
 import { RoomManager } from '../domain/rooms/RoomManager';
 import { ProtocolHandler } from '../domain/protocol/ProtocolHandler';
+import { BanManager } from '../domain/auth/BanManager';
 
 interface AdminSession extends SessionData {
   isAdmin?: boolean;
@@ -24,13 +25,14 @@ export class HttpServer {
   private readonly loginAttempts = new Map<string, LoginAttempt>();
   private readonly blacklistedIps = new Set<string>();
   private sessionParser: express.RequestHandler;
-  private readonly blacklistFile = path.join(process.cwd(), 'logs', 'login_blacklist.log');
+  private readonly blacklistFile = path.join(process.cwd(), 'data', 'login_blacklist.log');
   
   constructor(
     private readonly config: ServerConfig,
     private readonly logger: Logger,
     private readonly roomManager: RoomManager,
     private readonly protocolHandler: ProtocolHandler,
+    private readonly banManager: BanManager,
   ) {
     this.app = express();
     this.server = createServer(this.app);
@@ -83,6 +85,10 @@ export class HttpServer {
     const timestamp = new Date().toISOString();
     const logEntry = `[${timestamp}] IP: ${ip}, Username Attempted: ${username}, Reason: Too many failures\n`;
     try {
+        const dir = path.dirname(this.blacklistFile);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
         fs.appendFileSync(this.blacklistFile, logEntry);
         this.blacklistedIps.add(ip);
     } catch (e) {
@@ -165,13 +171,16 @@ export class HttpServer {
   }
 
   private adminAuth(req: express.Request, res: express.Response, next: express.NextFunction): void {
-    const isAdmin = (req.session as AdminSession).isAdmin;
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+    
+    const isAdmin = (req.session as AdminSession).isAdmin || isLocal;
     const providedSecret = req.header('X-Admin-Secret') || (req.query.admin_secret as string);
 
     const isSecretValid = providedSecret ? this.verifyAdminSecret(providedSecret) : false;
 
     if (isAdmin || isSecretValid) {
-        // If authenticated via secret but not session, we can optionally mark session as admin
+        // If authenticated via secret/local but not session, we can optionally mark session as admin
         if (!isAdmin && (req.session as AdminSession)) {
             (req.session as AdminSession).isAdmin = true;
         }
@@ -213,6 +222,18 @@ export class HttpServer {
   }
 
   private setupRoutes(): void {
+    // Global IP Ban Check
+    this.app.use((req, res, next) => {
+        const ip = req.ip || req.socket.remoteAddress || 'unknown';
+        const banInfo = this.banManager.isIpBanned(ip);
+        if (banInfo) {
+            this.logger.warn(`拦截到封禁 IP ${ip} 的 Web 访问。原因: ${banInfo.reason}`);
+            res.status(403).send(`您的 IP 已被封禁。原因: ${banInfo.reason}`);
+            return;
+        }
+        next();
+    });
+
     const publicPath = path.join(__dirname, '../../public');
     this.app.use(express.static(publicPath));
     this.logger.info(`正在从 ${publicPath} 提供静态文件`);
@@ -222,6 +243,10 @@ export class HttpServer {
         return res.redirect('/');
       }
       res.sendFile(path.join(publicPath, 'admin.html'));
+    });
+
+    this.app.get('/panel', this.adminAuth.bind(this), (_req, res) => {
+        res.sendFile(path.join(publicPath, 'panel.html'));
     });
 
     this.app.post('/api/test/verify-captcha', async (req, res) => {
@@ -326,7 +351,9 @@ export class HttpServer {
     });
 
     this.app.get('/check-auth', (req, res) => {
-        const isAdmin = (req.session as AdminSession).isAdmin ?? false;
+        const ip = req.ip || req.socket.remoteAddress || 'unknown';
+        const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+        const isAdmin = ((req.session as AdminSession).isAdmin || isLocal) ?? false;
         return res.json({ isAdmin });
     });
 
@@ -335,6 +362,7 @@ export class HttpServer {
             ...p,
             isAdmin: this.config.adminPhiraId.includes(p.id),
             isOwner: this.config.ownerPhiraId.includes(p.id),
+            ip: p.ip, // Expose IP for banning
         }));
         return res.json(allPlayers);
     });
@@ -505,6 +533,51 @@ export class HttpServer {
             return res.status(400).json({ error: 'Missing roomId or invalid userIds' });
         }
         const success = await this.protocolHandler.setRoomWhitelistByAdmin(roomId, userIds);
+        return res.json({ success });
+    });
+
+    // Ban Management APIs
+    this.app.get('/api/admin/bans', this.adminAuth.bind(this), (_req, res) => {
+        return res.json(this.banManager.getAllBans());
+    });
+
+    this.app.post('/api/admin/ban', this.adminAuth.bind(this), (req, res) => {
+        const { type, target, duration, reason } = req.body; // type: 'id' | 'ip', target: string|number, duration: seconds (null for perm)
+        
+        if (!type || !target) {
+            return res.status(400).json({ error: 'Missing type or target' });
+        }
+
+        const adminName = (req.session as AdminSession).isAdmin ? this.config.adminName : 'Admin (Secret)';
+        const finalReason = reason && String(reason).trim() !== '' ? String(reason) : 'No reason provided';
+
+        if (type === 'id') {
+            const userId = Number(target);
+            this.banManager.banId(userId, duration ? Number(duration) : null, finalReason, adminName);
+            // Kick player if online
+            this.protocolHandler.kickPlayer(userId);
+        } else if (type === 'ip') {
+            this.banManager.banIp(String(target), duration ? Number(duration) : null, finalReason, adminName);
+        } else {
+            return res.status(400).json({ error: 'Invalid ban type' });
+        }
+
+        return res.json({ success: true });
+    });
+
+    this.app.post('/api/admin/unban', this.adminAuth.bind(this), (req, res) => {
+        const { type, target } = req.body;
+        if (!type || !target) {
+            return res.status(400).json({ error: 'Missing type or target' });
+        }
+
+        let success = false;
+        if (type === 'id') {
+            success = this.banManager.unbanId(Number(target));
+        } else if (type === 'ip') {
+            success = this.banManager.unbanIp(String(target));
+        }
+
         return res.json({ success });
     });
 

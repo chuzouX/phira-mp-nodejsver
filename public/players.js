@@ -135,13 +135,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 nameClass += ' name-member';
             }
             
+            const adminActionsHtml = isAdmin ? `
+                <div class="player-admin-actions">
+                    <button class="kick-btn" onclick="banPlayer('id', ${p.id})">${I18n.t('players.ban')} ID</button>
+                    <button class="kick-btn action-orange" onclick="banPlayer('ip', '${p.ip}')">${I18n.t('players.ban')} IP</button>
+                </div>
+            ` : '';
+
             return `
             <li class="player-item">
                 <div class="player-info-left">
                     <span class="player-icon">${userIcon}</span>
                     <a class="${nameClass}" href="https://phira.moe/user/${p.id}" target="_blank">${p.name} (ID: ${p.id})</a>
                 </div>
-                <span>${locationHtml}</span>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    ${locationHtml}
+                    ${adminActionsHtml}
+                </div>
             </li>
             `;
         }).join('');
@@ -153,6 +163,25 @@ document.addEventListener('DOMContentLoaded', () => {
             </ul>
         `;
     }
+
+    window.banPlayer = async (type, target) => {
+        const reason = prompt(I18n.t('ban.reason_placeholder'));
+        if (!reason) return;
+        const duration = prompt(I18n.t('ban.duration_placeholder'));
+        
+        try {
+            const res = await fetch('/api/admin/ban', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type, target, duration: duration || null, reason })
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert(I18n.t('room.admin.success'));
+                location.reload();
+            }
+        } catch (e) { alert('Ban failed'); }
+    };
 
     if (I18n.isReady) {
         fetchAllPlayers();

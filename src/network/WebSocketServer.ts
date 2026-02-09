@@ -34,7 +34,17 @@ export class WebSocketServer {
 
   private setupConnectionHandler(): void {
     this.wss.on('connection', (ws: ExtWebSocket, req: IncomingMessage) => {
-      this.logger.info('WebSocket 客户端已连接');
+      const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown';
+      const connectionId = `ws-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+      this.logger.info(`WebSocket 客户端已连接: ${ip}`);
+
+      this.protocolHandler.handleConnection(connectionId, () => ws.close(), ip);
+
+      ws.on('close', () => {
+        this.protocolHandler.handleDisconnection(connectionId);
+        this.logger.info('WebSocket 客户端已断开');
+      });
 
       // Link express session to WebSocket
       try {
