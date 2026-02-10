@@ -312,9 +312,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="chart-container">
                     ${details.selectedChart?.illustration ? `
                         <div class="chart-illustration">
-                            <a href="https://phira.moe/chart/${details.selectedChart.id}" target="_blank">
-                                <img src="${details.selectedChart.illustration}" alt="Illustration">
-                            </a>
+                            <img src="${details.selectedChart.illustration}" alt="Illustration">
                         </div>` : `<div class="chart-illustration" style="background:var(--muted-bg); height:200px; display:flex; align-items:center; justify-content:center; color:var(--text-muted); border-radius:8px;">${I18n.t('room.no_illustration')}</div>`}
                     <div class="chart-details-box">
                         <h4>${I18n.t('room.chart_info')}</h4>
@@ -326,7 +324,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         <p><strong>${I18n.t('room.composer')}:</strong> <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;" title="${details.selectedChart?.composer || ''}">${details.selectedChart?.composer || 'N/A'}</span></p>
                         <p><strong>${I18n.t('room.rating')}:</strong> <span>${starsHtml} <span style="font-size:0.9em; color:var(--text-muted);">(${ratingDisplay} / 5.00)</span></span></p>
                     </div>
-                    <a href="${details.selectedChart?.file || 'javascript:void(0)'}" class="download-button ${!details.selectedChart?.file ? 'placeholder' : ''}" ${details.selectedChart?.file ? 'target="_blank"' : 'onclick="alert(\'杂鱼~ 你还没有选择任何谱面哦喵！\')"'} >&#128229; ${I18n.t('room.download')}</a>
                 </div>
             `;
 

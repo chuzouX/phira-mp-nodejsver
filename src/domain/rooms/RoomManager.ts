@@ -27,7 +27,6 @@ export interface ChartInfo {
   difficulty?: number;
   composer?: string;
   illustration?: string;
-  file?: string;
   uploader?: number;
   rating?: number;
   ratingCount?: number;

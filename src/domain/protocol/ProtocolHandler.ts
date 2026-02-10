@@ -500,7 +500,6 @@ export class ProtocolHandler {
       difficulty: chartData.difficulty,
       composer: chartData.composer,
       illustration: chartData.illustration,
-      file: chartData.file,
       rating: chartData.rating,
       ratingCount: chartData.ratingCount,
       uploader: uploaderId,
@@ -1287,13 +1286,6 @@ export class ProtocolHandler {
       return;
     }
 
-    if (!room.selectedChart) {
-      this.respond(connectionId, sendResponse, {
-        type: ServerCommandType.RequestStart,
-        result: { ok: false, error: '杂鱼~你还没选谱面呢' },
-      });
-      return;
-    }
 
     this.logger.mark(`“${session.userInfo.name}” 在房间 “${room.id}” 请求开始对局`, { userId: session.userId });
 
