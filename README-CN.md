@@ -88,6 +88,7 @@ npm install
 | `LOGIN_BLACKLIST_DURATION` | 后台登录失败后的黑名单拦截时长 (秒) | `600` |
 | `LOG_LEVEL` | 日志级别 (`debug`, `info`, `warn`, `error`) | `info` |
 | `DISPLAY_IP` | 在网页底部显示的服务器 IP/域名 | `phira.funxlink.fun:19723` |
+| `DEFAULT_AVATAR` | 默认头像 URL (用于无头像用户/机器人) | (Phira 默认值) |
 | `CAPTCHA_PROVIDER` | 验证码提供商 (`geetest` 或 `none`) | `none` |
 
 ## 部署与运行

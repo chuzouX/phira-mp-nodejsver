@@ -88,6 +88,7 @@ npm install
 | `LOGIN_BLACKLIST_DURATION` | Seconds to blacklist IP after login failures | `600` |
 | `LOG_LEVEL` | Logging level (`debug`, `info`, `warn`, `error`) | `info` |
 | `DISPLAY_IP` | Server IP displayed at the bottom of the web pages | `phira.funxlink.fun:19723` |
+| `DEFAULT_AVATAR` | Default avatar URL for users/bots without one | (Phira Default) |
 | `CAPTCHA_PROVIDER` | Captcha system (`geetest` or `none`) | `none` |
 
 ## Deployment & Running
