@@ -36,7 +36,7 @@ export const checkForUpdates = async (logger: Logger) => {
     const latestVersion = data.tag_name?.replace('v', '');
 
     if (latestVersion && latestVersion !== version) {
-      logger.mark('\n' + '='.repeat(50));
+      logger.mark('='.repeat(50));
       logger.mark(`🔔 发现新版本: v${latestVersion} (当前版本: v${version})`);
       logger.mark(`🔗 下载地址: https://github.com/chuzouX/phira-mp-nodejsver/releases/latest`);
       logger.mark('='.repeat(50) + '\n');
