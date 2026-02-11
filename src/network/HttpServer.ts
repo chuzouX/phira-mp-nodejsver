@@ -313,28 +313,23 @@ export class HttpServer {
       if ((req.session as AdminSession).isAdmin) {
         return res.redirect('/');
       }
-      
-      const adminHtmlPath = path.join(publicPath, 'admin.html');
-      try {
-          let html = fs.readFileSync(adminHtmlPath, 'utf8');
-          // Inject configuration before the closing head tag or before scripts
-          const configScript = `
-          <script>
-            window.SERVER_CONFIG = {
-                captchaProvider: ${JSON.stringify(this.config.captchaProvider)},
-                geetestId: ${JSON.stringify(this.config.geetestId)}
-            };
-          </script>`;
-          html = html.replace('</head>', `${configScript}</head>`);
-          res.send(html);
-      } catch (err) {
-          this.logger.error(`读取 admin.html 失败: ${err}`);
-          res.status(500).send('Internal Server Error');
-      }
+      this.serveHtmlWithConfig(res, path.join(publicPath, 'admin.html'));
     });
 
-    this.app.get('/panel', this.adminAuth.bind(this), (_req, res) => {
-        res.sendFile(path.join(publicPath, 'panel.html'));
+    this.app.get('/', (req, res) => {
+        this.serveHtmlWithConfig(res, path.join(publicPath, 'index.html'));
+    });
+
+    this.app.get('/room', (req, res) => {
+        this.serveHtmlWithConfig(res, path.join(publicPath, 'room.html'));
+    });
+
+    this.app.get('/players', (req, res) => {
+        this.serveHtmlWithConfig(res, path.join(publicPath, 'players.html'));
+    });
+
+    this.app.get('/panel', this.adminAuth.bind(this), (req, res) => {
+        this.serveHtmlWithConfig(res, path.join(publicPath, 'panel.html'));
     });
 
     this.app.post('/login', async (req, res) => {
@@ -782,5 +777,27 @@ export class HttpServer {
         resolve();
       });
     });
+  }
+
+  private serveHtmlWithConfig(res: express.Response, filePath: string): void {
+    try {
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).send('File not found');
+        }
+        let html = fs.readFileSync(filePath, 'utf8');
+        const configScript = `
+        <script>
+          window.SERVER_CONFIG = {
+              captchaProvider: ${JSON.stringify(this.config.captchaProvider)},
+              geetestId: ${JSON.stringify(this.config.geetestId)},
+              displayIp: ${JSON.stringify(this.config.displayIp)}
+          };
+        </script>`;
+        html = html.replace('</head>', `${configScript}</head>`);
+        res.send(html);
+    } catch (err) {
+        this.logger.error(`读取 HTML 文件失败 (${filePath}): ${err}`);
+        res.status(500).send('Internal Server Error');
+    }
   }
 }

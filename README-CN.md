@@ -86,6 +86,7 @@ npm install
 | `SESSION_SECRET` | 会话加密密钥 | (默认不安全值) |
 | `LOGIN_BLACKLIST_DURATION` | 后台登录失败后的黑名单拦截时长 (秒) | `600` |
 | `LOG_LEVEL` | 日志级别 (`debug`, `info`, `warn`, `error`) | `info` |
+| `DISPLAY_IP` | 在网页底部显示的服务器 IP/域名 | `phira.funxlink.fun:19723` |
 | `CAPTCHA_PROVIDER` | 验证码提供商 (`geetest` 或 `none`) | `none` |
 
 ## 部署与运行

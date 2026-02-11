@@ -86,6 +86,7 @@ npm install
 | `SESSION_SECRET` | Secret for session encryption | (Insecure Default) |
 | `LOGIN_BLACKLIST_DURATION` | Seconds to blacklist IP after login failures | `600` |
 | `LOG_LEVEL` | Logging level (`debug`, `info`, `warn`, `error`) | `info` |
+| `DISPLAY_IP` | Server IP displayed at the bottom of the web pages | `phira.funxlink.fun:19723` |
 | `CAPTCHA_PROVIDER` | Captcha system (`geetest` or `none`) | `none` |
 
 ## Deployment & Running

@@ -47,6 +47,11 @@
                 <code id="server-ip">phira.funxlink.fun:19723</code>
                 <span class="copy-icon">&#128203;</span>
             </div>
+            <script>
+                if (window.SERVER_CONFIG && window.SERVER_CONFIG.displayIp) {
+                    document.getElementById('server-ip').textContent = window.SERVER_CONFIG.displayIp;
+                }
+            </script>
             <div class="footer-controls">
                 <button id="theme-toggle" class="theme-toggle-btn">
                     <span id="theme-icon" class="theme-icon">🌙</span>

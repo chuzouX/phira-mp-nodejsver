@@ -46,6 +46,9 @@ SESSION_SECRET=a-very-insecure-secret-change-it
 # Log Level (debug, info, mark, warn, error)
 LOG_LEVEL=info
 
+# Server IP displayed at the bottom of the web pages
+DISPLAY_IP=phira.funxlink.fun:19723
+
 # Captcha Provider (geetest or none)
 CAPTCHA_PROVIDER=none
 # GEETEST_ID=
@@ -105,6 +108,7 @@ export interface ServerConfig {
   serverAnnouncement: string;
   sessionSecret: string;
   loginBlacklistDuration: number;
+  displayIp: string;
   captchaProvider: 'geetest' | 'none';
   geetestId?: string;
   geetestKey?: string;
@@ -140,6 +144,7 @@ const defaultConfig: ServerConfig = {
   serverAnnouncement: `你好{{name}}，欢迎来到 {{serverName}} 服务器`,
   sessionSecret: 'a-very-insecure-secret-change-it',
   loginBlacklistDuration: 600, // 10 minutes
+  displayIp: 'phira.funxlink.fun:19723',
   captchaProvider: 'none',
 };
 
@@ -248,6 +253,7 @@ export const createServerConfig = (overrides: Partial<ServerConfig> = {}): Serve
     serverAnnouncement: process.env.SERVER_ANNOUNCEMENT ?? defaultConfig.serverAnnouncement,
     sessionSecret: process.env.SESSION_SECRET ?? defaultConfig.sessionSecret,
     loginBlacklistDuration: Number.parseInt(process.env.LOGIN_BLACKLIST_DURATION ?? `${defaultConfig.loginBlacklistDuration}`, 10),
+    displayIp: process.env.DISPLAY_IP ?? defaultConfig.displayIp,
     captchaProvider: (process.env.CAPTCHA_PROVIDER || 'none').toLowerCase() as  'geetest' | 'none',
     geetestId: process.env.GEETEST_ID,
     geetestKey: process.env.GEETEST_KEY,
