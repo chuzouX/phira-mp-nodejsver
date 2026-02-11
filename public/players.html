@@ -27,10 +27,20 @@
         <footer>
             <p data-i18n="common.server_ip">Game Server IP:</p>
             <div class="server-ip-container" id="copy-ip" data-i18n-title="common.click_to_copy">
-                <code id="server-ip">phira.funxlink.fun:19723</code>
+                <code id="server-ip">...</code>
                 <span class="copy-icon">&#128203;</span>
             </div>
-            <div class="footer-controls">
+                <script>
+                    // Update server IP and title from config if available
+                    if (window.SERVER_CONFIG) {
+                        if (window.SERVER_CONFIG.displayIp) {
+                            document.getElementById('server-ip').textContent = window.SERVER_CONFIG.displayIp;
+                        }
+                        if (window.SERVER_CONFIG.serverName) {
+                            document.title = `All Players - ${window.SERVER_CONFIG.serverName}`;
+                        }
+                    }
+                </script>            <div class="footer-controls">
                 <button id="theme-toggle" class="theme-toggle-btn">
                     <span id="theme-icon" class="theme-icon">🌙</span>
                     <span id="theme-text" data-i18n="common.dark_mode">Dark Mode</span>

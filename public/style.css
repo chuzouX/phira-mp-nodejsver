@@ -254,8 +254,6 @@ body.dark-mode .name-member { color: #60a5fa !important; }
 /* Chart Info */
 .chart-container { display: flex; flex-direction: column; gap: 20px; }
 .chart-illustration img { width: 100%; border-radius: var(--radius-md); box-shadow: var(--card-shadow); max-height: 240px; object-fit: cover; }
-.download-button { background-color: var(--primary-color); color: white; padding: 14px; border-radius: var(--radius-md); text-decoration: none; font-weight: 700; text-align: center; transition: var(--transition); border: none; cursor: pointer; }
-.download-button:hover { background-color: var(--primary-hover); transform: translateY(-2px); }
 
 /* Announcement */
 #announcement-popup { position: fixed; top: 24px; left: 50%; transform: translateX(-50%); z-index: 1000; background-color: rgba(15, 23, 42, 0.9); backdrop-filter: blur(12px); color: white; padding: 12px 24px; border-radius: 99px; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.2); font-weight: 600; font-size: 0.9375rem; display: none; border: 1px solid rgba(255,255,255,0.1); }
@@ -417,6 +415,40 @@ footer { margin-top: 80px; padding: 60px 0; text-align: center; border-top: 1px 
     transform: scale(1.05);
 }
 
+.player-admin-actions {
+    display: flex;
+    gap: 8px;
+    margin-left: 10px;
+}
+
+.kick-btn {
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: var(--transition);
+    border: 1px solid rgba(231, 76, 60, 0.2);
+    background: rgba(231, 76, 60, 0.1);
+    color: var(--danger-color);
+}
+
+.kick-btn:hover {
+    background: var(--danger-color);
+    color: white;
+    transform: translateY(-1px);
+}
+
+.kick-btn.action-orange {
+    background: rgba(230, 126, 34, 0.1);
+    color: #e67e22;
+    border-color: rgba(230, 126, 34, 0.2);
+}
+
+.kick-btn.action-orange:hover {
+    background: #e67e22;
+    color: white;
+}
 
 /* Room Go Button & Lobby Tag in Players List */
 .room-go-btn {

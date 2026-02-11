@@ -124,13 +124,18 @@
             
             <div class="captcha-container" id="captcha-widget"></div>
             
-            <input type="hidden" name="captchaVerifyParam" id="captchaVerifyParam">
+            <div id="login-error" style="color:var(--danger-color); font-size:0.85rem; margin-bottom:15px; text-align:center; display:none;"></div>
+
             <button type="submit" id="login-btn" class="login-btn" disabled data-i18n="admin.login_btn">Login</button>
         </form>
         
         <div class="admin-footer">
             <a href="/" class="back-link" data-i18n="common.back_home">&larr; Back to Home</a>
             
+            <div style="margin-top: 10px; font-family: monospace; font-size: 0.8rem; opacity: 0.8;">
+                <span data-i18n="common.server_ip">Server IP:</span> <span id="server-ip">...</span>
+            </div>
+
             <div class="footer-controls" style="margin-top: 0;">
                 <button id="theme-toggle" class="theme-toggle-btn" style="padding: 8px 16px; font-size: 0.8rem;">
                     <span id="theme-icon" class="theme-icon">🌙</span>
@@ -158,6 +163,14 @@
         // Listen for i18n to be ready to set initial theme text
         document.addEventListener('i18nReady', () => {
             updateThemeUI(document.body.classList.contains('dark-mode'));
+            if (window.SERVER_CONFIG) {
+                if (window.SERVER_CONFIG.displayIp) {
+                    document.getElementById('server-ip').textContent = window.SERVER_CONFIG.displayIp;
+                }
+                if (window.SERVER_CONFIG.serverName) {
+                    document.title = `Admin Login - ${window.SERVER_CONFIG.serverName}`;
+                }
+            }
         });
 
         themeToggle.addEventListener('click', () => {
@@ -166,45 +179,106 @@
             updateThemeUI(isDark);
         });
 
+        let geetestInstance = null;
+
         async function initCaptcha() {
             const loginBtn = document.getElementById('login-btn');
-            const captchaInput = document.getElementById('captchaVerifyParam');
             const captchaWidget = document.getElementById('captcha-widget');
+            const loginForm = document.getElementById('login-form');
+            const errorDiv = document.getElementById('login-error');
 
-            try {
-                const response = await fetch('/api/config/public');
-                const config = await response.json();
+            const showError = (msg) => {
+                errorDiv.textContent = msg;
+                errorDiv.style.display = 'block';
+            };
 
-                if (config.captchaProvider === 'aliyun') {
-                    const captchaLang = I18n.currentLang === 'zh' ? 'cn' : 'en';
-                    window.AliyunCaptchaConfig = { region: 'cn', prefix: config.aliyunCaptchaPrefix };
-                    const script = document.createElement('script');
-                    script.src = "https://o.alicdn.com/captcha-frontend/aliyunCaptcha/AliyunCaptcha.js";
-                    script.onload = () => {
-                        window.initAliyunCaptcha({
-                            SceneId: config.aliyunCaptchaSceneId,
-                            prefix: config.aliyunCaptchaPrefix,
-                            region: 'cn',
-                            language: captchaLang,
-                            mode: 'embed',
-                            element: '#captcha-widget',
-                            immediate: true,
-                            captchaVerifyCallback: function(p) {
-                                captchaInput.value = p;
-                                loginBtn.disabled = false;
-                                setTimeout(() => { captchaWidget.style.display = 'none'; }, 500);
-                            },
-                            errorCallback: () => {
-                                captchaWidget.innerHTML = `<p style="color:var(--danger-color); font-size:0.8rem;">${I18n.t('admin.captcha_error')}</p>`;
-                            }
-                        });
-                    };
-                    document.head.appendChild(script);
-                } else {
+            const hideError = () => {
+                errorDiv.style.display = 'none';
+            };
+
+            loginForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                hideError();
+                loginBtn.disabled = true;
+                loginBtn.textContent = I18n.t('common.loading') || 'Loading...';
+
+                const formData = new FormData(loginForm);
+                const data = Object.fromEntries(formData.entries());
+
+                try {
+                    const response = await fetch('/login', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: new URLSearchParams(data).toString(),
+                    });
+
+                    if (response.ok) {
+                        window.location.href = '/';
+                    } else {
+                        const errorText = await response.text();
+                        // Extract error message from HTML if returned as such
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = errorText;
+                        const cleanError = tempDiv.textContent || 'Login failed';
+                        showError(cleanError);
+                        
+                        // Reset captcha
+                        if (geetestInstance) {
+                            geetestInstance.reset();
+                            loginBtn.disabled = true;
+                            // Remove previous hidden fields
+                            const hiddenInputs = loginForm.querySelectorAll('input[type="hidden"][name^="lot_number"], input[type="hidden"][name^="captcha_output"], input[type="hidden"][name^="pass_token"], input[type="hidden"][name^="gen_time"]');
+                            hiddenInputs.forEach(el => el.remove());
+                        } else {
+                            loginBtn.disabled = false;
+                        }
+                        loginBtn.textContent = I18n.t('admin.login_btn');
+                    }
+                } catch (error) {
+                    showError('Network error occurred.');
                     loginBtn.disabled = false;
-                    captchaWidget.style.display = 'none';
+                    loginBtn.textContent = I18n.t('admin.login_btn');
                 }
-            } catch (error) { loginBtn.disabled = false; }
+            });
+
+            // Try to use injected config
+            const config = window.SERVER_CONFIG || { captchaProvider: 'none' };
+
+            if (config.captchaProvider === 'geetest') {
+                const script = document.createElement('script');
+                script.src = "https://static.geetest.com/v4/gt4.js";
+                script.onload = () => {
+                    window.initGeetest4({
+                        captchaId: config.geetestId,
+                        product: 'float',
+                        language: I18n.currentLang === 'zh' ? 'zh-cn' : 'en',
+                    }, (captchaObj) => {
+                        geetestInstance = captchaObj;
+                        captchaObj.appendTo('#captcha-widget');
+                        captchaObj.onSuccess(() => {
+                            const result = captchaObj.getValidate();
+                            // Add geetest parameters to form
+                            Object.keys(result).forEach(key => {
+                                const input = document.createElement('input');
+                                input.type = 'hidden';
+                                input.name = key;
+                                input.value = result[key];
+                                loginForm.appendChild(input);
+                            });
+                            loginBtn.disabled = false;
+                        });
+                        captchaObj.onError(() => {
+                            captchaWidget.innerHTML = `<p style="color:var(--danger-color); font-size:0.8rem;">${I18n.t('admin.captcha_error')}</p>`;
+                        });
+                    });
+                };
+                document.head.appendChild(script);
+            } else {
+                loginBtn.disabled = false;
+                captchaWidget.style.display = 'none';
+            }
         }
 
         document.addEventListener('DOMContentLoaded', initCaptcha);

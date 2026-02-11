@@ -21,6 +21,7 @@ export class PhiraAuthService implements AuthService {
   constructor(
     private readonly apiUrl: string,
     private readonly logger: Logger,
+    private readonly defaultAvatar: string = 'https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404',
   ) {}
 
   async authenticate(token: string): Promise<UserInfo> {
@@ -43,12 +44,12 @@ export class PhiraAuthService implements AuthService {
 
       const userData: PhiraUserResponse = await response.json();
 
-      this.logger.info(`验证玩家成功：“${userData.name}”（用户ID：${userData.id}）`);
+      this.logger.info(`验证玩家成功：“${userData.name}”（用户ID：${userData.id}）`, { userId: userData.id });
 
       return {
         id: userData.id,
         name: userData.name,
-        avatar: userData.avatar ?? 'https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404',
+        avatar: userData.avatar ?? this.defaultAvatar,
         monitor: false,
       };
     } catch (error) {
