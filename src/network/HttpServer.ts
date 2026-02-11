@@ -309,26 +309,26 @@ export class HttpServer {
     this.app.use(express.static(publicPath));
     this.logger.info(`正在从 ${publicPath} 提供静态文件`);
 
-    this.app.get('/admin', (req, res) => {
-      if ((req.session as AdminSession).isAdmin) {
+    this.app.get('/admin', (_req, res) => {
+      if ((_req.session as AdminSession).isAdmin) {
         return res.redirect('/');
       }
       this.serveHtmlWithConfig(res, path.join(publicPath, 'admin.html'));
     });
 
-    this.app.get('/', (req, res) => {
+    this.app.get('/', (_req, res) => {
         this.serveHtmlWithConfig(res, path.join(publicPath, 'index.html'));
     });
 
-    this.app.get('/room', (req, res) => {
+    this.app.get('/room', (_req, res) => {
         this.serveHtmlWithConfig(res, path.join(publicPath, 'room.html'));
     });
 
-    this.app.get('/players', (req, res) => {
+    this.app.get('/players', (_req, res) => {
         this.serveHtmlWithConfig(res, path.join(publicPath, 'players.html'));
     });
 
-    this.app.get('/panel', this.adminAuth.bind(this), (req, res) => {
+    this.app.get('/panel', this.adminAuth.bind(this), (_req, res) => {
         this.serveHtmlWithConfig(res, path.join(publicPath, 'panel.html'));
     });
 
@@ -782,7 +782,8 @@ export class HttpServer {
   private serveHtmlWithConfig(res: express.Response, filePath: string): void {
     try {
         if (!fs.existsSync(filePath)) {
-            return res.status(404).send('File not found');
+            res.status(404).send('File not found');
+            return;
         }
         let html = fs.readFileSync(filePath, 'utf8');
         const configScript = `
