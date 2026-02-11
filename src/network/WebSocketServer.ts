@@ -34,7 +34,31 @@ export class WebSocketServer {
 
   private setupConnectionHandler(): void {
     this.wss.on('connection', (ws: ExtWebSocket, req: IncomingMessage) => {
-      this.logger.info('WebSocket 客户端已连接');
+      // Priority: HTTP Headers (Standard for Web Proxies)
+      let ip = 'unknown';
+      const xForwardedFor = req.headers['x-forwarded-for'];
+      if (xForwardedFor) {
+        const ips = typeof xForwardedFor === 'string' ? xForwardedFor.split(',') : (Array.isArray(xForwardedFor) ? xForwardedFor : []);
+        if (ips.length > 0) ip = ips[0].trim();
+      } else {
+        const xRealIp = req.headers['x-real-ip'];
+        if (xRealIp && typeof xRealIp === 'string') {
+          ip = xRealIp.trim();
+        } else {
+          ip = req.socket.remoteAddress || 'unknown';
+        }
+      }
+      
+      const connectionId = `ws-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+      this.logger.info(`WebSocket 客户端已连接: ${ip}`);
+
+      this.protocolHandler.handleConnection(connectionId, () => ws.close(), ip);
+
+      ws.on('close', () => {
+        this.protocolHandler.handleDisconnection(connectionId);
+        this.logger.info('WebSocket 客户端已断开');
+      });
 
       // Link express session to WebSocket
       try {
@@ -208,7 +232,7 @@ export class WebSocketServer {
     players.unshift({
         id: -1,
         name: this.config.serverName,
-        avatar: 'https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404',
+        avatar: this.config.defaultAvatar,
         isReady: false,
         isFinished: false,
         score: null,

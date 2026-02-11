@@ -3,18 +3,88 @@
  * Copyright (c) 2024
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
+
+const ensureEnvFile = () => {
+  const envPath = path.join(process.cwd(), '.env');
+  const examplePath = path.join(process.cwd(), '.env.example');
+  
+  if (!fs.existsSync(envPath)) {
+    let defaultEnv = '';
+    
+    if (fs.existsSync(examplePath)) {
+        try {
+            defaultEnv = fs.readFileSync(examplePath, 'utf8');
+        } catch (e) {
+            // Fallback to hardcoded
+        }
+    }
+
+    if (!defaultEnv) {
+        defaultEnv = `# 游戏服务器配置
+PORT=12346
+HOST=0.0.0.0
+TCP_ENABLED=true
+USE_PROXY_PROTOCOL=false
+LOG_LEVEL=info
+NODE_ENV=development
+PHIRA_API_URL=https://phira.5wyxi.com
+SERVER_NAME=Server
+ROOM_SIZE=8
+SERVER_ANNOUNCEMENT="你好{{name}}，欢迎来到 {{serverName}} 服务器"
+
+# web服务器配置
+WEB_PORT=8080
+ENABLE_WEB_SERVER=true
+DISPLAY_IP=phira.funxlink.fun:19723
+DEFAULT_AVATAR=https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404
+SESSION_SECRET=a-very-insecure-secret-change-it
+LOGIN_BLACKLIST_DURATION=600
+# Enable automatic update checking on startup
+ENABLE_UPDATE_CHECK=true
+
+# Admin Credentials for /panel
+ADMIN_NAME=admin
+ADMIN_PASSWORD=password
+ADMIN_SECRET=
+ADMIN_PHIRA_ID=
+OWNER_PHIRA_ID=
+BAN_ID_WHITELIST=
+BAN_IP_WHITELIST=
+SILENT_PHIRA_IDS=
+
+# 房间发现过滤
+ENABLE_PUB_WEB=false
+PUB_PREFIX=pub
+ENABLE_PRI_WEB=false
+PRI_PREFIX=sm
+
+# 验证码配置 (geetest / none)
+CAPTCHA_PROVIDER=none
+GEETEST_ID=
+GEETEST_KEY=
+`;
+    }
+
+    fs.writeFileSync(envPath, defaultEnv, 'utf8');
+    console.log('✅ 已自动生成默认 .env 配置文件');
+  }
+};
+
+// 执行环境初始化
+ensureEnvFile();
+
 // 只在开发环境加载 .env 文件
 if (process.env.NODE_ENV !== 'production') {
   const dotenv = require('dotenv');
-  const result = dotenv.config();
-  
-  if (result.error) {
-    console.error('加载 .env 文件失败:', result.error);
-  } else {
-    console.log('✅ 开发环境：已从 .env 加载配置');
-  }
+  dotenv.config();
+  console.log('✅ 开发环境：已从 .env 加载配置');
 } else {
-  console.log('✅ 生产环境：使用系统环境变量');
+  // 生产环境（包括打包后）也尝试加载同级目录的 .env
+  const dotenv = require('dotenv');
+  dotenv.config();
+  console.log('✅ 运行环境：已加载外部 .env 配置');
 }
 
 export interface ProtocolOptions {
@@ -34,6 +104,7 @@ export interface ServerConfig {
   pubPrefix: string;
   enablePriWeb: boolean;
   priPrefix: string;
+  useProxyProtocol: boolean;
   protocol: ProtocolOptions;
   logging: LoggingOptions;
   phiraApiUrl: string;
@@ -41,16 +112,21 @@ export interface ServerConfig {
   roomSize: number;
   adminName: string;
   adminPassword: string;
+  adminSecret: string;
   adminPhiraId: number[];
   ownerPhiraId: number[];
+  banIdWhitelist: number[];
+  banIpWhitelist: string[];
+  silentPhiraIds: number[];
+  serverAnnouncement: string;
   sessionSecret: string;
-  turnstileSiteKey?: string;
-  turnstileSecretKey?: string;
-  captchaProvider: 'cloudflare' | 'aliyun' | 'none';
-  aliyunAccessKeyId?: string;
-  aliyunAccessKeySecret?: string;
-  aliyunCaptchaSceneId?: string;
-  aliyunCaptchaPrefix?: string;
+  loginBlacklistDuration: number;
+  displayIp: string;
+  defaultAvatar: string;
+  enableUpdateCheck: boolean;
+  captchaProvider: 'geetest' | 'none';
+  geetestId?: string;
+  geetestKey?: string;
 }
 
 const defaultConfig: ServerConfig = {
@@ -62,6 +138,7 @@ const defaultConfig: ServerConfig = {
   pubPrefix: 'pub',
   enablePriWeb: false,
   priPrefix: 'sm',
+  useProxyProtocol: false,
   protocol: {
     tcp: true,
   },
@@ -73,9 +150,18 @@ const defaultConfig: ServerConfig = {
   roomSize: 8,
   adminName: 'admin',
   adminPassword: 'password',
+  adminSecret: '',
   adminPhiraId: [],
   ownerPhiraId: [],
+  banIdWhitelist: [],
+  banIpWhitelist: [],
+  silentPhiraIds: [],
+  serverAnnouncement: `你好{{name}}，欢迎来到 {{serverName}} 服务器`,
   sessionSecret: 'a-very-insecure-secret-change-it',
+  loginBlacklistDuration: 600, // 10 minutes
+  displayIp: 'phira.funxlink.fun:19723',
+  defaultAvatar: 'https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404',
+  enableUpdateCheck: true,
   captchaProvider: 'none',
 };
 
@@ -101,13 +187,10 @@ export const env = {
   host: process.env.HOST || '0.0.0.0',
   webPort: parseInt(process.env.WEB_PORT || '8080', 10),
   enableWebServer: parseBoolean(process.env.ENABLE_WEB_SERVER, true),
+  useProxyProtocol: parseBoolean(process.env.USE_PROXY_PROTOCOL, false),
   
   // 验证码配置
-  captchaProvider: (process.env.CAPTCHA_PROVIDER || 'none').toLowerCase() as 'cloudflare' | 'aliyun' | 'none',
-  aliyunAccessKeyId: process.env.ALIYUN_ACCESS_KEY_ID,
-  aliyunAccessKeySecret: process.env.ALIYUN_ACCESS_KEY_SECRET,
-  aliyunCaptchaSceneId: process.env.ALIYUN_CAPTCHA_SCENE_ID,
-  aliyunCaptchaPrefix: process.env.ALIYUN_CAPTCHA_PREFIX,
+  captchaProvider: (process.env.CAPTCHA_PROVIDER || 'none').toLowerCase() as 'geetest' | 'none',
 
   // 房间过滤配置
   enablePubWeb: parseBoolean(process.env.ENABLE_PUB_WEB, false),
@@ -120,14 +203,15 @@ export const env = {
   // Admin
   adminName: process.env.ADMIN_NAME || 'admin',
   adminPassword: process.env.ADMIN_PASSWORD || 'password',
+  adminSecret: process.env.ADMIN_SECRET || '',
   adminPhiraId: parseNumberList(process.env.ADMIN_PHIRA_ID, []),
   ownerPhiraId: parseNumberList(process.env.OWNER_PHIRA_ID, []),
+  banIdWhitelist: parseNumberList(process.env.BAN_ID_WHITELIST, []),
+  banIpWhitelist: (process.env.BAN_IP_WHITELIST || '').split(',').map(s => s.trim()).filter(s => s !== ''),
+  silentPhiraIds: parseNumberList(process.env.SILENT_PHIRA_IDS, []),
   sessionSecret: process.env.SESSION_SECRET || 'a-very-insecure-secret-change-it',
+  loginBlacklistDuration: parseInt(process.env.LOGIN_BLACKLIST_DURATION || '600', 10),
   
-  // Turnstile
-  turnstileSiteKey: process.env.TURNSTILE_SITE_KEY,
-  turnstileSecretKey: process.env.TURNSTILE_SECRET_KEY,
-
   // Phira API
   phiraApiUrl: process.env.PHIRA_API_URL || 'https://phira.5wyxi.com',
   
@@ -165,6 +249,7 @@ export const createServerConfig = (overrides: Partial<ServerConfig> = {}): Serve
     pubPrefix: process.env.PUB_PREFIX ?? defaultConfig.pubPrefix,
     enablePriWeb: parseBoolean(process.env.ENABLE_PRI_WEB, defaultConfig.enablePriWeb),
     priPrefix: process.env.PRI_PREFIX ?? defaultConfig.priPrefix,
+    useProxyProtocol: parseBoolean(process.env.USE_PROXY_PROTOCOL, defaultConfig.useProxyProtocol),
     protocol: {
       tcp: parseBoolean(process.env.TCP_ENABLED, defaultConfig.protocol.tcp),
     },
@@ -176,16 +261,21 @@ export const createServerConfig = (overrides: Partial<ServerConfig> = {}): Serve
     roomSize: Number.parseInt(process.env.ROOM_SIZE ?? `${defaultConfig.roomSize}`, 10),
     adminName: process.env.ADMIN_NAME ?? defaultConfig.adminName,
     adminPassword: process.env.ADMIN_PASSWORD ?? defaultConfig.adminPassword,
+    adminSecret: process.env.ADMIN_SECRET ?? defaultConfig.adminSecret,
     adminPhiraId: parseNumberList(process.env.ADMIN_PHIRA_ID, defaultConfig.adminPhiraId),
     ownerPhiraId: parseNumberList(process.env.OWNER_PHIRA_ID, defaultConfig.ownerPhiraId),
+    banIdWhitelist: parseNumberList(process.env.BAN_ID_WHITELIST, defaultConfig.banIdWhitelist),
+    banIpWhitelist: (process.env.BAN_IP_WHITELIST || '').split(',').map(s => s.trim()).filter(s => s !== ''),
+    silentPhiraIds: parseNumberList(process.env.SILENT_PHIRA_IDS, defaultConfig.silentPhiraIds),
+    serverAnnouncement: process.env.SERVER_ANNOUNCEMENT ?? defaultConfig.serverAnnouncement,
     sessionSecret: process.env.SESSION_SECRET ?? defaultConfig.sessionSecret,
-    turnstileSiteKey: process.env.TURNSTILE_SITE_KEY,
-    turnstileSecretKey: process.env.TURNSTILE_SECRET_KEY,
-    captchaProvider: (process.env.CAPTCHA_PROVIDER || 'none').toLowerCase() as 'cloudflare' | 'aliyun' | 'none',
-    aliyunAccessKeyId: process.env.ALIYUN_ACCESS_KEY_ID?.trim(),
-    aliyunAccessKeySecret: process.env.ALIYUN_ACCESS_KEY_SECRET?.trim(),
-    aliyunCaptchaSceneId: process.env.ALIYUN_CAPTCHA_SCENE_ID?.trim(),
-    aliyunCaptchaPrefix: process.env.ALIYUN_CAPTCHA_PREFIX?.trim(),
+    loginBlacklistDuration: Number.parseInt(process.env.LOGIN_BLACKLIST_DURATION ?? `${defaultConfig.loginBlacklistDuration}`, 10),
+    displayIp: process.env.DISPLAY_IP ?? defaultConfig.displayIp,
+    defaultAvatar: process.env.DEFAULT_AVATAR ?? defaultConfig.defaultAvatar,
+    enableUpdateCheck: parseBoolean(process.env.ENABLE_UPDATE_CHECK, defaultConfig.enableUpdateCheck),
+    captchaProvider: (process.env.CAPTCHA_PROVIDER || 'none').toLowerCase() as  'geetest' | 'none',
+    geetestId: process.env.GEETEST_ID,
+    geetestKey: process.env.GEETEST_KEY,
   };
 
   return {

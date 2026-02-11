@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentOtherRooms = [];
     let lastMessageCount = -1;
     let announcementTimeout = null;
+    const defaultAvatar = (window.SERVER_CONFIG && window.SERVER_CONFIG.defaultAvatar) || 'https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404';
 
     function showAnnouncement(m) {
         try {
@@ -312,9 +313,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="chart-container">
                     ${details.selectedChart?.illustration ? `
                         <div class="chart-illustration">
-                            <a href="https://phira.moe/chart/${details.selectedChart.id}" target="_blank">
-                                <img src="${details.selectedChart.illustration}" alt="Illustration">
-                            </a>
+                            <img src="${details.selectedChart.illustration}" alt="Illustration">
                         </div>` : `<div class="chart-illustration" style="background:var(--muted-bg); height:200px; display:flex; align-items:center; justify-content:center; color:var(--text-muted); border-radius:8px;">${I18n.t('room.no_illustration')}</div>`}
                     <div class="chart-details-box">
                         <h4>${I18n.t('room.chart_info')}</h4>
@@ -326,7 +325,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         <p><strong>${I18n.t('room.composer')}:</strong> <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;" title="${details.selectedChart?.composer || ''}">${details.selectedChart?.composer || 'N/A'}</span></p>
                         <p><strong>${I18n.t('room.rating')}:</strong> <span>${starsHtml} <span style="font-size:0.9em; color:var(--text-muted);">(${ratingDisplay} / 5.00)</span></span></p>
                     </div>
-                    <a href="${details.selectedChart?.file || 'javascript:void(0)'}" class="download-button ${!details.selectedChart?.file ? 'placeholder' : ''}" ${details.selectedChart?.file ? 'target="_blank"' : 'onclick="alert(\'杂鱼~ 你还没有选择任何谱面哦喵！\')"'} >&#128229; ${I18n.t('room.download')}</a>
                 </div>
             `;
 
@@ -337,7 +335,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <h3>${I18n.t('room.host_info')}</h3>
                     <div class="uploader-info">
                         <a href="https://phira.moe/user/${details.ownerId}" target="_blank" style="text-decoration:none; color:inherit;">
-                            <img src="${host?.avatar || 'https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404'}" class="uploader-avatar">
+                            <img src="${host?.avatar || defaultAvatar}" class="uploader-avatar">
                             <div class="uploader-text">
                                 <p class="uploader-name">${host?.name || I18n.t('common.unknown')}</p>
                                 <p class="uploader-rks">RKS: ${(host?.rks ?? 0).toFixed(2)}</p>
@@ -362,7 +360,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return `
                     <li class="player-item">
                         <div class="player-info-left">
-                            <img src="${p.avatar || 'https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404'}" class="player-avatar-small">
+                            <img src="${p.avatar || defaultAvatar}" class="player-avatar-small">
                             <a class="player-name ${nameClass}" href="${isServer ? '#' : `https://phira.moe/user/${p.id}`}" target="_blank"><span class="name-prefix ${prefixClass}">${prefixText}</span>${p.name || I18n.t('common.unknown')}</a>
                         </div>
                         <span class="player-status ${statusClass}">${isServer ? 'Bot' : (p.isReady ? 'Ready' : 'Not Ready')}</span>

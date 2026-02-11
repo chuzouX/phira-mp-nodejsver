@@ -45,7 +45,6 @@
     "host_no_bio": "The host is lazy and left nothing",
     "player": "Player",
     "score": "Score",
-    "download": "Download Chart",
     "not_selected": "Not Selected",
     "id": "ID",
     "level": "Level",
@@ -88,7 +87,8 @@
       "lock": "Lock/Unlock",
       "kick": "Kick Player",
       "blacklist": "BlackList",
-      "whitelist": "WhiteList"
+      "whitelist": "WhiteList",
+      "bulk_action": "Bulk Room Control"
     }
   },
   "admin": {
@@ -97,13 +97,51 @@
     "password": "Password",
     "login_btn": "Login",
     "captcha_error": "Captcha Error. Please refresh.",
-    "access_denied": "Access Denied. You must be an admin to view this page."
+    "access_denied": "Access Denied. You must be an admin to view this page.",
+    "panel_title": "Admin Management Panel",
+    "server_control": "Server Control",
+    "login_blacklist": "Panel Login Blacklist",
+    "room_creation": "Room Creation",
+    "enable": "Enable",
+    "disable": "Disable",
+    "bulk_target": "Target Rooms",
+    "close_all": "Close All",
+    "lock_all": "Lock All",
+    "unlock_all": "Unlock All",
+    "set_size": "Set Size",
+    "send": "Send",
+    "content_required": "Content required",
+    "target_required": "Target required",
+    "invalid_size": "Invalid size",
+    "action_failed": "Action failed",
+    "confirm_bulk": "Confirm action for: {target}?",
+    "footer_version": "FunXLink Studio Phira Management Panel v1.0"
   },
   "players": {
     "title": "Online Players",
     "all_players": "All Online Players",
     "no_players": "No players currently online",
     "in_room": "In Room",
-    "in_lobby": "In Lobby"
+    "in_lobby": "In Lobby",
+    "ban": "Ban",
+    "unban": "Unban"
+  },
+  "ban": {
+    "manage_title": "Ban List Management",
+    "user_id_bans": "In-game User ID Bans",
+    "ip_bans": "In-game IP Bans",
+    "target": "Target",
+    "reason": "Reason",
+    "expires": "Expires",
+    "permanent": "Permanent",
+    "admin": "Admin",
+    "no_bans": "No bans in this list",
+    "ban_user": "Ban User/IP",
+    "type_user_id": "User ID",
+    "type_game_ip": "In-game IP",
+    "ban_ip": "Ban IP",
+    "duration_placeholder": "Duration (seconds, empty for permanent)",
+    "reason_placeholder": "Enter ban reason",
+    "confirm_unban": "Are you sure you want to unban {target}?"
   }
 }

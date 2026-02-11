@@ -19,7 +19,7 @@ export class NetworkServer {
     private readonly logger: Logger,
     protocolHandler: ProtocolHandler,
   ) {
-    this.tcpServer = new TcpServer(logger, protocolHandler);
+    this.tcpServer = new TcpServer(logger, protocolHandler, config.useProxyProtocol);
   }
 
   async start(): Promise<void> {

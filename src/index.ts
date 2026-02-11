@@ -3,6 +3,23 @@
  * Copyright (c) 2024
  */
 
+// Suppress experimental fetch warning
+const originalEmit = process.emit;
+// @ts-ignore
+process.emit = function (name, data) {
+  if (
+    name === 'warning' &&
+    data &&
+    typeof data === 'object' &&
+    (data as any).name === 'ExperimentalWarning' &&
+    (data as any).message?.includes('Fetch API')
+  ) {
+    return false;
+  }
+  // @ts-ignore
+  return originalEmit.apply(process, arguments);
+};
+
 import { createApplication } from './app';
 
 const main = async () => {

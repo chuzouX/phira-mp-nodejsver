@@ -8,8 +8,7 @@ import { Logger } from '../logging/logger';
 import { ServerConfig } from '../config/config';
 import { RoomManager } from '../domain/rooms/RoomManager';
 import { ProtocolHandler } from '../domain/protocol/ProtocolHandler';
-import * as $Captcha20230305 from '@alicloud/captcha20230305';
-import * as $OpenApi from '@alicloud/openapi-client';
+import { BanManager } from '../domain/auth/BanManager';
 
 interface AdminSession extends SessionData {
   isAdmin?: boolean;
@@ -24,19 +23,23 @@ export class HttpServer {
   private readonly app: express.Application;
   private readonly server: Server;
   private readonly loginAttempts = new Map<string, LoginAttempt>();
-  private readonly blacklistedIps = new Set<string>();
-  private aliyunCaptchaClient?: $Captcha20230305.default;
+  private readonly blacklistedIps = new Map<string, number>(); // ip -> expiresAt
   private sessionParser: express.RequestHandler;
-  private readonly blacklistFile = path.join(process.cwd(), 'logs', 'login_blacklist.log');
+  private readonly blacklistFile = path.join(process.cwd(), 'data', 'login_blacklist.json');
+  private readonly cleanupInterval: NodeJS.Timeout;
   
   constructor(
     private readonly config: ServerConfig,
     private readonly logger: Logger,
     private readonly roomManager: RoomManager,
     private readonly protocolHandler: ProtocolHandler,
+    private readonly banManager: BanManager,
   ) {
     this.app = express();
     this.server = createServer(this.app);
+
+    // Trust Nginx proxy headers (X-Forwarded-For)
+    this.app.set('trust proxy', true);
 
     // Initialize session parser
     this.sessionParser = session({
@@ -53,11 +56,10 @@ export class HttpServer {
 
     this.setupMiddleware();
     this.setupRoutes();
-    this.initAliyunCaptchaClient();
     this.loadBlacklist();
     
     // Cleanup expired login attempts every hour to prevent memory leak
-    setInterval(() => {
+    this.cleanupInterval = setInterval(() => {
         const now = Date.now();
         for (const [ip, attempt] of this.loginAttempts.entries()) {
             if (now - attempt.lastAttempt > 15 * 60 * 1000) { // 15 minutes expiration
@@ -71,44 +73,101 @@ export class HttpServer {
     if (fs.existsSync(this.blacklistFile)) {
         try {
             const data = fs.readFileSync(this.blacklistFile, 'utf8');
-            const lines = data.split('\n');
-            lines.forEach(line => {
-                const match = line.match(/IP: ([\d.]+)/);
-                if (match) this.blacklistedIps.add(match[1]);
-            });
-            this.logger.info(`已从文件加载 ${this.blacklistedIps.size} 个黑名单 IP。`);
+            const entries = JSON.parse(data);
+            if (typeof entries === 'object' && !Array.isArray(entries)) {
+                Object.entries(entries).forEach(([ip, expiresAt]) => {
+                    this.blacklistedIps.set(ip, Number(expiresAt));
+                });
+            } else if (Array.isArray(entries)) {
+                // Compatibility for old Array format
+                entries.forEach(ip => this.blacklistedIps.set(ip, Date.now() + 365 * 24 * 3600 * 1000));
+            }
+            this.cleanupBlacklist();
+            this.logger.info(`已从文件加载 ${this.blacklistedIps.size} 个登录黑名单 IP。`);
         } catch (e) {
-            this.logger.error(`加载黑名单文件失败: ${e}`);
+            this.logger.error(`加载登录黑名单文件失败: ${e}`);
         }
     }
   }
 
-  private logToBlacklist(ip: string, username: string): void {
-    const timestamp = new Date().toISOString();
-    const logEntry = `[${timestamp}] IP: ${ip}, Username Attempted: ${username}, Reason: Too many failures\n`;
+  private saveBlacklist(): void {
     try {
-        fs.appendFileSync(this.blacklistFile, logEntry);
-        this.blacklistedIps.add(ip);
+        const dir = path.dirname(this.blacklistFile);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        const data = Object.fromEntries(this.blacklistedIps);
+        fs.writeFileSync(this.blacklistFile, JSON.stringify(data, null, 2));
     } catch (e) {
-        this.logger.error(`写入黑名单日志失败: ${e}`);
+        this.logger.error(`保存登录黑名单失败: ${e}`);
     }
   }
 
-  private initAliyunCaptchaClient(): void {
-    if (this.config.captchaProvider === 'aliyun' && this.config.aliyunAccessKeyId && this.config.aliyunAccessKeySecret) {
-      try {
-        const config = new $OpenApi.Config({
-          accessKeyId: this.config.aliyunAccessKeyId,
-          accessKeySecret: this.config.aliyunAccessKeySecret,
-          endpoint: 'captcha.cn-shanghai.aliyuncs.com',
-          regionId: 'cn-shanghai',
-        });
-        this.aliyunCaptchaClient = new $Captcha20230305.default(config);
-        this.logger.info('阿里云验证码 2.0 客户端已初始化');
-      } catch (error) {
-        this.logger.error(`初始化阿里云验证码客户端失败: ${String(error)}`);
+  private cleanupBlacklist(): void {
+    const now = Date.now();
+    let changed = false;
+    for (const [ip, expiresAt] of this.blacklistedIps.entries()) {
+        if (expiresAt < now) {
+            this.blacklistedIps.delete(ip);
+            changed = true;
+        }
+    }
+    if (changed) this.saveBlacklist();
+  }
+
+  private getRealIp(req: express.Request): string {
+    // Priority: HTTP Headers (Standard for Web Proxies)
+    const xForwardedFor = req.headers['x-forwarded-for'];
+    if (xForwardedFor) {
+      const ips = typeof xForwardedFor === 'string' ? xForwardedFor.split(',') : (Array.isArray(xForwardedFor) ? xForwardedFor : []);
+      if (ips.length > 0) {
+        return ips[0].trim();
       }
     }
+    const xRealIp = req.headers['x-real-ip'];
+    if (xRealIp && typeof xRealIp === 'string') {
+      return xRealIp.trim();
+    }
+
+    // Fallback: Express req.ip (if trust proxy is on) or socket remoteAddress
+    return req.ip || req.socket.remoteAddress || 'unknown';
+  }
+
+  private isBlacklisted(ip: string): boolean {
+    const expiresAt = this.blacklistedIps.get(ip);
+    if (!expiresAt) return false;
+    
+    if (expiresAt < Date.now()) {
+        this.blacklistedIps.delete(ip);
+        this.saveBlacklist();
+        return false;
+    }
+    return true;
+  }
+
+  private getRemainingBlacklistTimeStr(ip: string): string {
+    const expiresAt = this.blacklistedIps.get(ip);
+    if (!expiresAt) return '';
+    
+    const remainingMs = expiresAt - Date.now();
+    if (remainingMs <= 0) return '已过期';
+    
+    const seconds = Math.floor(remainingMs / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+
+    if (hours > 0) return `${hours}小时 ${minutes % 60}分钟`;
+    if (minutes > 0) return `${minutes}分钟 ${seconds % 60}秒`;
+    return `${seconds}秒`;
+  }
+
+  private logToBlacklist(ip: string, username: string): void {
+    const duration = this.config.loginBlacklistDuration;
+    const expiresAt = Date.now() + duration * 1000;
+    this.blacklistedIps.set(ip, expiresAt);
+    this.saveBlacklist();
+    const durationStr = duration >= 3600 ? `${(duration / 3600).toFixed(1)}小时` : `${Math.floor(duration / 60)}分钟`;
+    this.logger.ban(`IP ${ip} 因多次登录失败（尝试用户名: ${username}）被自动加入登录黑名单。时长: ${durationStr}`);
   }
 
   private async verifyCaptcha(req: express.Request, ip: string): Promise<{ success: boolean; message?: string }> {
@@ -118,72 +177,50 @@ export class HttpServer {
           return { success: true };
       }
 
-      if (provider === 'cloudflare') {
-          const turnstileToken = req.body['cf-turnstile-response'];
-          if (!this.config.turnstileSecretKey) return { success: true };
-          if (!turnstileToken) return { success: false, message: 'Turnstile verification failed (missing token).' };
+      if (provider === 'geetest') {
+          const { lot_number, captcha_output, pass_token, gen_time } = req.body;
+          if (!lot_number || !captcha_output || !pass_token || !gen_time) {
+              return { success: false, message: 'Missing Geetest parameters.' };
+          }
+
+          if (!this.config.geetestId || !this.config.geetestKey) {
+              this.logger.error('Geetest ID or Key missing in configuration');
+              return { success: false, message: 'Captcha configuration error.' };
+          }
 
           try {
-              const verifyUrl = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
-              const formData = new URLSearchParams();
-              formData.append('secret', this.config.turnstileSecretKey);
-              formData.append('response', turnstileToken as string);
-              formData.append('remoteip', ip);
+              const sign_token = crypto.createHmac('sha256', this.config.geetestKey)
+                  .update(lot_number, 'utf8')
+                  .digest('hex');
 
-              const result = await fetch(verifyUrl, {
-                  method: 'POST',
-                  body: formData,
-              });
-              
-              const outcome = await result.json() as any;
-              if (!outcome.success) {
-                  this.logger.warn(`IP ${ip} 的 Turnstile 验证失败: ${JSON.stringify(outcome)}`);
-                  return { success: false, message: 'Turnstile verification failed. Please try again.' };
-              }
-              return { success: true };
-          } catch (error) {
-              this.logger.error(`Turnstile 验证错误: ${String(error)}`);
-              return { success: false, message: 'Internal server error during verification.' };
-          }
-      }
+              const query = new URLSearchParams({
+                  captcha_id: this.config.geetestId,
+                  lot_number,
+                  captcha_output,
+                  pass_token,
+                  gen_time,
+                  sign_token,
+              }).toString();
 
-      if (provider === 'aliyun') {
-          const captchaVerifyParam = req.body['captchaVerifyParam'] || req.body['captcha_verify_param'];
-          if (!this.aliyunCaptchaClient || !this.config.aliyunCaptchaSceneId) {
-              this.logger.error('阿里云验证码客户端未初始化或 Scene ID 缺失');
-              return { success: false, message: 'Captcha service configuration error.' };
-          }
-          if (!captchaVerifyParam) return { success: false, message: 'Aliyun Captcha verification failed (missing param).' };
+              const verifyUrl = `http://gcaptcha4.geetest.com/validate?${query}`;
+              const response = await fetch(verifyUrl, { method: 'POST' });
+              const result = await response.json() as any;
 
-          try {
-              const verifyIntelligentCaptchaRequest = new $Captcha20230305.VerifyIntelligentCaptchaRequest({
-                  captchaVerifyParam: captchaVerifyParam,
-                  sceneId: this.config.aliyunCaptchaSceneId,
-              });
-              
-              const response = await this.aliyunCaptchaClient.verifyIntelligentCaptcha(verifyIntelligentCaptchaRequest);
-              
-              this.logger.info(`IP ${ip} 的阿里云 2.0 API 响应: ${JSON.stringify(response.body)}`);
-
-              const verifyResult = response.body?.result?.verifyResult;
-              if (response.body && response.body.result && (verifyResult === true || (verifyResult as any) === 'true')) {
-                  this.logger.info(`IP ${ip} 的阿里云验证码验证成功`);
+              if (result.result === 'success') {
+                  this.logger.info(`IP ${ip} 的 Geetest 验证成功`);
                   return { success: true };
               } else {
-                  this.logger.warn(`IP ${ip} 的阿里云验证码验证失败: ${JSON.stringify(response.body)}`);
-                  let msg = response.body?.message || 'Verification failed';
-                  if (response.body?.result?.verifyCode === 'F023') {
-                      msg = 'SceneId mismatch (F023). Please check your Aliyun console.';
-                  }
-                  return { success: false, message: msg };
+                  this.logger.warn(`IP ${ip} 的 Geetest 验证失败: ${result.reason}`);
+                  return { success: false, message: result.reason || 'Geetest verification failed.' };
               }
-          } catch (error: any) {
-              this.logger.error(`阿里云验证码 SDK 错误: ${error.message} (Code: ${error.code})`);
-              return { success: false, message: `Captcha service connection error: ${error.message}` };
-          }
-      }
+          } catch (error) {
+              this.logger.error(`Geetest 验证错误: ${String(error)}`);
+              // 当请求 Geetest 服务接口出现异常，应放行通过 (参考 app.js)
+              return { success: true };
+           }
+       }
 
-      return { success: true };
+       return { success: true };
   }
 
   private setupMiddleware(): void {
@@ -202,44 +239,108 @@ export class HttpServer {
     // CORS middleware to allow other servers to fetch data
     this.app.use((_req, res, next) => {
         res.header('Access-Control-Allow-Origin', '*'); // Allow any server to request
-        res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+        res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, X-Admin-Secret');
         next();
     });
   }
 
+  private adminAuth(req: express.Request, res: express.Response, next: express.NextFunction): void {
+    const isAdmin = (req.session as AdminSession).isAdmin;
+    const providedSecret = req.header('X-Admin-Secret') || (req.query.admin_secret as string);
+
+    const isSecretValid = providedSecret ? this.verifyAdminSecret(providedSecret) : false;
+
+    if (isAdmin || isSecretValid) {
+        // If authenticated via secret but not session, we can optionally mark session as admin
+        if (!isAdmin && (req.session as AdminSession)) {
+            (req.session as AdminSession).isAdmin = true;
+        }
+        return next();
+    }
+
+    res.status(403).json({ error: 'Forbidden: Admin access required' });
+  }
+
+  private verifyAdminSecret(providedSecret: string): boolean {
+    if (!this.config.adminSecret || this.config.adminSecret.trim() === '') return false;
+
+    try {
+      // 使用 ADMIN_SECRET 的 SHA256 作为 32 字节 Key
+      const key = crypto.createHash('sha256').update(this.config.adminSecret).digest();
+      const data = Buffer.from(providedSecret, 'hex');
+      
+      if (data.length < 17) return false;
+
+      const iv = data.subarray(0, 16);
+      const encrypted = data.subarray(16);
+      
+      const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+      let decrypted = decipher.update(encrypted, undefined, 'utf8');
+      decrypted += decipher.final('utf8');
+
+      // 获取当前日期 (YYYY-MM-DD)
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      
+      // 验证格式: {日期}_{SECRET}_xy521
+      const expected = `${dateStr}_${this.config.adminSecret}_xy521`;
+      
+      return decrypted === expected;
+    } catch (e) {
+      this.logger.debug(`管理员密钥解密失败: ${e}`);
+      return false;
+    }
+  }
+
   private setupRoutes(): void {
+    // Global IP Ban Check
+    this.app.use((req, res, next) => {
+        const ip = this.getRealIp(req);
+        const banInfo = this.banManager.isIpBanned(ip);
+        if (banInfo) {
+            this.logger.warn(`拦截到封禁 IP ${ip} 的 Web 访问。原因: ${banInfo.reason}`);
+            res.status(403).send(`您的 IP 已被封禁。原因: ${banInfo.reason}`);
+            return;
+        }
+        next();
+    });
+
     const publicPath = path.join(__dirname, '../../public');
+    
+    // Custom HTML routes WITH config injection (MUST be before express.static)
+    this.app.get(['/admin', '/admin.html'], (_req, res) => {
+      if ((_req.session as AdminSession).isAdmin) {
+        return res.redirect('/');
+      }
+      this.serveHtmlWithConfig(res, path.join(publicPath, 'admin.html'));
+    });
+
+    this.app.get(['/', '/index.html'], (_req, res) => {
+        this.serveHtmlWithConfig(res, path.join(publicPath, 'index.html'));
+    });
+
+    this.app.get(['/room', '/room.html'], (_req, res) => {
+        this.serveHtmlWithConfig(res, path.join(publicPath, 'room.html'));
+    });
+
+    this.app.get(['/players', '/players.html'], (_req, res) => {
+        this.serveHtmlWithConfig(res, path.join(publicPath, 'players.html'));
+    });
+
+    this.app.get(['/panel', '/panel.html'], this.adminAuth.bind(this), (_req, res) => {
+        this.serveHtmlWithConfig(res, path.join(publicPath, 'panel.html'));
+    });
+
     this.app.use(express.static(publicPath));
     this.logger.info(`正在从 ${publicPath} 提供静态文件`);
 
-    this.app.get('/admin', (req, res) => {
-      if ((req.session as AdminSession).isAdmin) {
-        return res.redirect('/');
-      }
-      res.sendFile(path.join(publicPath, 'admin.html'));
-    });
-
-    this.app.get('/api/config/public', (_req, res) => {
-        res.json({
-            turnstileSiteKey: this.config.turnstileSiteKey,
-            captchaProvider: this.config.captchaProvider,
-            aliyunCaptchaSceneId: this.config.aliyunCaptchaSceneId,
-            aliyunCaptchaPrefix: this.config.aliyunCaptchaPrefix,
-        });
-    });
-
-    this.app.post('/api/test/verify-captcha', async (req, res) => {
-        const ip = req.ip || req.socket.remoteAddress || 'unknown';
-        const result = await this.verifyCaptcha(req, ip);
-        res.json(result);
-    });
-
     this.app.post('/login', async (req, res) => {
       const { username, password } = req.body;
-      const ip = req.ip || req.socket.remoteAddress || 'unknown';
+      const ip = this.getRealIp(req);
 
-      if (this.blacklistedIps.has(ip)) {
-          return res.status(403).send('由于您多次尝试登录失败，已被系统拉入登录黑名单，如需要解除，请联系服务器管理员');
+      if (this.isBlacklisted(ip)) {
+          const timeLeft = this.getRemainingBlacklistTimeStr(ip);
+          return res.status(403).send(`由于您多次尝试登录失败，已被系统拉入登录黑名单，剩余时长: ${timeLeft}，如需要提前解除，请联系服务器管理员`);
       }
 
       if (!username || !password) {
@@ -327,22 +428,17 @@ export class HttpServer {
         return res.json({ isAdmin });
     });
 
-    this.app.get('/api/all-players', (req, res) => {
-        if (!(req.session as AdminSession).isAdmin) {
-            return res.status(403).json({ error: 'Forbidden' });
-        }
+    this.app.get('/api/all-players', this.adminAuth.bind(this), (_req, res) => {
         const allPlayers = this.protocolHandler.getAllSessions().map(p => ({
             ...p,
             isAdmin: this.config.adminPhiraId.includes(p.id),
             isOwner: this.config.ownerPhiraId.includes(p.id),
+            ip: p.ip, // Expose IP for banning
         }));
         return res.json(allPlayers);
     });
 
-    this.app.post('/api/admin/server-message', (req, res) => {
-        if (!(req.session as AdminSession).isAdmin) {
-            return res.status(403).json({ error: 'Forbidden' });
-        }
+    this.app.post('/api/admin/server-message', this.adminAuth.bind(this), (req, res) => {
         const { roomId, content } = req.body;
         if (!roomId || !content) {
             return res.status(400).json({ error: 'Missing roomId or content' });
@@ -351,10 +447,7 @@ export class HttpServer {
         return res.json({ success: true });
     });
 
-    this.app.post('/api/admin/broadcast', (req, res) => {
-        if (!(req.session as AdminSession).isAdmin) {
-            return res.status(403).json({ error: 'Forbidden' });
-        }
+    this.app.post('/api/admin/broadcast', this.adminAuth.bind(this), (req, res) => {
         const { content, target } = req.body;
         if (!content) {
             return res.status(400).json({ error: 'Missing content' });
@@ -376,10 +469,7 @@ export class HttpServer {
         return res.json({ success: true, roomCount: sentCount });
     });
 
-    this.app.post('/api/admin/bulk-action', (req, res) => {
-        if (!(req.session as AdminSession).isAdmin) {
-            return res.status(403).json({ error: 'Forbidden' });
-        }
+    this.app.post('/api/admin/bulk-action', this.adminAuth.bind(this), (req, res) => {
         const { action, value, target } = req.body;
         const rooms = this.roomManager.listRooms();
         
@@ -427,10 +517,7 @@ export class HttpServer {
         return res.json({ success: true, affectedCount: count });
     });
 
-    this.app.post('/api/admin/kick-player', (req, res) => {
-        if (!(req.session as AdminSession).isAdmin) {
-            return res.status(403).json({ error: 'Forbidden' });
-        }
+    this.app.post('/api/admin/kick-player', this.adminAuth.bind(this), (req, res) => {
         const { userId } = req.body;
         if (!userId) {
             return res.status(400).json({ error: 'Missing userId' });
@@ -439,10 +526,7 @@ export class HttpServer {
         return res.json({ success });
     });
 
-    this.app.post('/api/admin/force-start', (req, res) => {
-        if (!(req.session as AdminSession).isAdmin) {
-            return res.status(403).json({ error: 'Forbidden' });
-        }
+    this.app.post('/api/admin/force-start', this.adminAuth.bind(this), (req, res) => {
         const { roomId } = req.body;
         if (!roomId) {
             return res.status(400).json({ error: 'Missing roomId' });
@@ -451,10 +535,7 @@ export class HttpServer {
         return res.json({ success });
     });
 
-    this.app.post('/api/admin/toggle-lock', (req, res) => {
-        if (!(req.session as AdminSession).isAdmin) {
-            return res.status(403).json({ error: 'Forbidden' });
-        }
+    this.app.post('/api/admin/toggle-lock', this.adminAuth.bind(this), (req, res) => {
         const { roomId } = req.body;
         if (!roomId) {
             return res.status(400).json({ error: 'Missing roomId' });
@@ -463,10 +544,7 @@ export class HttpServer {
         return res.json({ success });
     });
 
-    this.app.post('/api/admin/set-max-players', (req, res) => {
-        if (!(req.session as AdminSession).isAdmin) {
-            return res.status(403).json({ error: 'Forbidden' });
-        }
+    this.app.post('/api/admin/set-max-players', this.adminAuth.bind(this), (req, res) => {
         const { roomId, maxPlayers } = req.body;
         if (!roomId || maxPlayers === undefined) {
             return res.status(400).json({ error: 'Missing roomId or maxPlayers' });
@@ -475,10 +553,7 @@ export class HttpServer {
         return res.json({ success });
     });
 
-    this.app.post('/api/admin/close-room', (req, res) => {
-        if (!(req.session as AdminSession).isAdmin) {
-            return res.status(403).json({ error: 'Forbidden' });
-        }
+    this.app.post('/api/admin/close-room', this.adminAuth.bind(this), (req, res) => {
         const { roomId } = req.body;
         if (!roomId) {
             return res.status(400).json({ error: 'Missing roomId' });
@@ -487,10 +562,7 @@ export class HttpServer {
         return res.json({ success });
     });
 
-    this.app.post('/api/admin/toggle-mode', (req, res) => {
-        if (!(req.session as AdminSession).isAdmin) {
-            return res.status(403).json({ error: 'Forbidden' });
-        }
+    this.app.post('/api/admin/toggle-mode', this.adminAuth.bind(this), (req, res) => {
         const { roomId } = req.body;
         if (!roomId) {
             return res.status(400).json({ error: 'Missing roomId' });
@@ -499,10 +571,7 @@ export class HttpServer {
         return res.json({ success });
     });
 
-    this.app.get('/api/admin/room-blacklist', (req, res) => {
-        if (!(req.session as AdminSession).isAdmin) {
-            return res.status(403).json({ error: 'Forbidden' });
-        }
+    this.app.get('/api/admin/room-blacklist', this.adminAuth.bind(this), (req, res) => {
         const { roomId } = req.query;
         if (!roomId) {
             return res.status(400).json({ error: 'Missing roomId' });
@@ -511,10 +580,7 @@ export class HttpServer {
         return res.json({ blacklist: room?.blacklist || [] });
     });
 
-    this.app.post('/api/admin/set-room-blacklist', async (req, res) => {
-        if (!(req.session as AdminSession).isAdmin) {
-            return res.status(403).json({ error: 'Forbidden' });
-        }
+    this.app.post('/api/admin/set-room-blacklist', this.adminAuth.bind(this), async (req, res) => {
         const { roomId, userIds } = req.body;
         if (!roomId || !Array.isArray(userIds)) {
             return res.status(400).json({ error: 'Missing roomId or invalid userIds' });
@@ -523,10 +589,7 @@ export class HttpServer {
         return res.json({ success });
     });
 
-    this.app.get('/api/admin/room-whitelist', (req, res) => {
-        if (!(req.session as AdminSession).isAdmin) {
-            return res.status(403).json({ error: 'Forbidden' });
-        }
+    this.app.get('/api/admin/room-whitelist', this.adminAuth.bind(this), (req, res) => {
         const { roomId } = req.query;
         if (!roomId) {
             return res.status(400).json({ error: 'Missing roomId' });
@@ -535,15 +598,101 @@ export class HttpServer {
         return res.json({ whitelist: room?.whitelist || [] });
     });
 
-    this.app.post('/api/admin/set-room-whitelist', async (req, res) => {
-        if (!(req.session as AdminSession).isAdmin) {
-            return res.status(403).json({ error: 'Forbidden' });
-        }
+    this.app.post('/api/admin/set-room-whitelist', this.adminAuth.bind(this), async (req, res) => {
         const { roomId, userIds } = req.body;
         if (!roomId || !Array.isArray(userIds)) {
             return res.status(400).json({ error: 'Missing roomId or invalid userIds' });
         }
         const success = await this.protocolHandler.setRoomWhitelistByAdmin(roomId, userIds);
+        return res.json({ success });
+    });
+
+    // Ban Management APIs
+    this.app.get('/api/admin/bans', this.adminAuth.bind(this), (_req, res) => {
+        return res.json(this.banManager.getAllBans());
+    });
+
+    this.app.post('/api/admin/ban', this.adminAuth.bind(this), (req, res) => {
+        const { type, target, duration, reason } = req.body; // type: 'id' | 'ip', target: string|number, duration: seconds (null for perm)
+        
+        if (!type || !target) {
+            return res.status(400).json({ error: 'Missing type or target' });
+        }
+
+        const adminName = (req.session as AdminSession).isAdmin ? this.config.adminName : 'Admin (Secret)';
+        const finalReason = reason && String(reason).trim() !== '' ? String(reason) : 'No reason provided';
+
+        if (type === 'id') {
+            const userId = Number(target);
+            this.banManager.banId(userId, duration ? Number(duration) : null, finalReason, adminName);
+            // Kick player if online
+            this.protocolHandler.kickPlayer(userId);
+        } else if (type === 'ip') {
+            const ip = String(target);
+            this.banManager.banIp(ip, duration ? Number(duration) : null, finalReason, adminName);
+            // Kick all players with this IP
+            this.protocolHandler.kickIp(ip);
+        } else {
+            return res.status(400).json({ error: 'Invalid ban type' });
+        }
+
+        return res.json({ success: true });
+    });
+
+    this.app.post('/api/admin/unban', this.adminAuth.bind(this), (req, res) => {
+        const { type, target } = req.body;
+        if (!type || !target) {
+            return res.status(400).json({ error: 'Missing type or target' });
+        }
+
+        const adminName = (req.session as AdminSession).isAdmin ? this.config.adminName : 'Admin (Secret)';
+        let success = false;
+        if (type === 'id') {
+            success = this.banManager.unbanId(Number(target), adminName);
+        } else if (type === 'ip') {
+            success = this.banManager.unbanIp(String(target), adminName);
+        }
+
+        return res.json({ success });
+    });
+
+    // Login Blacklist APIs
+    this.app.get('/api/admin/login-blacklist', this.adminAuth.bind(this), (_req, res) => {
+        const list = Array.from(this.blacklistedIps.entries()).map(([ip, expiresAt]) => ({
+            ip,
+            expiresAt
+        }));
+        return res.json({ blacklistedIps: list });
+    });
+
+    this.app.post('/api/admin/blacklist-ip', this.adminAuth.bind(this), (req, res) => {
+        const { ip, duration } = req.body; // duration in seconds
+        if (!ip) {
+            return res.status(400).json({ error: 'Missing ip' });
+        }
+        const adminName = (req.session as AdminSession).isAdmin ? this.config.adminName : 'Admin (Secret)';
+        const finalDuration = duration ? Number(duration) : this.config.loginBlacklistDuration;
+        const expiresAt = Date.now() + finalDuration * 1000;
+        
+        this.blacklistedIps.set(String(ip), expiresAt);
+        this.saveBlacklist();
+        
+        const durationStr = finalDuration >= 3600 ? `${(finalDuration / 3600).toFixed(1)}小时` : `${Math.floor(finalDuration / 60)}分钟`;
+        this.logger.ban(`IP ${ip} 被管理员 ${adminName} 手动加入登录黑名单。时长: ${durationStr}`);
+        return res.json({ success: true });
+    });
+
+    this.app.post('/api/admin/unblacklist-ip', this.adminAuth.bind(this), (req, res) => {
+        const { ip } = req.body;
+        if (!ip) {
+            return res.status(400).json({ error: 'Missing ip' });
+        }
+        const adminName = (req.session as AdminSession).isAdmin ? this.config.adminName : 'Admin (Secret)';
+        const success = this.blacklistedIps.delete(String(ip));
+        if (success) {
+            this.saveBlacklist();
+            this.logger.ban(`IP ${ip} 被管理员 ${adminName} 从登录黑名单中移除。`);
+        }
         return res.json({ success });
     });
 
@@ -623,11 +772,37 @@ export class HttpServer {
   }
 
   public stop(): Promise<void> {
+    clearInterval(this.cleanupInterval);
     return new Promise((resolve) => {
       this.server.close(() => {
         this.logger.info('HTTP 服务器已停止');
         resolve();
       });
     });
+  }
+
+  private serveHtmlWithConfig(res: express.Response, filePath: string): void {
+    try {
+        if (!fs.existsSync(filePath)) {
+            res.status(404).send('File not found');
+            return;
+        }
+        let html = fs.readFileSync(filePath, 'utf8');
+        const configScript = `
+        <script>
+          window.SERVER_CONFIG = {
+              captchaProvider: ${JSON.stringify(this.config.captchaProvider)},
+              geetestId: ${JSON.stringify(this.config.geetestId)},
+              displayIp: ${JSON.stringify(this.config.displayIp)},
+              defaultAvatar: ${JSON.stringify(this.config.defaultAvatar)},
+              serverName: ${JSON.stringify(this.config.serverName)}
+          };
+        </script>`;
+        html = html.replace('</head>', `${configScript}</head>`);
+        res.send(html);
+    } catch (err) {
+        this.logger.error(`读取 HTML 文件失败 (${filePath}): ${err}`);
+        res.status(500).send('Internal Server Error');
+    }
   }
 }
