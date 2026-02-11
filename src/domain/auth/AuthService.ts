@@ -34,6 +34,7 @@ export class PhiraAuthService implements AuthService {
           Authorization: `Bearer ${token}`,
           'User-Agent': 'PhiraServer/1.0',
         },
+        redirect: 'error'
       });
 
       if (!response.ok) {

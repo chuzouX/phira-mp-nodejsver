@@ -206,7 +206,10 @@ export class HttpServer {
               }).toString();
 
               const verifyUrl = `http://gcaptcha4.geetest.com/validate?${query}`;
-              const response = await fetch(verifyUrl, { method: 'POST' });
+              const response = await fetch(verifyUrl, { 
+                  method: 'POST',
+                  redirect: 'error' // 防止 SSRF 重定向攻击
+              });
               const result = await response.json() as any;
 
               if (result.result === 'success') {

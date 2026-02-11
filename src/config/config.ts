@@ -144,6 +144,7 @@ export interface ServerConfig {
   federationNodeUrl: string;
   federationHealthInterval: number;
   federationSyncInterval: number;
+  federationAllowLocal: boolean;
 }
 
 const defaultConfig: ServerConfig = {
@@ -188,6 +189,7 @@ const defaultConfig: ServerConfig = {
   federationNodeUrl: '',
   federationHealthInterval: 30000,
   federationSyncInterval: 15000,
+  federationAllowLocal: false,
 };
 
 const parseBoolean = (value: string | undefined, fallback: boolean): boolean => {
@@ -318,6 +320,7 @@ export const createServerConfig = (overrides: Partial<ServerConfig> = {}): Serve
     federationNodeUrl: process.env.FEDERATION_NODE_URL ?? defaultConfig.federationNodeUrl,
     federationHealthInterval: Number.parseInt(process.env.FEDERATION_HEALTH_INTERVAL ?? `${defaultConfig.federationHealthInterval}`, 10),
     federationSyncInterval: Number.parseInt(process.env.FEDERATION_SYNC_INTERVAL ?? `${defaultConfig.federationSyncInterval}`, 10),
+    federationAllowLocal: parseBoolean(process.env.FEDERATION_ALLOW_LOCAL, defaultConfig.federationAllowLocal),
   };
 
   return {

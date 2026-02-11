@@ -41,6 +41,7 @@ export interface FederationConfig {
   healthInterval: number;
   syncInterval: number;
   serverName: string;
+  allowLocal: boolean;
 }
 
 export interface FederationNode {

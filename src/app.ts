@@ -12,11 +12,8 @@ import { ProtocolHandler } from './domain/protocol/ProtocolHandler';
 import { NetworkServer } from './network/NetworkServer';
 import { HttpServer } from './network/HttpServer';
 import { WebSocketServer } from './network/WebSocketServer';
-<<<<<<< Updated upstream
 import { version } from '../package.json';
-=======
 import { FederationManager, FederationConfig } from './federation/FederationManager';
->>>>>>> Stashed changes
 
 export interface Application {
   readonly config: ServerConfig;
@@ -109,6 +106,7 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
       healthInterval: config.federationHealthInterval,
       syncInterval: config.federationSyncInterval,
       serverName: config.serverName,
+      allowLocal: config.federationAllowLocal,
     };
 
     federationManager = new FederationManager(fedConfig, federationLogger, roomManager);
@@ -181,8 +179,6 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
     start,
     stop,
     getTcpServer: () => networkServer,
-    getHttpServer: () => httpServer!, // Note: this might be undefined now, but interface requires it. 
-    // Ideally interface should be updated, but for minimal changes we can cast or update interface. 
-    // Let's check the interface definition.
+    getHttpServer: () => httpServer!, 
   };
 };

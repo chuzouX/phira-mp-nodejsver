@@ -388,9 +388,11 @@ export class ProtocolHandler {
     // Fetch names for the blacklist report
     const blacklistDetails: string[] = [];
     for (const id of userIds) {
+        if (isNaN(Number(id))) continue; // SSRF 防护：严格数字校验
         try {
             const response = await fetch(`https://phira.5wyxi.com/user/${id}`, {
-                headers: { 'User-Agent': 'PhiraServer/1.0' }
+                headers: { 'User-Agent': 'PhiraServer/1.0' },
+                redirect: 'error'
             });
             if (response.ok) {
                 const data = await response.json() as any;
@@ -440,9 +442,11 @@ export class ProtocolHandler {
     // Fetch names for the whitelist report
     const whitelistDetails: string[] = [];
     for (const id of userIds) {
+        if (isNaN(Number(id))) continue; // SSRF 防护：严格数字校验
         try {
             const response = await fetch(`https://phira.5wyxi.com/user/${id}`, {
-                headers: { 'User-Agent': 'PhiraServer/1.0' }
+                headers: { 'User-Agent': 'PhiraServer/1.0' },
+                redirect: 'error'
             });
             if (response.ok) {
                 const data = await response.json() as any;
@@ -544,10 +548,12 @@ export class ProtocolHandler {
   }
 
   private async fetchChartInfo(chartId: number): Promise<ChartInfo> {
+    if (isNaN(Number(chartId))) throw new Error('Invalid chart ID');
     this.logger.debug(`正在获取谱面信息: ${chartId}`, { userId: -1 });
     
     const response = await fetch(`https://phira.5wyxi.com/chart/${chartId}`, {
-        headers: { 'User-Agent': 'PhiraServer/1.0' }
+        headers: { 'User-Agent': 'PhiraServer/1.0' },
+        redirect: 'error'
     });
     
     if (!response.ok) {
@@ -563,10 +569,11 @@ export class ProtocolHandler {
     this.logger.debug(`谱面 API 响应: ${chartData.name} (ID: ${chartId}, 上传者: ${uploaderId})`, { userId: -1 });
     
     let uploaderInfo;
-    if (uploaderId && !isNaN(uploaderId)) {
+    if (uploaderId && !isNaN(Number(uploaderId))) {
         try {
             const userResponse = await fetch(`https://phira.5wyxi.com/user/${uploaderId}`, {
-                headers: { 'User-Agent': 'PhiraServer/1.0' }
+                headers: { 'User-Agent': 'PhiraServer/1.0' },
+                redirect: 'error'
             });
             if (userResponse.ok) {
                 const userData = await userResponse.json() as any;
@@ -759,9 +766,11 @@ export class ProtocolHandler {
   }
 
   private async fetchUserInfo(userId: number): Promise<{ rks?: number; bio?: string }> {
+    if (isNaN(Number(userId))) return {};
     try {
         const response = await fetch(`https://phira.5wyxi.com/user/${userId}`, {
-            headers: { 'User-Agent': 'PhiraServer/1.0' }
+            headers: { 'User-Agent': 'PhiraServer/1.0' },
+            redirect: 'error'
         });
         if (response.ok) {
             const userData = await response.json() as any;
@@ -1750,7 +1759,10 @@ export class ProtocolHandler {
 
     let recordInfo;
     try {
-      const response = await fetch(`https://phira.5wyxi.com/record/${recordId}`)
+      if (isNaN(Number(recordId))) throw new Error('Invalid record ID');
+      const response = await fetch(`https://phira.5wyxi.com/record/${recordId}`, {
+          redirect: 'error'
+      });
 
       if (!response.ok) {
         throw new Error(`API返回了一个神秘的状态： ${response.status}`);
