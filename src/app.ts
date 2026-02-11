@@ -12,16 +12,29 @@ import { ProtocolHandler } from './domain/protocol/ProtocolHandler';
 import { NetworkServer } from './network/NetworkServer';
 import { HttpServer } from './network/HttpServer';
 import { WebSocketServer } from './network/WebSocketServer';
+import { version } from '../package.json';
 
-export interface Application {
-  readonly config: ServerConfig;
-  readonly logger: Logger;
-  readonly roomManager: RoomManager;
-  start(): Promise<void>;
-  stop(): Promise<void>;
-  getTcpServer(): NetworkServer;
-  getHttpServer(): HttpServer | undefined;
-}
+const checkForUpdates = async (logger: Logger) => {
+  try {
+    const response = await fetch('https://api.github.com/repos/Pimeng/phira-mp-nodejsver/releases/latest', {
+      headers: { 'User-Agent': 'PhiraServer-UpdateCheck' }
+    });
+    
+    if (!response.ok) return;
+
+    const data = await response.json() as any;
+    const latestVersion = data.tag_name?.replace('v', '');
+
+    if (latestVersion && latestVersion !== version) {
+      logger.mark('\n' + '='.repeat(50));
+      logger.mark(`🔔 发现新版本: v${latestVersion} (当前版本: v${version})`);
+      logger.mark(`🔗 下载地址: https://github.com/Pimeng/phira-mp-nodejsver/releases/latest`);
+      logger.mark('='.repeat(50) + '\n');
+    }
+  } catch (error) {
+    // Silently ignore update check errors
+  }
+};
 
 export const createApplication = (overrides?: Partial<ServerConfig>): Application => {
   const configService = new ConfigService(overrides);
@@ -92,6 +105,9 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
   }
 
   const start = async (): Promise<void> => {
+    if (config.enableUpdateCheck) {
+        void checkForUpdates(logger);
+    }
     const promises: Promise<void>[] = [networkServer.start()];
     if (httpServer) {
         promises.push(httpServer.start());

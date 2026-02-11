@@ -41,7 +41,10 @@ DISPLAY_IP=phira.funxlink.fun:19723
 DEFAULT_AVATAR=https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404
 SESSION_SECRET=a-very-insecure-secret-change-it
 LOGIN_BLACKLIST_DURATION=600
-ADMIN_NAME=admin
+# Enable automatic update checking on startup
+ENABLE_UPDATE_CHECK=true
+
+# Admin Credentials for /panel
 ADMIN_PASSWORD=password
 ADMIN_SECRET=
 ADMIN_PHIRA_ID=
@@ -119,6 +122,7 @@ export interface ServerConfig {
   loginBlacklistDuration: number;
   displayIp: string;
   defaultAvatar: string;
+  enableUpdateCheck: boolean;
   captchaProvider: 'geetest' | 'none';
   geetestId?: string;
   geetestKey?: string;
@@ -156,6 +160,7 @@ const defaultConfig: ServerConfig = {
   loginBlacklistDuration: 600, // 10 minutes
   displayIp: 'phira.funxlink.fun:19723',
   defaultAvatar: 'https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404',
+  enableUpdateCheck: true,
   captchaProvider: 'none',
 };
 
@@ -266,6 +271,7 @@ export const createServerConfig = (overrides: Partial<ServerConfig> = {}): Serve
     loginBlacklistDuration: Number.parseInt(process.env.LOGIN_BLACKLIST_DURATION ?? `${defaultConfig.loginBlacklistDuration}`, 10),
     displayIp: process.env.DISPLAY_IP ?? defaultConfig.displayIp,
     defaultAvatar: process.env.DEFAULT_AVATAR ?? defaultConfig.defaultAvatar,
+    enableUpdateCheck: parseBoolean(process.env.ENABLE_UPDATE_CHECK, defaultConfig.enableUpdateCheck),
     captchaProvider: (process.env.CAPTCHA_PROVIDER || 'none').toLowerCase() as  'geetest' | 'none',
     geetestId: process.env.GEETEST_ID,
     geetestKey: process.env.GEETEST_KEY,
