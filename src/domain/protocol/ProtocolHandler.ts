@@ -45,6 +45,7 @@ export class ProtocolHandler {
     private readonly onSessionChange?: () => void,
     private readonly banManager?: BanManager,
     private readonly serverAnnouncement: string = '你好{{name}}，欢迎来到 {{serverName}} 服务器',
+    private readonly defaultAvatar: string = 'https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404',
   ) {}
 
   public getSessionCount(): number {
@@ -506,7 +507,7 @@ export class ProtocolHandler {
                 uploaderInfo = {
                     id: userData.id,
                     name: userData.name,
-                    avatar: userData.avatar ?? 'https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404',
+                    avatar: userData.avatar ?? this.defaultAvatar,
                     rks: userData.rks ?? 0,
                     bio: userData.bio,
                 };
@@ -936,7 +937,7 @@ export class ProtocolHandler {
           // Send server user join AFTER client has transitioned
                 this.broadcastToRoom(room, {
                   type: ServerCommandType.OnJoinRoom,
-                  user: { id: -1, name: this.serverName, avatar: 'https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404', monitor: true },
+                  user: { id: -1, name: this.serverName, avatar: this.defaultAvatar, monitor: true },
                 });
           this.broadcastMessage(room, {
             type: 'CreateRoom',
@@ -1033,7 +1034,7 @@ export class ProtocolHandler {
       // Delay announcement slightly
 
       const usersInRoom = Array.from(room.players.values()).map((p) => p.user);
-      const serverUser: UserInfo = { id: -1, name: this.serverName, avatar: 'https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404', monitor: true };
+      const serverUser: UserInfo = { id: -1, name: this.serverName, avatar: this.defaultAvatar, monitor: true };
       
       const joinResponse: JoinRoomResponse = {
         state: room.state,
@@ -1879,7 +1880,7 @@ export class ProtocolHandler {
       users.set(id, playerInfo.user);
     }
     // Add special server user info (ID -1, name from config)
-    users.set(-1, { id: -1, name: this.serverName, avatar: 'https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404', monitor: true });
+    users.set(-1, { id: -1, name: this.serverName, avatar: this.defaultAvatar, monitor: true });
 
     const player = room.players.get(userId);
 

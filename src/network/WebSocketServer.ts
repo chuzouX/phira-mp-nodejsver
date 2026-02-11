@@ -232,7 +232,7 @@ export class WebSocketServer {
     players.unshift({
         id: -1,
         name: this.config.serverName,
-        avatar: 'https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404',
+        avatar: this.config.defaultAvatar,
         isReady: false,
         isFinished: false,
         score: null,

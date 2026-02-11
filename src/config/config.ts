@@ -38,6 +38,7 @@ SERVER_ANNOUNCEMENT="你好{{name}}，欢迎来到 {{serverName}} 服务器"
 WEB_PORT=8080
 ENABLE_WEB_SERVER=true
 DISPLAY_IP=phira.funxlink.fun:19723
+DEFAULT_AVATAR=https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404
 SESSION_SECRET=a-very-insecure-secret-change-it
 LOGIN_BLACKLIST_DURATION=600
 ADMIN_NAME=admin
@@ -117,6 +118,7 @@ export interface ServerConfig {
   sessionSecret: string;
   loginBlacklistDuration: number;
   displayIp: string;
+  defaultAvatar: string;
   captchaProvider: 'geetest' | 'none';
   geetestId?: string;
   geetestKey?: string;
@@ -153,6 +155,7 @@ const defaultConfig: ServerConfig = {
   sessionSecret: 'a-very-insecure-secret-change-it',
   loginBlacklistDuration: 600, // 10 minutes
   displayIp: 'phira.funxlink.fun:19723',
+  defaultAvatar: 'https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404',
   captchaProvider: 'none',
 };
 
@@ -262,6 +265,7 @@ export const createServerConfig = (overrides: Partial<ServerConfig> = {}): Serve
     sessionSecret: process.env.SESSION_SECRET ?? defaultConfig.sessionSecret,
     loginBlacklistDuration: Number.parseInt(process.env.LOGIN_BLACKLIST_DURATION ?? `${defaultConfig.loginBlacklistDuration}`, 10),
     displayIp: process.env.DISPLAY_IP ?? defaultConfig.displayIp,
+    defaultAvatar: process.env.DEFAULT_AVATAR ?? defaultConfig.defaultAvatar,
     captchaProvider: (process.env.CAPTCHA_PROVIDER || 'none').toLowerCase() as  'geetest' | 'none',
     geetestId: process.env.GEETEST_ID,
     geetestKey: process.env.GEETEST_KEY,
