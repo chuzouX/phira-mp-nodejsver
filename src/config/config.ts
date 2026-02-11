@@ -8,52 +8,60 @@ import * as path from 'path';
 
 const ensureEnvFile = () => {
   const envPath = path.join(process.cwd(), '.env');
+  const examplePath = path.join(process.cwd(), '.env.example');
+  
   if (!fs.existsSync(envPath)) {
-    const defaultEnv = `# Phira Multiplayer Server Configuration
+    let defaultEnv = '';
+    
+    if (fs.existsSync(examplePath)) {
+        try {
+            defaultEnv = fs.readFileSync(examplePath, 'utf8');
+        } catch (e) {
+            // Fallback to hardcoded
+        }
+    }
 
-# TCP Server Port
+    if (!defaultEnv) {
+        defaultEnv = `# 游戏服务器配置
 PORT=12346
-# HTTP/WS Server Port
-WEB_PORT=8080
-# Server Name shown in broadcast
-SERVER_NAME=Server
-# Enable Proxy Protocol (v2) for getting real IP behind frp/nginx
+HOST=0.0.0.0
+TCP_ENABLED=true
 USE_PROXY_PROTOCOL=false
-
-# Phira API Base URL
+LOG_LEVEL=info
+NODE_ENV=development
 PHIRA_API_URL=https://phira.5wyxi.com
-
-# Default Room Size
+SERVER_NAME=Server
 ROOM_SIZE=8
-
-# Admin Credentials for /panel
-ADMIN_NAME=admin
-ADMIN_PASSWORD=password
-# AES Secret for remote API access
-ADMIN_SECRET=
-
-# IDs of users to silence in logs
-SILENT_PHIRA_IDS=
-
-# Server Announcement Message
-# Supports {{name}} and {{serverName}} placeholders
-# Use \\n for new lines
 SERVER_ANNOUNCEMENT="你好{{name}}，欢迎来到 {{serverName}} 服务器"
 
-# Session Encryption Secret
-SESSION_SECRET=a-very-insecure-secret-change-it
-
-# Log Level (debug, info, mark, warn, error)
-LOG_LEVEL=info
-
-# Server IP displayed at the bottom of the web pages
+# web服务器配置
+WEB_PORT=8080
+ENABLE_WEB_SERVER=true
 DISPLAY_IP=phira.funxlink.fun:19723
+SESSION_SECRET=a-very-insecure-secret-change-it
+LOGIN_BLACKLIST_DURATION=600
+ADMIN_NAME=admin
+ADMIN_PASSWORD=password
+ADMIN_SECRET=
+ADMIN_PHIRA_ID=
+OWNER_PHIRA_ID=
+BAN_ID_WHITELIST=
+BAN_IP_WHITELIST=
+SILENT_PHIRA_IDS=
 
-# Captcha Provider (geetest or none)
+# 房间发现过滤
+ENABLE_PUB_WEB=false
+PUB_PREFIX=pub
+ENABLE_PRI_WEB=false
+PRI_PREFIX=sm
+
+# 验证码配置 (geetest / none)
 CAPTCHA_PROVIDER=none
-# GEETEST_ID=
-# GEETEST_KEY=
+GEETEST_ID=
+GEETEST_KEY=
 `;
+    }
+
     fs.writeFileSync(envPath, defaultEnv, 'utf8');
     console.log('✅ 已自动生成默认 .env 配置文件');
   }
