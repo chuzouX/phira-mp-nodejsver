@@ -460,7 +460,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const otherRoomsContent = (currentOtherRooms || []).length > 0 
-                ? currentOtherRooms.slice(0,5).map(r => `<a href="room.html?id=${r.id}" class="other-room-item"><span class="other-room-name">${r.name || 'Room'}</span><span class="other-room-count">${r.playerCount}/${r.maxPlayers}</span></a>`).join('')
+                ? currentOtherRooms.slice(0,5).map(r => {
+                    const serverBadge = r.isRemote ? `<span class="other-room-server-badge remote">🌐 ${r.serverName || ''}</span>` : '';
+                    return `<a href="room.html?id=${r.id}${r.isRemote ? '&remote=1' : ''}" class="other-room-item${r.isRemote ? ' other-room-remote' : ''}"><span class="other-room-name">${r.name || 'Room'}${serverBadge}</span><span class="other-room-count">${r.playerCount}/${r.maxPlayers}</span></a>`;
+                }).join('')
                 : `<div style="padding:20px; text-align:center; color:var(--text-muted); font-size:0.85rem; font-style:italic;">${I18n.t('room.no_other_rooms')}</div>`;
 
             roomDetails.innerHTML = `

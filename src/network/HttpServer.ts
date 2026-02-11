@@ -9,6 +9,7 @@ import { ServerConfig } from '../config/config';
 import { RoomManager } from '../domain/rooms/RoomManager';
 import { ProtocolHandler } from '../domain/protocol/ProtocolHandler';
 import { BanManager } from '../domain/auth/BanManager';
+import { FederationManager } from '../federation/FederationManager';
 
 interface AdminSession extends SessionData {
   isAdmin?: boolean;
@@ -34,6 +35,7 @@ export class HttpServer {
     private readonly roomManager: RoomManager,
     private readonly protocolHandler: ProtocolHandler,
     private readonly banManager: BanManager,
+    private readonly federationManager?: FederationManager,
   ) {
     this.app = express();
     this.server = createServer(this.app);
@@ -56,6 +58,7 @@ export class HttpServer {
 
     this.setupMiddleware();
     this.setupRoutes();
+    this.setupFederationRoutes();
     this.loadBlacklist();
     
     // Cleanup expired login attempts every hour to prevent memory leak
@@ -742,11 +745,214 @@ export class HttpServer {
             serverName: this.config.serverName,
             onlinePlayers: this.protocolHandler.getSessionCount(),
             roomCount: rooms.length,
-            rooms: rooms
+            rooms: rooms,
+            // 联邦信息
+            federation: this.federationManager ? {
+              enabled: true,
+              nodeId: this.federationManager.getNodeId(),
+              remoteRooms: this.federationManager.getRemoteRooms().map((r: any) => ({
+                id: r.id,
+                name: r.name,
+                nodeId: r.nodeId,
+                nodeName: r.nodeName,
+                playerCount: r.playerCount,
+                maxPlayers: r.maxPlayers,
+                state: r.state,
+                locked: r.locked,
+                cycle: r.cycle,
+                players: r.players,
+              })),
+              nodes: this.federationManager.getOnlineNodes().map((n: any) => ({
+                id: n.id,
+                serverName: n.serverName,
+                status: n.status,
+              })),
+            } : { enabled: false },
         };
 
         res.json(response);
     });
+  }
+
+  // ==================== 联邦路由 ====================
+
+  private setupFederationRoutes(): void {
+    if (!this.federationManager) {
+      this.logger.debug('[联邦] 联邦管理器未提供，跳过联邦路由注册');
+      return;
+    }
+
+    const fm = this.federationManager;
+
+    // 联邦认证中间件：验证共享密钥
+    const authFederation = (req: express.Request, res: express.Response, next: express.NextFunction): void => {
+      const secret = req.header('X-Federation-Secret');
+      const expectedSecret = fm.getConfig().secret;
+      if (!secret || !expectedSecret || secret !== expectedSecret) {
+        res.status(403).json({ error: 'Invalid federation secret' });
+        return;
+      }
+      next();
+    };
+
+    // === 节点发现 ===
+
+    // 握手：接收其他节点的自我介绍，返回自身信息和已知节点列表
+    this.app.post('/api/federation/handshake', authFederation, (req, res) => {
+      const { nodeId, nodeUrl, serverName, isReverse } = req.body;
+      if (!nodeId || !nodeUrl) {
+        return res.status(400).json({ error: 'Missing nodeId or nodeUrl' });
+      }
+
+      this.logger.info(`[联邦HTTP] 收到握手请求: 来自 ${serverName} (ID: ${nodeId}, URL: ${nodeUrl}, 反向: ${!!isReverse})`);
+      const result = fm.handleIncomingHandshake({ nodeId, nodeUrl, serverName: serverName || 'Unknown', isReverse: !!isReverse });
+      this.logger.info(`[联邦HTTP] 握手响应已发送给 ${serverName}`);
+      return res.json(result);
+    });
+
+    // 健康检查：返回节点状态和已知节点列表
+    this.app.get('/api/federation/health', authFederation, (_req, res) => {
+      return res.json({
+        nodeId: fm.getNodeId(),
+        serverName: fm.getConfig().serverName,
+        status: 'online',
+        timestamp: Date.now(),
+        peers: fm.getNodes().filter(n => n.status === 'online').map(n => ({
+          id: n.id,
+          url: n.url,
+          serverName: n.serverName,
+        })),
+      });
+    });
+
+    // 获取已知节点列表
+    this.app.get('/api/federation/peers', authFederation, (_req, res) => {
+      return res.json({
+        peers: fm.getNodes().map(n => ({
+          id: n.id,
+          url: n.url,
+          serverName: n.serverName,
+          status: n.status,
+          lastSeen: n.lastSeen,
+        })),
+      });
+    });
+
+    // === 房间与玩家查询 ===
+
+    // 获取本节点的房间列表（供其他节点同步）
+    this.app.get('/api/federation/rooms', authFederation, (_req, res) => {
+      const rooms = fm.getLocalRoomsForFederation();
+      this.logger.info(`[联邦HTTP] 收到房间查询请求，返回 ${rooms.length} 个本地房间`);
+      return res.json({ rooms });
+    });
+
+    // 获取本节点的所有在线玩家
+    this.app.get('/api/federation/players', authFederation, (_req, res) => {
+      const players = this.protocolHandler.getAllSessions().map(p => ({
+        id: p.id,
+        name: p.name,
+        roomId: p.roomId,
+        roomName: p.roomName,
+      }));
+      return res.json({ players });
+    });
+
+    // === 跨服代理 ===
+
+    // 代理加入：远程玩家请求加入本地房间
+    this.app.post('/api/federation/proxy/join', authFederation, (req, res) => {
+      const { roomId, userId, userInfo, sourceNodeId, sourceNodeUrl } = req.body;
+      if (!roomId || !userId || !userInfo || !sourceNodeId || !sourceNodeUrl) {
+        return res.status(400).json({ success: false, error: 'Missing required fields' });
+      }
+
+      const result = fm.handleIncomingJoin({ roomId, userId, userInfo, sourceNodeId, sourceNodeUrl });
+      return res.json(result);
+    });
+
+    // 代理命令：远程玩家在本地房间执行命令
+    this.app.post('/api/federation/proxy/command', authFederation, async (req, res) => {
+      const { roomId, userId, command, sourceNodeId } = req.body;
+      if (!roomId || !userId || !command || !sourceNodeId) {
+        return res.status(400).json({ success: false, error: 'Missing required fields' });
+      }
+
+      try {
+        const result = await fm.handleIncomingCommand({ roomId, userId, command, sourceNodeId });
+        return res.json(result);
+      } catch (error) {
+        this.logger.error(`[联邦] 处理代理命令失败: ${error}`);
+        return res.status(500).json({ success: false, error: 'Internal error' });
+      }
+    });
+
+    // 代理离开：远程玩家离开本地房间
+    this.app.post('/api/federation/proxy/leave', authFederation, (req, res) => {
+      const { roomId, userId, sourceNodeId } = req.body;
+      if (!roomId || !userId || !sourceNodeId) {
+        return res.status(400).json({ success: false, error: 'Missing required fields' });
+      }
+
+      const result = fm.handleIncomingLeave({ roomId, userId, sourceNodeId });
+      return res.json(result);
+    });
+
+    // 事件回调：权威服务器推送广播事件给代理服务器上的玩家
+    this.app.post('/api/federation/proxy/callback', authFederation, (req, res) => {
+      const { targetUserId, command } = req.body;
+      if (targetUserId === undefined || !command) {
+        return res.status(400).json({ success: false, error: 'Missing required fields' });
+      }
+
+      const delivered = fm.handleEventCallback({ targetUserId, command });
+      return res.json({ success: delivered });
+    });
+
+    // === 事件广播 ===
+
+    // 接收来自其他节点的房间事件
+    this.app.post('/api/federation/event', authFederation, (req, res) => {
+      const event = req.body;
+      if (!event || !event.type || !event.sourceNodeId) {
+        return res.status(400).json({ error: 'Invalid event' });
+      }
+
+      this.logger.info(`[联邦HTTP] 收到节点事件: ${event.type} (房间: ${event.roomId}, 来源: ${event.sourceNodeId})`);
+      fm.handleIncomingEvent(event);
+      return res.json({ success: true });
+    });
+
+    // === 管理接口 ===
+
+    // 联邦状态查询（管理员用）
+    this.app.get('/api/federation/status', this.adminAuth.bind(this), (_req, res) => {
+      return res.json(fm.getStatus());
+    });
+
+    // 手动添加联邦节点（管理员用）
+    this.app.post('/api/federation/add-node', this.adminAuth.bind(this), async (req, res) => {
+      const { nodeUrl } = req.body;
+      if (!nodeUrl) {
+        return res.status(400).json({ error: 'Missing nodeUrl' });
+      }
+
+      const success = await fm.handshakeWithNode(nodeUrl);
+      return res.json({ success });
+    });
+
+    // 手动移除联邦节点（管理员用）
+    this.app.post('/api/federation/remove-node', this.adminAuth.bind(this), (req, res) => {
+      const { nodeId } = req.body;
+      if (!nodeId) {
+        return res.status(400).json({ error: 'Missing nodeId' });
+      }
+
+      fm.removeNode(nodeId);
+      return res.json({ success: true });
+    });
+
+    this.logger.info(`[联邦] 已注册 ${fm.getConfig().enabled ? '启用' : '未启用'} 的联邦 HTTP 路由`);
   }
 
   public getInternalServer(): Server {

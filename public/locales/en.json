@@ -17,6 +17,8 @@
   "index": {
     "title": "Phira Server Rooms",
     "no_rooms": "No active rooms found.",
+    "remote_room": "Remote room from federated node",
+    "local_server": "Local Server",
     "easter_egg_alert": "🎹 Congratulations! You found the hidden Easter egg!\n\nPhira Multiplayer Server Node.js version is running smoothly...\nMay every rhythm gamer find their own melody in the beat! ✨\n\n- FunXLink Studio"
   },
   "room": {

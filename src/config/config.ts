@@ -64,6 +64,15 @@ PRI_PREFIX=sm
 CAPTCHA_PROVIDER=none
 GEETEST_ID=
 GEETEST_KEY=
+
+# 联邦节点配置（多服务器无中心化联机）
+FEDERATION_ENABLED=true
+FEDERATION_SEED_NODES=127.0.0.1:12346
+FEDERATION_SECRET=change-this-shared-secret
+FEDERATION_NODE_ID=
+FEDERATION_NODE_URL=
+FEDERATION_HEALTH_INTERVAL=30000
+FEDERATION_SYNC_INTERVAL=15000
 `;
     }
 
@@ -127,6 +136,14 @@ export interface ServerConfig {
   captchaProvider: 'geetest' | 'none';
   geetestId?: string;
   geetestKey?: string;
+  // 联邦节点配置
+  federationEnabled: boolean;
+  federationSeedNodes: string[];
+  federationSecret: string;
+  federationNodeId: string;
+  federationNodeUrl: string;
+  federationHealthInterval: number;
+  federationSyncInterval: number;
 }
 
 const defaultConfig: ServerConfig = {
@@ -163,6 +180,14 @@ const defaultConfig: ServerConfig = {
   defaultAvatar: 'https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404',
   enableUpdateCheck: true,
   captchaProvider: 'none',
+  // 联邦节点配置
+  federationEnabled: false,
+  federationSeedNodes: [],
+  federationSecret: '',
+  federationNodeId: '',
+  federationNodeUrl: '',
+  federationHealthInterval: 30000,
+  federationSyncInterval: 15000,
 };
 
 const parseBoolean = (value: string | undefined, fallback: boolean): boolean => {
@@ -224,6 +249,15 @@ export const env = {
   // Server Name
   serverName: process.env.SERVER_NAME || 'Server',
   
+  // 联邦节点
+  federationEnabled: parseBoolean(process.env.FEDERATION_ENABLED, false),
+  federationSeedNodes: (process.env.FEDERATION_SEED_NODES || '').split(',').map(s => s.trim()).filter(s => s !== ''),
+  federationSecret: process.env.FEDERATION_SECRET || '',
+  federationNodeId: process.env.FEDERATION_NODE_ID || '',
+  federationNodeUrl: process.env.FEDERATION_NODE_URL || '',
+  federationHealthInterval: parseInt(process.env.FEDERATION_HEALTH_INTERVAL || '30000', 10),
+  federationSyncInterval: parseInt(process.env.FEDERATION_SYNC_INTERVAL || '15000', 10),
+
   // 环境
   nodeEnv: process.env.NODE_ENV || 'development',
   isDevelopment: process.env.NODE_ENV !== 'production',
@@ -276,6 +310,14 @@ export const createServerConfig = (overrides: Partial<ServerConfig> = {}): Serve
     captchaProvider: (process.env.CAPTCHA_PROVIDER || 'none').toLowerCase() as  'geetest' | 'none',
     geetestId: process.env.GEETEST_ID,
     geetestKey: process.env.GEETEST_KEY,
+    // 联邦节点
+    federationEnabled: parseBoolean(process.env.FEDERATION_ENABLED, defaultConfig.federationEnabled),
+    federationSeedNodes: (process.env.FEDERATION_SEED_NODES || '').split(',').map(s => s.trim()).filter(s => s !== ''),
+    federationSecret: process.env.FEDERATION_SECRET ?? defaultConfig.federationSecret,
+    federationNodeId: process.env.FEDERATION_NODE_ID ?? defaultConfig.federationNodeId,
+    federationNodeUrl: process.env.FEDERATION_NODE_URL ?? defaultConfig.federationNodeUrl,
+    federationHealthInterval: Number.parseInt(process.env.FEDERATION_HEALTH_INTERVAL ?? `${defaultConfig.federationHealthInterval}`, 10),
+    federationSyncInterval: Number.parseInt(process.env.FEDERATION_SYNC_INTERVAL ?? `${defaultConfig.federationSyncInterval}`, 10),
   };
 
   return {

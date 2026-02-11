@@ -6,6 +6,7 @@ import { RoomManager, Room } from '../domain/rooms/RoomManager';
 import { ProtocolHandler } from '../domain/protocol/ProtocolHandler';
 import { ServerConfig } from '../config/config';
 import { UserInfo } from '../domain/protocol/Commands';
+import { FederationManager } from '../federation/FederationManager';
 
 // Define the structure of messages between client and server
 interface WebSocketMessage {
@@ -27,6 +28,7 @@ export class WebSocketServer {
     private readonly config: ServerConfig,
     private readonly logger: Logger,
     private readonly sessionParser: express.RequestHandler,
+    private readonly federationManager?: FederationManager,
   ) {
     this.wss = new WsServer({ server });
     this.setupConnectionHandler();
@@ -179,8 +181,8 @@ export class WebSocketServer {
     }
   }
 
-  private getSanitizedRoomList(isAdmin: boolean = false): Partial<Room>[] {
-    return this.roomManager.listRooms()
+  private getSanitizedRoomList(isAdmin: boolean = false): any[] {
+    const localRooms = this.roomManager.listRooms()
       .filter(room => {
         if (isAdmin) return true;
         // Mode 1: Public Web Only (Whitelist)
@@ -210,8 +212,35 @@ export class WebSocketServer {
             } as any,
             locked: room.locked,
             cycle: room.cycle,
+            isRemote: false,
+            serverName: this.config.serverName,
         };
       });
+
+    // 合并联邦远程房间
+    let remoteRooms: any[] = [];
+    if (this.federationManager) {
+      try {
+        remoteRooms = this.federationManager.getRemoteRooms().map(room => ({
+          id: room.id,
+          name: room.name,
+          ownerId: room.ownerId,
+          ownerName: room.players.find(p => p.id === room.ownerId)?.name || 'Unknown',
+          playerCount: room.playerCount,
+          maxPlayers: room.maxPlayers,
+          state: room.state,
+          locked: room.locked,
+          cycle: room.cycle,
+          isRemote: true,
+          serverName: room.nodeName,
+          nodeId: room.nodeId,
+        }));
+      } catch (e) {
+        this.logger.error(`获取联邦远程房间失败: ${e}`);
+      }
+    }
+
+    return [...localRooms, ...remoteRooms];
   }
 
   private getSanitizedRoomDetails(room: Room, isAdmin: boolean = false) {
@@ -269,30 +298,45 @@ export class WebSocketServer {
             };
         }),
         players: players,
-        otherRooms: this.roomManager.listRooms()
-            .filter(r => {
-                if (r.id === room.id) return false;
-                if (isAdmin) return true;
-                // Apply same visibility rules as room list
-                if (this.config.enablePubWeb) {
-                  return r.id.startsWith(this.config.pubPrefix);
-                }
-                if (this.config.enablePriWeb) {
-                  return !r.id.startsWith(this.config.priPrefix);
-                }
-                return true;
-            })
-            .map(r => ({
-                id: r.id,
-                name: r.name,
-                playerCount: r.players.size,
-                maxPlayers: r.maxPlayers,
-                state: {
-                    ...r.state,
-                    chartId: (r.state as any).chartId ?? r.selectedChart?.id ?? null,
-                    chartName: r.selectedChart?.name ?? null,
-                }
-            })),
+        otherRooms: [
+            ...this.roomManager.listRooms()
+                .filter(r => {
+                    if (r.id === room.id) return false;
+                    if (isAdmin) return true;
+                    // Apply same visibility rules as room list
+                    if (this.config.enablePubWeb) {
+                      return r.id.startsWith(this.config.pubPrefix);
+                    }
+                    if (this.config.enablePriWeb) {
+                      return !r.id.startsWith(this.config.priPrefix);
+                    }
+                    return true;
+                })
+                .map(r => ({
+                    id: r.id,
+                    name: r.name,
+                    playerCount: r.players.size,
+                    maxPlayers: r.maxPlayers,
+                    state: {
+                        ...r.state,
+                        chartId: (r.state as any).chartId ?? r.selectedChart?.id ?? null,
+                        chartName: r.selectedChart?.name ?? null,
+                    },
+                    isRemote: false,
+                    serverName: this.config.serverName,
+                })),
+            ...(this.federationManager ? this.federationManager.getRemoteRooms()
+                .filter(r => r.id !== room.id)
+                .map(r => ({
+                    id: r.id,
+                    name: r.name,
+                    playerCount: r.playerCount,
+                    maxPlayers: r.maxPlayers,
+                    state: r.state,
+                    isRemote: true,
+                    serverName: r.nodeName,
+                })) : []),
+        ],
     };
   }
 
