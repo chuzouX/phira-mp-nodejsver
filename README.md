@@ -26,8 +26,9 @@ TypeScript-based Node.js server with TCP support for multiplayer gaming.
 - ⚙️ **Optimized Room Logic**: Improved handling for solo rooms and server-side announcements.
 - 🛡️ **Advanced Security**: 
     - Support for **Proxy Protocol v2** (TCP) and **HTTP Forwarded Headers** (X-Forwarded-For, X-Real-IP) for reliable real IP detection behind all types of proxies.
+    - **Global Web Interception**: Banned IPs are instantly blocked from accessing any web resources (Dashboard, APIs, WebSocket) with a 403 error.
+    - **Anti-Brute Force**: Automatic login blacklist for the admin panel after repeated failures to mitigate brute-force and credential stuffing attacks.
     - Differentiated **Admin vs System bans** (System bans drop connections instantly; Admin bans show detailed reasons).
-    - **Login Blacklist** for management panel with custom duration and automatic proxy-aware blocking.
     - **Customizable Display IP**: Show your own domain or IP on the web UI via `DISPLAY_IP` config.
     - Automatic **IP kicking** when an IP is banned.
     - **Audit Log**: Dedicated `logs/ban.log` for tracking all ban/unban actions and suspicious activities.
