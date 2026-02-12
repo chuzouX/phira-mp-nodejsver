@@ -14,13 +14,20 @@ import { HttpServer } from './network/HttpServer';
 import { WebSocketServer } from './network/WebSocketServer';
 import { version } from '../package.json';
 import { FederationManager, FederationConfig } from './federation/FederationManager';
+import { ConsoleInterface } from './network/ConsoleInterface';
 
 export interface Application {
   readonly config: ServerConfig;
   readonly logger: Logger;
   readonly roomManager: RoomManager;
+  readonly startTime: number;
   start(): Promise<void>;
   stop(): Promise<void>;
+  reloadConfig(): void;
+  updateConfig(key: string, value: string): void;
+  setLogLevel(level: string): void;
+  setLogLevels(levels: string[]): void;
+  setAdminStatus(userId: number, isAdmin: boolean): Promise<string | null>;
   getTcpServer(): NetworkServer;
   getHttpServer(): HttpServer | undefined;
 }
@@ -48,6 +55,7 @@ export const checkForUpdates = async (logger: Logger) => {
 };
 
 export const createApplication = (overrides?: Partial<ServerConfig>): Application => {
+  const startTime = Date.now();
   const configService = new ConfigService(overrides);
   const config = configService.getConfig();
   const logLevel = config.logging.level;
@@ -143,6 +151,106 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
       logger.info('Web server is disabled via configuration.');
   }
 
+  const reloadConfig = (): void => {
+    const newConfig = configService.reloadConfig();
+    
+    // Update BanManager
+    banManager.setWhitelists(newConfig.banIdWhitelist, newConfig.banIpWhitelist);
+    
+    // Update ProtocolHandler
+    protocolHandler.reloadConfig(
+        newConfig.serverName,
+        newConfig.phiraApiUrl,
+        newConfig.serverAnnouncement,
+        newConfig.defaultAvatar
+    );
+
+    // Update Logger silents
+    [logger, roomLogger, authLogger, protocolLogger, webSocketLogger, federationLogger].forEach(l => {
+        l.setSilentIds(newConfig.silentPhiraIds);
+    });
+
+    logger.mark('[程序] 配置已从 .env 重新加载');
+  };
+
+  const setAdminStatus = async (userId: number, isAdmin: boolean): Promise<string | null> => {
+    const currentAdmins = [...config.adminPhiraId];
+    if (isAdmin) {
+        if (!currentAdmins.includes(userId)) {
+            currentAdmins.push(userId);
+        }
+    } else {
+        const index = currentAdmins.indexOf(userId);
+        if (index > -1) {
+            currentAdmins.splice(index, 1);
+        }
+    }
+
+    // Persist to .env
+    configService.updateAdminPhiraIds(currentAdmins);
+    
+    // Sync other components
+    reloadConfig();
+
+    // Fetch username for display
+    try {
+        const response = await fetch(`${config.phiraApiUrl}/user/${userId}`);
+        if (response.ok) {
+            const data = await response.json() as any;
+            return data.name || '未知用户';
+        }
+    } catch (e) {
+        // Silently ignore API errors
+    }
+    return '未知用户';
+  };
+
+  const updateConfig = (key: string, value: string): void => {
+    configService.saveConfigToFile(key, value);
+    reloadConfig();
+  };
+
+  const setLogLevel = (level: string): void => {
+    const validLevels = ['debug', 'info', 'mark', 'warn', 'error'];
+    const normalized = level.toLowerCase();
+    if (validLevels.includes(normalized)) {
+        [logger, roomLogger, authLogger, protocolLogger, webSocketLogger, federationLogger].forEach(l => {
+            l.setLevel(normalized as any);
+        });
+        logger.mark(`[程序] 日志等级已设置为: ${normalized.toUpperCase()}`);
+    }
+  };
+
+  const setLogLevels = (levels: string[]): void => {
+    const validLevels = ['debug', 'info', 'mark', 'warn', 'error'];
+    const filtered = levels.map(l => l.toLowerCase()).filter(l => validLevels.includes(l)) as any[];
+    
+    if (filtered.length === 0) return;
+
+    if (filtered.length === 1) {
+        setLogLevel(filtered[0]);
+    } else {
+        [logger, roomLogger, authLogger, protocolLogger, webSocketLogger, federationLogger].forEach(l => {
+            l.setAllowedLevels(filtered);
+        });
+        logger.mark(`[程序] 日志等级已设置为显示: ${filtered.join(', ').toUpperCase()}`);
+    }
+  };
+
+  const consoleInterface = new ConsoleInterface(
+    config,
+    logger,
+    roomManager,
+    protocolHandler,
+    banManager,
+    httpServer,
+    reloadConfig,
+    setAdminStatus,
+    startTime,
+    updateConfig,
+    setLogLevels,
+  );
+
   const start = async (): Promise<void> => {
     if (config.enableUpdateCheck) {
         void checkForUpdates(logger);
@@ -157,9 +265,13 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
     if (federationManager) {
       await federationManager.start();
     }
+
+    consoleInterface.start();
   };
 
   const stop = async (): Promise<void> => {
+    consoleInterface.stop();
+
     // 先停止联邦（清理远程连接）
     if (federationManager) {
       await federationManager.stop();
@@ -176,8 +288,14 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
     config,
     logger,
     roomManager,
+    startTime,
     start,
     stop,
+    reloadConfig,
+    setAdminStatus,
+    updateConfig,
+    setLogLevel,
+    setLogLevels,
     getTcpServer: () => networkServer,
     getHttpServer: () => httpServer!, 
   };

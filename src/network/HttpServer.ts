@@ -177,6 +177,30 @@ export class HttpServer {
     return true;
   }
 
+  public getBlacklistedIps(): { ip: string; expiresAt: number }[] {
+    return Array.from(this.blacklistedIps.entries()).map(([ip, expiresAt]) => ({
+        ip,
+        expiresAt
+    }));
+  }
+
+  public blacklistIpManual(ip: string, durationSeconds: number, adminName: string = 'Console'): void {
+    const expiresAt = Date.now() + durationSeconds * 1000;
+    this.blacklistedIps.set(ip, expiresAt);
+    this.saveBlacklist();
+    const durationStr = durationSeconds >= 3600 ? `${(durationSeconds / 3600).toFixed(1)}小时` : `${Math.floor(durationSeconds / 60)}分钟`;
+    this.logger.ban(`IP ${ip} 被管理员 ${adminName} 手动加入登录黑名单。时长: ${durationStr}`);
+  }
+
+  public unblacklistIpManual(ip: string, adminName: string = 'Console'): boolean {
+    const success = this.blacklistedIps.delete(ip);
+    if (success) {
+        this.saveBlacklist();
+        this.logger.ban(`IP ${ip} 被管理员 ${adminName} 从登录黑名单中移除。`);
+    }
+    return success;
+  }
+
   private getRemainingBlacklistTimeStr(ip: string): string {
     const expiresAt = this.blacklistedIps.get(ip);
     if (!expiresAt) return '';

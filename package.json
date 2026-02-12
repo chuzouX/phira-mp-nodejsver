@@ -1,6 +1,6 @@
 {
   "name": "phira-mp-server",
-  "version": "0.4.1 - dev",
+  "version": "0.4.2",
   "description": "TypeScript Node.js server with TCP socket support",
   "main": "dist/index.js",
   "bin": "dist/index.js",

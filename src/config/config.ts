@@ -292,9 +292,49 @@ export const createServerConfig = (overrides: Partial<ServerConfig> = {}): Serve
 };
 
 export class ConfigService {
-  private readonly config: ServerConfig;
+  private config: ServerConfig;
   constructor(overrides?: Partial<ServerConfig>) {
     this.config = createServerConfig(overrides);
   }
   getConfig(): ServerConfig { return this.config; }
+
+  public updateAdminPhiraIds(ids: number[]): void {
+    this.config.adminPhiraId = ids;
+    this.saveConfigToFile('ADMIN_PHIRA_ID', ids.join(','));
+  }
+
+  public saveConfigToFile(key: string, value: string): void {
+    const envPath = path.join(process.cwd(), '.env');
+    if (!fs.existsSync(envPath)) return;
+
+    try {
+      let content = fs.readFileSync(envPath, 'utf8');
+      const regex = new RegExp(`^${key}=.*`, 'm');
+      
+      if (regex.test(content)) {
+        content = content.replace(regex, `${key}=${value}`);
+      } else {
+        content += `\n${key}=${value}`;
+      }
+      
+      fs.writeFileSync(envPath, content, 'utf8');
+    } catch (err) {
+      console.error(`Failed to save config to .env: ${err}`);
+    }
+  }
+
+  reloadConfig(): ServerConfig {
+    const dotenv = require('dotenv');
+    const envPath = path.join(process.cwd(), '.env');
+    if (fs.existsSync(envPath)) {
+      dotenv.config({ path: envPath, override: true });
+    }
+    
+    const newConfig = createServerConfig();
+    
+    // Update existing object properties so references remain valid
+    Object.assign(this.config, newConfig);
+    
+    return this.config;
+  }
 }
