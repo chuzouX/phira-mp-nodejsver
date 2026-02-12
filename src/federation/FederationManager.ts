@@ -51,6 +51,7 @@ export interface FederationNode {
   lastSeen: number;
   status: 'online' | 'offline' | 'unknown';
   addedAt: number;
+  lastHealthCheck?: number; // 上次健康检查的时间（运行时，不持久化）
 }
 
 export interface FederationRoomInfo {
@@ -495,13 +496,61 @@ export class FederationManager {
         this.logger.error(`[联邦] 健康检查循环出错: ${err}`);
       });
     }, this.config.healthInterval);
+    this.logger.info(`[联邦] 健康检查已启动，间隔: ${this.config.healthInterval}ms`);
 
     // 立即执行一次
     this.checkAllNodes().catch(() => {});
   }
 
   private async checkAllNodes(): Promise<void> {
-    const promises = Array.from(this.nodes.values()).map(node => this.checkNode(node));
+    const now = Date.now();
+    const THREE_DAYS = 3 * 24 * 60 * 60 * 1000;
+    const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+    const FIVE_MINUTES = 5 * 60 * 1000;
+    const ONE_HOUR = 60 * 60 * 1000;
+
+    const nodesToRemove: string[] = [];
+    const nodesToCheck: FederationNode[] = [];
+
+    for (const node of this.nodes.values()) {
+      // 在线或未知状态：每次都检查
+      if (node.status === 'online' || node.status === 'unknown') {
+        nodesToCheck.push(node);
+        continue;
+      }
+
+      // 离线节点：分级轮询
+      const offlineDuration = now - node.lastSeen;
+      const timeSinceLastCheck = now - (node.lastHealthCheck || 0);
+
+      if (offlineDuration >= SEVEN_DAYS) {
+        // 离线超过 7 天：自动移除节点记录
+        nodesToRemove.push(node.id);
+        this.logger.info(`[联邦] 节点 ${node.serverName} (${node.url}) 已离线超过7天，自动移除记录（将在其重新上线或被其他节点广播时重新添加）`);
+      } else if (offlineDuration >= THREE_DAYS) {
+        // 离线 3-7 天：每小时检查一次
+        if (timeSinceLastCheck >= ONE_HOUR) {
+          nodesToCheck.push(node);
+          this.logger.debug(`[联邦] 节点 ${node.serverName} 离线${Math.floor(offlineDuration / (24 * 60 * 60 * 1000))}天，执行小时级检查`);
+        }
+      } else {
+        // 离线 0-3 天：每 5 分钟检查一次
+        if (timeSinceLastCheck >= FIVE_MINUTES) {
+          nodesToCheck.push(node);
+        }
+      }
+    }
+
+    // 移除过期节点
+    for (const nodeId of nodesToRemove) {
+      this.removeNode(nodeId);
+    }
+
+    // 执行健康检查并更新 lastHealthCheck
+    const promises = nodesToCheck.map(node => {
+      node.lastHealthCheck = now;
+      return this.checkNode(node);
+    });
     await Promise.allSettled(promises);
     this.saveNodes();
   }
@@ -551,19 +600,43 @@ export class FederationManager {
   }
 
   private handleNodeOffline(nodeId: string): void {
-    // 移除该节点的联邦玩家（在本地房间中的远程玩家）
+    const node = this.nodes.get(nodeId);
+    const nodeName = node?.serverName || nodeId;
+
+    // 1. 移除该节点的联邦玩家（在本地房间中的远程玩家）
     for (const [userId, info] of this.federatedPlayers) {
       if (info.sourceNodeId === nodeId) {
-        this.logger.info(`[联邦] 节点 ${nodeId} 离线，移除联邦玩家 ${userId}`);
+        this.logger.info(`[联邦] 节点 ${nodeName} 离线，移除联邦玩家 ${userId}`);
         this.removeIncomingFederatedPlayer(userId);
       }
     }
 
-    // 移除该节点的远程房间缓存
+    // 2. 清理代理玩家（本地玩家在该节点的远程房间中）
+    //    当权威服务器意外下线，本地玩家需要被踢出远程房间
+    for (const [userId, info] of this.proxyPlayers) {
+      if (info.remoteNodeId === nodeId) {
+        this.logger.info(`[联邦] 节点 ${nodeName} 离线，清理代理玩家 ${userId} (远程房间: ${info.roomId})`);
+        this.proxyPlayers.delete(userId);
+        // 通知本地玩家：远程房间已不可用，强制离开
+        if (this.protocolHandler) {
+          this.protocolHandler.sendCommandToUser(userId, {
+            type: ServerCommandType.LeaveRoom,
+            result: { ok: true, value: undefined },
+          });
+        }
+      }
+    }
+
+    // 3. 移除该节点的远程房间缓存
+    let removedRooms = 0;
     for (const [roomId, roomInfo] of this.remoteRooms) {
       if (roomInfo.nodeId === nodeId) {
         this.remoteRooms.delete(roomId);
+        removedRooms++;
       }
+    }
+    if (removedRooms > 0) {
+      this.logger.info(`[联邦] 已清理节点 ${nodeName} 的 ${removedRooms} 个远程房间缓存`);
     }
   }
 
@@ -575,6 +648,7 @@ export class FederationManager {
         this.logger.error(`[联邦] 房间同步循环出错: ${err}`);
       });
     }, this.config.syncInterval);
+    this.logger.info(`[联邦] 房间同步已启动，间隔: ${this.config.syncInterval}ms`);
 
     // 立即执行一次
     this.syncAllRooms().catch(() => {});
