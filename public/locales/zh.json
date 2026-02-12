@@ -142,6 +142,7 @@
     "type_user_id": "用户 ID",
     "type_game_ip": "游戏内 IP",
     "ban_ip": "封禁 IP",
+    "target_placeholder": "请选择或输入 ID/IP",
     "duration_placeholder": "时长 (秒，留空为永久)",
     "reason_placeholder": "请输入封禁原因",
     "confirm_unban": "确定要解封 {target} 吗？"
