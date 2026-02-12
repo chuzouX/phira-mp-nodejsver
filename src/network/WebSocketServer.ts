@@ -40,12 +40,20 @@ export class WebSocketServer {
     this.wss.on('connection', (ws: ExtWebSocket, req: IncomingMessage) => {
       // 1. WebSocket Hijacking Protection: Verify Origin
       const origin = req.headers['origin'];
-      const host = req.headers['host'];
+      const forwardedHost = req.headers['x-forwarded-host'];
+      const host = (typeof forwardedHost === 'string' ? forwardedHost : forwardedHost?.[0]) || req.headers['host'];
+
       if (origin && host) {
           try {
               const originUrl = new URL(origin);
-              if (originUrl.host !== host) {
-                  this.logger.warn(`WebSocket 握手拒绝: Origin 不匹配 [${origin}] vs Host [${host}]`);
+              
+              // Check against whitelist first
+              const isAllowed = this.config.allowedOrigins.some(ao => {
+                  try { return new URL(ao).host === originUrl.host; } catch { return false; }
+              });
+
+              if (!isAllowed && originUrl.host !== host) {
+                  this.logger.warn(`WebSocket 握手拒绝: Origin 不匹配 [${origin}] vs Host [${host}] (可能包含转发头)`);
                   ws.close(1008, 'Policy Violation: Origin mismatch');
                   return;
               }

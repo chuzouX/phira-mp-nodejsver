@@ -28,6 +28,9 @@ HOST=0.0.0.0
 TCP_ENABLED=true
 USE_PROXY_PROTOCOL=false
 TRUST_PROXY_HOPS=1
+# 允许的跨域来源 (多个用逗号分隔，如 http://domain.com,https://api.com)
+# 若在反代环境下遇到 Origin 匹配失败，请在此填入你的公网域名
+ALLOWED_ORIGINS=
 LOG_LEVEL=info
 NODE_ENV=development
 PHIRA_API_URL=https://phira.5wyxi.com
@@ -136,6 +139,7 @@ export interface ServerConfig {
   defaultAvatar: string;
   enableUpdateCheck: boolean;
   trustProxyHops: number;
+  allowedOrigins: string[];
   captchaProvider: 'geetest' | 'none';
   geetestId?: string;
   geetestKey?: string;
@@ -184,6 +188,7 @@ const defaultConfig: ServerConfig = {
   defaultAvatar: 'https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404',
   enableUpdateCheck: true,
   trustProxyHops: 1,
+  allowedOrigins: [],
   captchaProvider: 'none',
   // 联邦节点配置
   federationEnabled: false,
@@ -314,6 +319,7 @@ export const createServerConfig = (overrides: Partial<ServerConfig> = {}): Serve
     defaultAvatar: process.env.DEFAULT_AVATAR ?? defaultConfig.defaultAvatar,
     enableUpdateCheck: parseBoolean(process.env.ENABLE_UPDATE_CHECK, defaultConfig.enableUpdateCheck),
     trustProxyHops: Number.parseInt(process.env.TRUST_PROXY_HOPS ?? `${defaultConfig.trustProxyHops}`, 10),
+    allowedOrigins: (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(s => s !== ''),
     captchaProvider: (process.env.CAPTCHA_PROVIDER || 'none').toLowerCase() as  'geetest' | 'none',
     geetestId: process.env.GEETEST_ID,
     geetestKey: process.env.GEETEST_KEY,

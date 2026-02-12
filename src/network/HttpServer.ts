@@ -289,8 +289,12 @@ export class HttpServer {
         if (origin) {
             try {
                 const originUrl = new URL(origin);
-                if (originUrl.host !== host) {
-                    this.logger.warn(`CSRF 拦截: 异常的 Origin [${origin}], 预期 Host [${host}]`);
+                const isAllowed = this.config.allowedOrigins.some(ao => {
+                    try { return new URL(ao).host === originUrl.host; } catch { return false; }
+                });
+
+                if (!isAllowed && originUrl.host !== host) {
+                    this.logger.warn(`CSRF 拦截: 异常的 Origin [${origin}], 预期 Host [${host}] 或白名单内容`);
                     res.status(403).json({ error: 'Forbidden: CSRF validation failed (Origin mismatch)' });
                     return;
                 }
@@ -302,8 +306,12 @@ export class HttpServer {
             // Fallback to Referer check
             try {
                 const refererUrl = new URL(referer);
-                if (refererUrl.host !== host) {
-                    this.logger.warn(`CSRF 拦截: 异常的 Referer [${referer}], 预期 Host [${host}]`);
+                const isAllowed = this.config.allowedOrigins.some(ao => {
+                    try { return new URL(ao).host === refererUrl.host; } catch { return false; }
+                });
+
+                if (!isAllowed && refererUrl.host !== host) {
+                    this.logger.warn(`CSRF 拦截: 异常的 Referer [${referer}], 预期 Host [${host}] 或白名单内容`);
                     res.status(403).json({ error: 'Forbidden: CSRF validation failed (Referer mismatch)' });
                     return;
                 }
