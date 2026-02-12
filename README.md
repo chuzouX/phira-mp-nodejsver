@@ -72,31 +72,28 @@ npm install
 | `WEB_PORT` | HTTP/WS management server port | `8080` |
 | `TCP_ENABLED` | Enable/Disable TCP server | `true` |
 | `USE_PROXY_PROTOCOL` | Enable Proxy Protocol v2 for real IP | `false` |
-| `TRUST_PROXY_HOPS` | Number of proxy hops to trust (1 for Nginx, 2 for CDN+Nginx) | `1` |
+| `TRUST_PROXY_HOPS` | Proxy trust hops (1 for Nginx, 2 for CDN+Nginx) | `1` |
+| `ALLOWED_ORIGINS` | Whitelist of allowed cross-origin sources | (Empty) |
 | `ENABLE_WEB_SERVER` | Enable/Disable HTTP server | `true` |
 | `SERVER_NAME` | Server broadcast name | `Server` |
 | `PHIRA_API_URL` | Base URL for Phira API | `https://phira.5wyxi.com` |
+| `DISPLAY_IP` | Server IP displayed at the bottom of the web pages | `phira.funxlink.fun:19723` |
+| `DEFAULT_AVATAR` | Default avatar URL for users/bots without one | (Phira Default) |
 | `ROOM_SIZE` | Default maximum players per room | `8` |
 | `ADMIN_NAME` | Admin dashboard username | `admin` |
 | `ADMIN_PASSWORD` | Admin dashboard password | `password` |
 | `ADMIN_SECRET` | Secret key for encrypted admin API access | (Empty) |
-| `ADMIN_PHIRA_ID` | List of Admin Phira IDs (comma separated) | (Empty) |
-| `OWNER_PHIRA_ID` | List of Owner Phira IDs (comma separated) | (Empty) |
-| `BAN_ID_WHITELIST` | IDs that cannot be banned | (Empty) |
-| `BAN_IP_WHITELIST` | IPs that cannot be banned | (Empty) |
-| `SILENT_PHIRA_IDS` | IDs of users whose actions won't be logged | (Empty) |
-| `SERVER_ANNOUNCEMENT` | Welcome message shown to players upon joining | (Simplified Default) |
 | `SESSION_SECRET` | Secret for session encryption | (Insecure Default) |
-| `LOGIN_BLACKLIST_DURATION` | Seconds to blacklist IP after login failures | `600` |
+| `ENABLE_UPDATE_CHECK` | Enable automatic update checking on startup | `true` |
 | `LOG_LEVEL` | Logging level (`debug`, `info`, `warn`, `error`) | `info` |
-| `DISPLAY_IP` | Server IP displayed at the bottom of the web pages | `phira.funxlink.fun:19723` |
-| `DEFAULT_AVATAR` | Default avatar URL for users/bots without one | (Phira Default) |
 | `CAPTCHA_PROVIDER` | Captcha system (`geetest` or `none`) | `none` |
 | `FEDERATION_ENABLED` | Enable Federation server mode | `false` |
 | `FEDERATION_SEED_NODES` | Comma separated list of initial seed nodes | (Empty) |
 | `FEDERATION_SECRET` | Shared secret for federation communication | (Empty) |
 | `FEDERATION_NODE_URL` | Publicly accessible URL/IP:Port of this node | (Empty) |
-
+| `FEDERATION_ALLOW_LOCAL` | Allow federation to connect local/private IPs | `false` |
+| `FEDERATION_HEALTH_INTERVAL` | Health check interval (ms) | `300` |
+| `FEDERATION_SYNC_INTERVAL` | State sync interval (ms) | `150` |
 ## 🌟 Federation Server
 
 ### 1. Purpose & Benefits

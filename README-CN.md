@@ -72,29 +72,28 @@ npm install
 | `WEB_PORT` | HTTP/WS 管理服务器端口 | `8080` |
 | `TCP_ENABLED` | 是否启用 TCP 游戏服务器 | `true` |
 | `USE_PROXY_PROTOCOL` | 是否开启 Proxy Protocol v2 以获取真实 IP | `false` |
+| `TRUST_PROXY_HOPS` | 代理信任层级 (1 为仅 Nginx, 2 为 CDN+Nginx) | `1` |
+| `ALLOWED_ORIGINS` | 允许的跨域来源白名单 (逗号分隔) | (空) |
 | `ENABLE_WEB_SERVER` | 是否启用 Web 管理服务器 | `true` |
 | `SERVER_NAME` | 服务器在游戏内显示的播报名称 | `Server` |
 | `PHIRA_API_URL` | Phira 官方 API 地址 | `https://phira.5wyxi.com` |
+| `DISPLAY_IP` | 在网页底部显示的服务器 IP/域名 | `phira.funxlink.fun:19723` |
+| `DEFAULT_AVATAR` | 默认头像 URL (用于无头像用户/机器人) | (Phira 默认值) |
 | `ROOM_SIZE` | 默认房间最大玩家人数 | `8` |
 | `ADMIN_NAME` | 管理后台登录用户名 | `admin` |
 | `ADMIN_PASSWORD` | 管理后台登录密码 | `password` |
 | `ADMIN_SECRET` | 外部脚本使用的加密密钥 | (空) |
-| `ADMIN_PHIRA_ID` | 管理员 Phira ID 列表 (逗号分隔) | (空) |
-| `OWNER_PHIRA_ID` | 所有者 Phira ID 列表 (逗号分隔) | (空) |
-| `BAN_ID_WHITELIST` | 封禁白名单 ID (逗号分隔) | (空) |
-| `BAN_IP_WHITELIST` | 封禁白名单 IP (逗号分隔) | (空) |
-| `SILENT_PHIRA_IDS` | **静默用户** ID 列表 (不产生日志) | (空) |
-| `SERVER_ANNOUNCEMENT` | 玩家加入服务器时显示的欢迎公告内容 | (简版默认值) |
 | `SESSION_SECRET` | 会话加密密钥 | (默认不安全值) |
-| `LOGIN_BLACKLIST_DURATION` | 后台登录失败后的黑名单拦截时长 (秒) | `600` |
+| `ENABLE_UPDATE_CHECK` | 是否启用启动时自动检查更新 | `true` |
 | `LOG_LEVEL` | 日志级别 (`debug`, `info`, `warn`, `error`) | `info` |
-| `DISPLAY_IP` | 在网页底部显示的服务器 IP/域名 | `phira.funxlink.fun:19723` |
-| `DEFAULT_AVATAR` | 默认头像 URL (用于无头像用户/机器人) | (Phira 默认值) |
 | `CAPTCHA_PROVIDER` | 验证码提供商 (`geetest` 或 `none`) | `none` |
 | `FEDERATION_ENABLED` | 是否启用联邦服务器模式（多服联动） | `false` |
 | `FEDERATION_SEED_NODES` | 初始种子节点列表 (逗号分隔) | (空) |
 | `FEDERATION_SECRET` | 联邦通信共享密钥 | (空) |
-| `FEDERATION_NODE_URL` | 当前节点可被外部访问的地址 (IP:Port) | (空) |
+| `FEDERATION_NODE_URL` | 当前节点外部访问地址 (用于联邦) | (空) |
+| `FEDERATION_ALLOW_LOCAL` | 是否允许联邦连接本地/私有 IP | `false` |
+| `FEDERATION_HEALTH_INTERVAL` | 联邦健康检查间隔 (ms) | `300` |
+| `FEDERATION_SYNC_INTERVAL` | 联邦状态同步间隔 (ms) | `150` |
 
 ## 🌟 联邦服务器 (Federation)
 
