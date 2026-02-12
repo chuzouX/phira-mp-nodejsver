@@ -73,8 +73,8 @@ FEDERATION_SECRET=
 FEDERATION_NODE_URL=
 FEDERATION_NODE_ID=
 FEDERATION_ALLOW_LOCAL=false
-FEDERATION_HEALTH_INTERVAL=30000
-FEDERATION_SYNC_INTERVAL=15000
+FEDERATION_HEALTH_INTERVAL=300
+FEDERATION_SYNC_INTERVAL=150
 `;
     }
 
@@ -261,8 +261,8 @@ export const env = {
   federationSecret: process.env.FEDERATION_SECRET || '',
   federationNodeId: process.env.FEDERATION_NODE_ID || '',
   federationNodeUrl: process.env.FEDERATION_NODE_URL || '',
-  federationHealthInterval: parseInt(process.env.FEDERATION_HEALTH_INTERVAL || '30000', 10),
-  federationSyncInterval: parseInt(process.env.FEDERATION_SYNC_INTERVAL || '15000', 10),
+  federationHealthInterval: parseInt(process.env.FEDERATION_HEALTH_INTERVAL || '300', 10),
+  federationSyncInterval: parseInt(process.env.FEDERATION_SYNC_INTERVAL || '150', 10),
 
   // 环境
   nodeEnv: process.env.NODE_ENV || 'development',
