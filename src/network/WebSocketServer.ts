@@ -20,6 +20,8 @@ interface ExtWebSocket extends WebSocket {
 
 export class WebSocketServer {
   private wss: WsServer;
+  private lastBroadcastTime = 0;
+  private broadcastTimer: NodeJS.Timeout | null = null;
 
   constructor(
     server: HttpServer,
@@ -36,18 +38,40 @@ export class WebSocketServer {
 
   private setupConnectionHandler(): void {
     this.wss.on('connection', (ws: ExtWebSocket, req: IncomingMessage) => {
+      // 1. WebSocket Hijacking Protection: Verify Origin
+      const origin = req.headers['origin'];
+      const host = req.headers['host'];
+      if (origin && host) {
+          try {
+              const originUrl = new URL(origin);
+              if (originUrl.host !== host) {
+                  this.logger.warn(`WebSocket 握手拒绝: Origin 不匹配 [${origin}] vs Host [${host}]`);
+                  ws.close(1008, 'Policy Violation: Origin mismatch');
+                  return;
+              }
+          } catch (e) {
+              ws.close(1008, 'Invalid Origin');
+              return;
+          }
+      }
+
       // Priority: HTTP Headers (Standard for Web Proxies)
-      let ip = 'unknown';
+      let ip = req.socket.remoteAddress || 'unknown';
       const xForwardedFor = req.headers['x-forwarded-for'];
-      if (xForwardedFor) {
+      const trustHops = this.config.trustProxyHops;
+
+      if (xForwardedFor && trustHops > 0) {
         const ips = typeof xForwardedFor === 'string' ? xForwardedFor.split(',') : (Array.isArray(xForwardedFor) ? xForwardedFor : []);
-        if (ips.length > 0) ip = ips[0].trim();
+        // Pick the N-th IP from the right
+        if (ips.length >= trustHops) {
+          ip = ips[ips.length - trustHops].trim();
+        } else if (ips.length > 0) {
+          ip = ips[0].trim();
+        }
       } else {
         const xRealIp = req.headers['x-real-ip'];
         if (xRealIp && typeof xRealIp === 'string') {
           ip = xRealIp.trim();
-        } else {
-          ip = req.socket.remoteAddress || 'unknown';
         }
       }
       
@@ -341,7 +365,21 @@ export class WebSocketServer {
   }
 
   public broadcastRooms(): void {
-    this.logger.debug('正在向所有 WebSocket 客户端广播房间列表');
+    // 1. Throttle broadcasts to max once every 100ms
+    if (this.broadcastTimer) return;
+
+    const now = Date.now();
+    const delay = Math.max(0, 100 - (now - this.lastBroadcastTime));
+
+    this.broadcastTimer = setTimeout(() => {
+        this.executeBroadcast();
+        this.broadcastTimer = null;
+        this.lastBroadcastTime = Date.now();
+    }, delay);
+  }
+
+  private executeBroadcast(): void {
+    this.logger.debug('正在执行节流后的房间列表广播');
     
     const adminList = JSON.stringify({
       type: 'roomList',
