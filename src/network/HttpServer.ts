@@ -409,7 +409,7 @@ export class HttpServer {
     });
 
     this.app.use(express.static(publicPath));
-    this.logger.debug(`正在从 ${publicPath} 提供静态文件`);
+    this.logger.info(`正在从 ${publicPath} 提供静态文件`);
 
     this.app.post('/login', async (req, res) => {
       const { username, password } = req.body;

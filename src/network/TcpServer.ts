@@ -297,7 +297,7 @@ export class TcpServer {
 
     if (realIp) {
       state.realIp = realIp;
-      this.logger.debug(`Proxy Protocol v2 识别到真实 IP: ${connectionId} -> ${realIp}`);
+      this.logger.info(`Proxy Protocol v2 识别到真实 IP: ${connectionId} -> ${realIp}`);
       
       // Update real IP in ProtocolHandler
       this.protocolHandler.updateConnectionIp(connectionId, realIp);
