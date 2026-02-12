@@ -27,9 +27,11 @@ PORT=12346
 HOST=0.0.0.0
 TCP_ENABLED=true
 USE_PROXY_PROTOCOL=false
+# 代理信任层级（防止 IP 封禁绕过）
+# 仅 Nginx 设为 1；CDN + Nginx 设为 2
 TRUST_PROXY_HOPS=1
-# 允许的跨域来源 (多个用逗号分隔，如 http://domain.com,https://api.com)
-# 若在反代环境下遇到 Origin 匹配失败，请在此填入你的公网域名
+# 允许的跨域来源 (多个用逗号分隔)
+# 若在反代环境下遇到 WebSocket 或管理接口 Origin 匹配失败，请在此填入公网域名
 ALLOWED_ORIGINS=
 LOG_LEVEL=info
 NODE_ENV=development
@@ -45,10 +47,10 @@ DISPLAY_IP=phira.funxlink.fun:19723
 DEFAULT_AVATAR=https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404
 SESSION_SECRET=a-very-insecure-secret-change-it
 LOGIN_BLACKLIST_DURATION=600
-# Enable automatic update checking on startup
+# 启用启动时自动检查更新
 ENABLE_UPDATE_CHECK=true
 
-# Admin Credentials for /panel
+# 管理员登录配置
 ADMIN_NAME=admin
 ADMIN_PASSWORD=password
 ADMIN_SECRET=
@@ -70,14 +72,22 @@ GEETEST_ID=
 GEETEST_KEY=
 
 # 联邦服务器配置 (多服无中心化联动)
+# 是否启用联邦模式
 FEDERATION_ENABLED=false
+# 初始种子节点 (多个用逗号分隔)
 FEDERATION_SEED_NODES=
+# 联邦通信共享密钥 (加入同一网络的服务器密钥必须一致)
 FEDERATION_SECRET=
+# 当前节点外部访问地址
 FEDERATION_NODE_URL=
+# 当前节点唯一 ID (留空则自动生成)
 FEDERATION_NODE_ID=
+# 是否允许联邦连接本地/私有 IP (生产环境建议设为 false)
 FEDERATION_ALLOW_LOCAL=false
-FEDERATION_HEALTH_INTERVAL=300
-FEDERATION_SYNC_INTERVAL=150
+# 联邦健康检查间隔 (ms)
+FEDERATION_HEALTH_INTERVAL=30000
+# 联邦状态同步间隔 (ms)
+FEDERATION_SYNC_INTERVAL=15000
 `;
     }
 
