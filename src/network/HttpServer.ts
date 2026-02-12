@@ -32,6 +32,7 @@ export class HttpServer {
   private readonly rateLimits = new Map<string, { count: number; lastReset: number }>();
   private cachedStatus: any = null;
   private statusCacheTime = 0;
+  private lastFederationRoomCount = -1; // 上次联邦房间查询返回的数量（防止日志刷屏）
 
   constructor(
     private readonly config: ServerConfig,
@@ -928,7 +929,10 @@ export class HttpServer {
     // 获取本节点的房间列表（供其他节点同步）
     this.app.get('/api/federation/rooms', authFederation, (_req, res) => {
       const rooms = fm.getLocalRoomsForFederation();
-      this.logger.info(`[联邦HTTP] 收到房间查询请求，返回 ${rooms.length} 个本地房间`);
+      if (rooms.length !== this.lastFederationRoomCount) {
+        this.logger.info(`[联邦HTTP] 房间查询: 本地房间数 ${this.lastFederationRoomCount === -1 ? '初始化' : this.lastFederationRoomCount} → ${rooms.length}`);
+        this.lastFederationRoomCount = rooms.length;
+      }
       return res.json({ rooms });
     });
 

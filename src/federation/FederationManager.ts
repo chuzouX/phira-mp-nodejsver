@@ -93,6 +93,8 @@ export class FederationManager {
   private remoteRooms = new Map<string, FederationRoomInfo>();
   private proxyPlayers = new Map<number, ProxyPlayerInfo>();       // 本地玩家 -> 远程房间
   private federatedPlayers = new Map<number, FederatedPlayerInfo>(); // 远程玩家 -> 本地房间
+  private lastNodeRoomCounts = new Map<string, number>();           // 每节点上次同步的房间数（防止日志刷屏）
+  private lastTotalRemoteRoomCount = -1;                            // 上次远程房间总数
 
   private healthTimer: NodeJS.Timeout | null = null;
   private syncTimer: NodeJS.Timeout | null = null;
@@ -405,7 +407,7 @@ export class FederationManager {
    * 从单个节点同步房间（用于新发现节点时立即获取其房间）
    */
   private async syncRoomsFromNode(node: FederationNode): Promise<void> {
-    this.logger.info(`[联邦] 📥 正在从节点 ${node.serverName} (${node.url}) 拉取房间...`);
+    this.logger.debug(`[联邦] 📥 正在从节点 ${node.serverName} (${node.url}) 拉取房间...`);
     try {
       const response = await fetch(`${node.url}/api/federation/rooms`, {
         headers: { 'X-Federation-Secret': this.config.secret },
@@ -430,10 +432,14 @@ export class FederationManager {
           });
           count++;
         }
-        this.logger.info(`[联邦] 📥 从 ${node.serverName} 获取了 ${count} 个房间 (当前远程房间总数: ${this.remoteRooms.size})`);
-        if (count > 0) {
-          const roomIds = data.rooms.map((r: any) => r.id).join(', ');
-          this.logger.info(`[联邦] 📥 房间列表: [${roomIds}]`);
+        const lastCount = this.lastNodeRoomCounts.get(node.id) ?? -1;
+        if (count !== lastCount) {
+          this.logger.info(`[联邦] 📥 从 ${node.serverName} 获取了 ${count} 个房间 (当前远程房间总数: ${this.remoteRooms.size})`);
+          if (count > 0) {
+            const roomIds = data.rooms.map((r: any) => r.id).join(', ');
+            this.logger.info(`[联邦] 📥 房间列表: [${roomIds}]`);
+          }
+          this.lastNodeRoomCounts.set(node.id, count);
         }
       } else {
         this.logger.warn(`[联邦] 📥 ${node.serverName} 返回了无效的房间数据: ${JSON.stringify(data).substring(0, 200)}`);
@@ -470,6 +476,7 @@ export class FederationManager {
       this.logger.info(`[联邦] 移除节点: ${node.serverName} (${node.url})`);
     }
     this.nodes.delete(id);
+    this.lastNodeRoomCounts.delete(id);
 
     // 清理该节点的远程房间
     for (const [roomId, roomInfo] of this.remoteRooms) {
@@ -699,6 +706,13 @@ export class FederationManager {
     });
 
     await Promise.allSettled(promises);
+
+    const newTotal = newRemoteRooms.size;
+    if (newTotal !== this.lastTotalRemoteRoomCount) {
+      this.logger.info(`[联邦] 🔄 定时同步完成: 远程房间总数 ${this.lastTotalRemoteRoomCount === -1 ? '初始化' : this.lastTotalRemoteRoomCount} → ${newTotal}`);
+      this.lastTotalRemoteRoomCount = newTotal;
+    }
+
     this.remoteRooms = newRemoteRooms;
   }
 
