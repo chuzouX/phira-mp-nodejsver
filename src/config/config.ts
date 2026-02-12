@@ -17,24 +17,28 @@ const ensureEnvFile = () => {
         try {
             defaultEnv = fs.readFileSync(examplePath, 'utf8');
         } catch (e) {
-            // Fallback to hardcoded
+            // Fallback
         }
     }
 
     if (!defaultEnv) {
-        defaultEnv = `# 游戏服务器配置
+        defaultEnv = `# Game Server Configuration
 PORT=12346
 HOST=0.0.0.0
 TCP_ENABLED=true
 USE_PROXY_PROTOCOL=false
+# Proxy trust hops (1 for Nginx, 2 for CDN+Nginx)
+TRUST_PROXY_HOPS=1
+# Allowed cross-origin sources (comma separated)
+ALLOWED_ORIGINS=
 LOG_LEVEL=info
 NODE_ENV=development
 PHIRA_API_URL=https://phira.5wyxi.com
 SERVER_NAME=Server
 ROOM_SIZE=8
-SERVER_ANNOUNCEMENT="你好{{name}}，欢迎来到 {{serverName}} 服务器"
+SERVER_ANNOUNCEMENT="Hello {{name}}, welcome to {{serverName}} server"
 
-# web服务器配置
+# Web Server Configuration
 WEB_PORT=8080
 ENABLE_WEB_SERVER=true
 DISPLAY_IP=phira.funxlink.fun:19723
@@ -54,37 +58,42 @@ BAN_ID_WHITELIST=
 BAN_IP_WHITELIST=
 SILENT_PHIRA_IDS=
 
-# 房间发现过滤
+# Room Discovery Filters
 ENABLE_PUB_WEB=false
 PUB_PREFIX=pub
 ENABLE_PRI_WEB=false
 PRI_PREFIX=sm
 
-# 验证码配置 (geetest / none)
+# Captcha Configuration
 CAPTCHA_PROVIDER=none
 GEETEST_ID=
 GEETEST_KEY=
+
+# Federation Configuration
+FEDERATION_ENABLED=false
+FEDERATION_SEED_NODES=
+FEDERATION_SECRET=
+FEDERATION_NODE_URL=
+FEDERATION_NODE_ID=
+FEDERATION_ALLOW_LOCAL=false
+FEDERATION_HEALTH_INTERVAL=300
+FEDERATION_SYNC_INTERVAL=150
 `;
     }
 
     fs.writeFileSync(envPath, defaultEnv, 'utf8');
-    console.log('✅ 已自动生成默认 .env 配置文件');
+    console.log('Env file generated.');
   }
 };
 
-// 执行环境初始化
 ensureEnvFile();
 
-// 只在开发环境加载 .env 文件
 if (process.env.NODE_ENV !== 'production') {
   const dotenv = require('dotenv');
   dotenv.config();
-  console.log('✅ 开发环境：已从 .env 加载配置');
 } else {
-  // 生产环境（包括打包后）也尝试加载同级目录的 .env
   const dotenv = require('dotenv');
   dotenv.config();
-  console.log('✅ 运行环境：已加载外部 .env 配置');
 }
 
 export interface ProtocolOptions {
@@ -124,9 +133,19 @@ export interface ServerConfig {
   displayIp: string;
   defaultAvatar: string;
   enableUpdateCheck: boolean;
+  trustProxyHops: number;
+  allowedOrigins: string[];
   captchaProvider: 'geetest' | 'none';
   geetestId?: string;
   geetestKey?: string;
+  federationEnabled: boolean;
+  federationSeedNodes: string[];
+  federationSecret: string;
+  federationNodeId: string;
+  federationNodeUrl: string;
+  federationHealthInterval: number;
+  federationSyncInterval: number;
+  federationAllowLocal: boolean;
 }
 
 const defaultConfig: ServerConfig = {
@@ -139,12 +158,8 @@ const defaultConfig: ServerConfig = {
   enablePriWeb: false,
   priPrefix: 'sm',
   useProxyProtocol: false,
-  protocol: {
-    tcp: true,
-  },
-  logging: {
-    level: 'info',
-  },
+  protocol: { tcp: true },
+  logging: { level: 'info' },
   phiraApiUrl: 'https://phira.5wyxi.com',
   serverName: 'Server',
   roomSize: 8,
@@ -156,51 +171,47 @@ const defaultConfig: ServerConfig = {
   banIdWhitelist: [],
   banIpWhitelist: [],
   silentPhiraIds: [],
-  serverAnnouncement: `你好{{name}}，欢迎来到 {{serverName}} 服务器`,
+  serverAnnouncement: 'Hello {{name}}, welcome to {{serverName}} server',
   sessionSecret: 'a-very-insecure-secret-change-it',
-  loginBlacklistDuration: 600, // 10 minutes
+  loginBlacklistDuration: 600,
   displayIp: 'phira.funxlink.fun:19723',
   defaultAvatar: 'https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404',
   enableUpdateCheck: true,
+  trustProxyHops: 1,
+  allowedOrigins: [],
   captchaProvider: 'none',
+  federationEnabled: false,
+  federationSeedNodes: [],
+  federationSecret: '',
+  federationNodeId: '',
+  federationNodeUrl: '',
+  federationHealthInterval: 300,
+  federationSyncInterval: 150,
+  federationAllowLocal: false,
 };
 
 const parseBoolean = (value: string | undefined, fallback: boolean): boolean => {
-  if (value === undefined) {
-    return fallback;
-  }
-
+  if (value === undefined) return fallback;
   return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
 };
 
 const parseNumberList = (value: string | undefined, fallback: number[]): number[] => {
-  if (value === undefined || value.trim() === '') {
-    return fallback;
-  }
+  if (value === undefined || value.trim() === '') return fallback;
   return value.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
 };
 
-// 导出环境变量配置（统一接口）
 export const env = {
-  // 服务器配置
   port: parseInt(process.env.PORT || '12346', 10),
   host: process.env.HOST || '0.0.0.0',
   webPort: parseInt(process.env.WEB_PORT || '8080', 10),
   enableWebServer: parseBoolean(process.env.ENABLE_WEB_SERVER, true),
   useProxyProtocol: parseBoolean(process.env.USE_PROXY_PROTOCOL, false),
-  
-  // 验证码配置
   captchaProvider: (process.env.CAPTCHA_PROVIDER || 'none').toLowerCase() as 'geetest' | 'none',
-
-  // 房间过滤配置
   enablePubWeb: parseBoolean(process.env.ENABLE_PUB_WEB, false),
   pubPrefix: process.env.PUB_PREFIX || 'pub',
   enablePriWeb: parseBoolean(process.env.ENABLE_PRI_WEB, false),
   priPrefix: process.env.PRI_PREFIX || 'sm',
-
   roomSize: parseInt(process.env.ROOM_SIZE || '8', 10),
-  
-  // Admin
   adminName: process.env.ADMIN_NAME || 'admin',
   adminPassword: process.env.ADMIN_PASSWORD || 'password',
   adminSecret: process.env.ADMIN_SECRET || '',
@@ -211,33 +222,21 @@ export const env = {
   silentPhiraIds: parseNumberList(process.env.SILENT_PHIRA_IDS, []),
   sessionSecret: process.env.SESSION_SECRET || 'a-very-insecure-secret-change-it',
   loginBlacklistDuration: parseInt(process.env.LOGIN_BLACKLIST_DURATION || '600', 10),
-  
-  // Phira API
   phiraApiUrl: process.env.PHIRA_API_URL || 'https://phira.5wyxi.com',
-  
-  // 协议配置
   tcpEnabled: parseBoolean(process.env.TCP_ENABLED, true),
-  
-  // 日志配置
   logLevel: process.env.LOG_LEVEL || 'info',
-
-  // Server Name
   serverName: process.env.SERVER_NAME || 'Server',
-  
-  // 环境
+  federationEnabled: parseBoolean(process.env.FEDERATION_ENABLED, false),
+  federationSeedNodes: (process.env.FEDERATION_SEED_NODES || '').split(',').map(s => s.trim()).filter(s => s !== ''),
+  federationSecret: process.env.FEDERATION_SECRET || '',
+  federationNodeId: process.env.FEDERATION_NODE_ID || '',
+  federationNodeUrl: process.env.FEDERATION_NODE_URL || '',
+  federationHealthInterval: parseInt(process.env.FEDERATION_HEALTH_INTERVAL || '300', 10),
+  federationSyncInterval: parseInt(process.env.FEDERATION_SYNC_INTERVAL || '150', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
   isDevelopment: process.env.NODE_ENV !== 'production',
   isProduction: process.env.NODE_ENV === 'production',
 } as const;
-
-// 验证必需的环境变量（当前暂时没有必需变量）
-const requiredEnvVars: string[] = [];
-
-for (const varName of requiredEnvVars) {
-  if (!process.env[varName]) {
-    throw new Error(`缺少必需的环境变量: ${varName}`);
-  }
-}
 
 export const createServerConfig = (overrides: Partial<ServerConfig> = {}): ServerConfig => {
   const envConfig: ServerConfig = {
@@ -250,12 +249,8 @@ export const createServerConfig = (overrides: Partial<ServerConfig> = {}): Serve
     enablePriWeb: parseBoolean(process.env.ENABLE_PRI_WEB, defaultConfig.enablePriWeb),
     priPrefix: process.env.PRI_PREFIX ?? defaultConfig.priPrefix,
     useProxyProtocol: parseBoolean(process.env.USE_PROXY_PROTOCOL, defaultConfig.useProxyProtocol),
-    protocol: {
-      tcp: parseBoolean(process.env.TCP_ENABLED, defaultConfig.protocol.tcp),
-    },
-    logging: {
-      level: process.env.LOG_LEVEL ?? defaultConfig.logging.level,
-    },
+    protocol: { tcp: parseBoolean(process.env.TCP_ENABLED, defaultConfig.protocol.tcp) },
+    logging: { level: process.env.LOG_LEVEL ?? defaultConfig.logging.level },
     phiraApiUrl: process.env.PHIRA_API_URL ?? defaultConfig.phiraApiUrl,
     serverName: process.env.SERVER_NAME ?? defaultConfig.serverName,
     roomSize: Number.parseInt(process.env.ROOM_SIZE ?? `${defaultConfig.roomSize}`, 10),
@@ -273,33 +268,33 @@ export const createServerConfig = (overrides: Partial<ServerConfig> = {}): Serve
     displayIp: process.env.DISPLAY_IP ?? defaultConfig.displayIp,
     defaultAvatar: process.env.DEFAULT_AVATAR ?? defaultConfig.defaultAvatar,
     enableUpdateCheck: parseBoolean(process.env.ENABLE_UPDATE_CHECK, defaultConfig.enableUpdateCheck),
-    captchaProvider: (process.env.CAPTCHA_PROVIDER || 'none').toLowerCase() as  'geetest' | 'none',
+    trustProxyHops: Number.parseInt(process.env.TRUST_PROXY_HOPS ?? `${defaultConfig.trustProxyHops}`, 10),
+    allowedOrigins: (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(s => s !== ''),
+    captchaProvider: (process.env.CAPTCHA_PROVIDER || 'none').toLowerCase() as 'geetest' | 'none',
     geetestId: process.env.GEETEST_ID,
     geetestKey: process.env.GEETEST_KEY,
+    federationEnabled: parseBoolean(process.env.FEDERATION_ENABLED, defaultConfig.federationEnabled),
+    federationSeedNodes: (process.env.FEDERATION_SEED_NODES || '').split(',').map(s => s.trim()).filter(s => s !== ''),
+    federationSecret: process.env.FEDERATION_SECRET ?? defaultConfig.federationSecret,
+    federationNodeId: process.env.FEDERATION_NODE_ID ?? defaultConfig.federationNodeId,
+    federationNodeUrl: process.env.FEDERATION_NODE_URL ?? defaultConfig.federationNodeUrl,
+    federationHealthInterval: Number.parseInt(process.env.FEDERATION_HEALTH_INTERVAL ?? `${defaultConfig.federationHealthInterval}`, 10),
+    federationSyncInterval: Number.parseInt(process.env.FEDERATION_SYNC_INTERVAL ?? `${defaultConfig.federationSyncInterval}`, 10),
+    federationAllowLocal: parseBoolean(process.env.FEDERATION_ALLOW_LOCAL, defaultConfig.federationAllowLocal),
   };
 
   return {
     ...envConfig,
     ...overrides,
-    protocol: {
-      ...envConfig.protocol,
-      ...overrides.protocol,
-    },
-    logging: {
-      ...envConfig.logging,
-      ...overrides.logging,
-    },
+    protocol: { ...envConfig.protocol, ...overrides.protocol },
+    logging: { ...envConfig.logging, ...overrides.logging },
   };
 };
 
 export class ConfigService {
   private readonly config: ServerConfig;
-
   constructor(overrides?: Partial<ServerConfig>) {
     this.config = createServerConfig(overrides);
   }
-
-  getConfig(): ServerConfig {
-    return this.config;
-  }
+  getConfig(): ServerConfig { return this.config; }
 }

@@ -35,6 +35,7 @@ export class ProtocolHandler {
   private readonly userConnections = new Map<number, string>();
   private readonly connectionClosers = new Map<string, () => void>();
   private readonly connectionIps = new Map<string, string>();
+  private federationManager: any = null;  // 联邦管理器（避免循环依赖用 any）
 
   constructor(
     private readonly roomManager: RoomManager,
@@ -50,6 +51,71 @@ export class ProtocolHandler {
 
   public getSessionCount(): number {
     return this.sessions.size;
+  }
+
+  // ========== 联邦功能方法 ==========
+
+  public setFederationManager(fm: any): void {
+    this.federationManager = fm;
+  }
+
+  /** 为联邦远程玩家创建虚拟会话（权威服务器侧） */
+  public createFederatedSession(
+    connectionId: string,
+    userId: number,
+    userInfo: UserInfo,
+    broadcastCallback: (cmd: ServerCommand) => void,
+  ): void {
+    this.sessions.set(connectionId, {
+      userId,
+      userInfo,
+      connectionId,
+      ip: 'federation',
+    });
+    this.broadcastCallbacks.set(connectionId, broadcastCallback);
+    this.userConnections.set(userId, connectionId);
+    this.onSessionChange?.();
+    this.logger.debug(`[联邦] 已创建联邦会话: ${connectionId} (用户: ${userInfo.name}, ID: ${userId})`, { userId });
+  }
+
+  /** 移除联邦虚拟会话 */
+  public removeFederatedSession(connectionId: string): void {
+    const session = this.sessions.get(connectionId);
+    if (session) {
+      if (this.userConnections.get(session.userId) === connectionId) {
+        this.userConnections.delete(session.userId);
+      }
+      this.sessions.delete(connectionId);
+      this.broadcastCallbacks.delete(connectionId);
+      this.onSessionChange?.();
+      this.logger.debug(`[联邦] 已移除联邦会话: ${connectionId}`, { userId: session.userId });
+    }
+  }
+
+  /** 向指定用户发送命令（用于联邦事件回调） */
+  public sendCommandToUser(userId: number, command: ServerCommand): boolean {
+    const connectionId = this.userConnections.get(userId);
+    if (!connectionId) return false;
+
+    const callback = this.broadcastCallbacks.get(connectionId);
+    if (!callback) return false;
+
+    callback(command);
+    return true;
+  }
+
+  /** 广播联邦玩家加入房间事件 */
+  public broadcastFederatedJoin(room: Room, userInfo: UserInfo, userId: number): void {
+    this.broadcastToRoom(room, {
+      type: ServerCommandType.OnJoinRoom,
+      user: userInfo,
+    });
+
+    this.broadcastMessage(room, {
+      type: 'JoinRoom',
+      user: userId,
+      name: userInfo.name,
+    });
   }
 
   public getBanManager(): BanManager | undefined {
@@ -322,9 +388,11 @@ export class ProtocolHandler {
     // Fetch names for the blacklist report
     const blacklistDetails: string[] = [];
     for (const id of userIds) {
+        if (isNaN(Number(id))) continue; // SSRF 防护：严格数字校验
         try {
             const response = await fetch(`https://phira.5wyxi.com/user/${id}`, {
-                headers: { 'User-Agent': 'PhiraServer/1.0' }
+                headers: { 'User-Agent': 'PhiraServer/1.0' },
+                redirect: 'error'
             });
             if (response.ok) {
                 const data = await response.json() as any;
@@ -374,9 +442,11 @@ export class ProtocolHandler {
     // Fetch names for the whitelist report
     const whitelistDetails: string[] = [];
     for (const id of userIds) {
+        if (isNaN(Number(id))) continue; // SSRF 防护：严格数字校验
         try {
             const response = await fetch(`https://phira.5wyxi.com/user/${id}`, {
-                headers: { 'User-Agent': 'PhiraServer/1.0' }
+                headers: { 'User-Agent': 'PhiraServer/1.0' },
+                redirect: 'error'
             });
             if (response.ok) {
                 const data = await response.json() as any;
@@ -478,10 +548,12 @@ export class ProtocolHandler {
   }
 
   private async fetchChartInfo(chartId: number): Promise<ChartInfo> {
+    if (isNaN(Number(chartId))) throw new Error('Invalid chart ID');
     this.logger.debug(`正在获取谱面信息: ${chartId}`, { userId: -1 });
     
     const response = await fetch(`https://phira.5wyxi.com/chart/${chartId}`, {
-        headers: { 'User-Agent': 'PhiraServer/1.0' }
+        headers: { 'User-Agent': 'PhiraServer/1.0' },
+        redirect: 'error'
     });
     
     if (!response.ok) {
@@ -497,10 +569,11 @@ export class ProtocolHandler {
     this.logger.debug(`谱面 API 响应: ${chartData.name} (ID: ${chartId}, 上传者: ${uploaderId})`, { userId: -1 });
     
     let uploaderInfo;
-    if (uploaderId && !isNaN(uploaderId)) {
+    if (uploaderId && !isNaN(Number(uploaderId))) {
         try {
             const userResponse = await fetch(`https://phira.5wyxi.com/user/${uploaderId}`, {
-                headers: { 'User-Agent': 'PhiraServer/1.0' }
+                headers: { 'User-Agent': 'PhiraServer/1.0' },
+                redirect: 'error'
             });
             if (userResponse.ok) {
                 const userData = await userResponse.json() as any;
@@ -550,6 +623,19 @@ export class ProtocolHandler {
 
     const session = this.sessions.get(connectionId);
     if (session) {
+      // 联邦代理玩家断线：通知远程服务器
+      if (this.federationManager?.isPlayerProxied(session.userId)) {
+        this.federationManager.proxyLeaveRoom(session.userId);
+        this.sessions.delete(connectionId);
+        if (this.userConnections.get(session.userId) === connectionId) {
+          this.userConnections.delete(session.userId);
+        }
+        this.broadcastCallbacks.delete(connectionId);
+        this.onSessionChange?.();
+        this.logger.info(`[联邦断线] 代理玩家 ${session.userInfo.name} (${session.userId}) 已断开`, { userId: session.userId });
+        return;
+      }
+
       const room = this.roomManager.getRoomByUserId(session.userId);
       if (room) {
         const roomId = room.id;
@@ -607,7 +693,18 @@ export class ProtocolHandler {
     const session = this.sessions.get(connectionId);
     this.logger.debug(`收到消息: ${connectionId} (类型: ${ClientCommandType[message.type]})`, { userId: session?.userId });
 
-    this.broadcastCallbacks.set(connectionId, sendResponse);
+    // 联邦连接不覆盖广播回调（保持联邦HTTP回调）
+    if (!connectionId.startsWith('federation:')) {
+      this.broadcastCallbacks.set(connectionId, sendResponse);
+    }
+
+    // 联邦代理：如果玩家在远程房间中，转发命令到权威服务器
+    if (session && this.federationManager?.isPlayerProxied(session.userId)) {
+      if (message.type !== ClientCommandType.Authenticate) {
+        this.federationManager.proxyCommand(session.userId, message, sendResponse);
+        return;
+      }
+    }
 
     switch (message.type) {
       case ClientCommandType.Authenticate:
@@ -669,9 +766,11 @@ export class ProtocolHandler {
   }
 
   private async fetchUserInfo(userId: number): Promise<{ rks?: number; bio?: string }> {
+    if (isNaN(Number(userId))) return {};
     try {
         const response = await fetch(`https://phira.5wyxi.com/user/${userId}`, {
-            headers: { 'User-Agent': 'PhiraServer/1.0' }
+            headers: { 'User-Agent': 'PhiraServer/1.0' },
+            redirect: 'error'
         });
         if (response.ok) {
             const userData = await response.json() as any;
@@ -952,6 +1051,13 @@ export class ProtocolHandler {
             user: -1,
             content: `Hi,${session.userInfo.name}！此房间为${roomTypeText}房间，房间号为${roomId}，祝您玩的开心！`,
           });
+
+          // 5. 广播房间创建事件给联邦节点
+          if (this.federationManager?.getConfig?.()?.enabled) {
+            this.federationManager.broadcastRoomEvent('room_created', room.id, 
+              this.federationManager.buildLocalRoomInfo(room)
+            ).catch(() => {});
+          }
       }, 250);
     } catch (error) {
       const errorMessage = (error as Error).message;
@@ -991,6 +1097,19 @@ export class ProtocolHandler {
 
     const room = this.roomManager.getRoom(roomId);
     if (!room) {
+      // 检查联邦远程房间
+      if (this.federationManager?.isRemoteRoom(roomId)) {
+        this.logger.info(`[联邦] 玩家 ${session.userId} 尝试加入远程房间 ${roomId}`, { userId: session.userId });
+        this.federationManager.proxyJoinRoom(
+          session.userId,
+          { ...session.userInfo, monitor },
+          roomId,
+          monitor,
+          sendResponse,
+        );
+        return;
+      }
+
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.JoinRoom,
         result: { ok: false, error: '找不到你想要的房间辣' },
@@ -1092,6 +1211,19 @@ export class ProtocolHandler {
     this.roomManager.removePlayerFromRoom(room.id, session.userId);
 
     const updatedRoom = this.roomManager.getRoom(room.id);
+
+    // 联邦：广播房间变更
+    if (this.federationManager?.getConfig?.()?.enabled) {
+      if (!updatedRoom) {
+        // 房间已被删除
+        this.federationManager.broadcastRoomEvent('room_deleted', room.id, null).catch(() => {});
+      } else {
+        this.federationManager.broadcastRoomEvent('room_updated', room.id,
+          this.federationManager.buildLocalRoomInfo(updatedRoom)
+        ).catch(() => {});
+      }
+    }
+
     if (updatedRoom && wasHost && updatedRoom.ownerId !== session.userId) {
       this.broadcastMessage(updatedRoom, {
         type: 'NewHost',
@@ -1281,6 +1413,13 @@ export class ProtocolHandler {
           type: ServerCommandType.SelectChart,
           result: { ok: true, value: undefined },
         });
+
+        // 联邦：广播谱面选择事件
+        if (this.federationManager?.getConfig?.()?.enabled) {
+          this.federationManager.broadcastRoomEvent('chart_selected', room.id,
+            this.federationManager.buildLocalRoomInfo(room)
+          ).catch(() => {});
+        }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'failed to fetch chart';
         this.logger.error(`获取谱面信息失败: ${connectionId} (谱面: ${chartId}, 错误: ${errorMessage})`, { userId: session.userId });
@@ -1385,6 +1524,13 @@ export class ProtocolHandler {
       type: ServerCommandType.RequestStart,
       result: { ok: true, value: undefined },
     });
+
+    // 联邦：广播游戏开始事件
+    if (this.federationManager?.getConfig?.()?.enabled) {
+      this.federationManager.broadcastRoomEvent('game_started', room.id,
+        this.federationManager.buildLocalRoomInfo(room)
+      ).catch(() => {});
+    }
   }
 
   private handleReady(
@@ -1613,7 +1759,10 @@ export class ProtocolHandler {
 
     let recordInfo;
     try {
-      const response = await fetch(`https://phira.5wyxi.com/record/${recordId}`)
+      if (isNaN(Number(recordId))) throw new Error('Invalid record ID');
+      const response = await fetch(`https://phira.5wyxi.com/record/${recordId}`, {
+          redirect: 'error'
+      });
 
       if (!response.ok) {
         throw new Error(`API返回了一个神秘的状态： ${response.status}`);
@@ -1863,6 +2012,13 @@ export class ProtocolHandler {
     }
 
     this.broadcastRoomUpdate(room);
+
+    // 联邦：广播游戏结束事件
+    if (this.federationManager?.getConfig?.()?.enabled) {
+      this.federationManager.broadcastRoomEvent('game_ended', room.id,
+        this.federationManager.buildLocalRoomInfo(room)
+      ).catch(() => {});
+    }
   }
 
   public broadcastRoomUpdate(room: Room): void {

@@ -234,12 +234,8 @@
                             <option value="ip" data-i18n="ban.type_game_ip">In-game IP</option>
                         </select>
                         <div id="ban-target-container" style="display: flex; flex: 1; min-width: 150px;">
-                            <select id="ban-user-select" style="width: 100%;">
-                                <option value="">-- Select Player --</option>
-                            </select>
-                            <select id="ban-ip-select" style="width: 100%; display: none;">
-                                <option value="">-- Select IP --</option>
-                            </select>
+                            <input type="text" id="ban-target-input" list="ban-target-list" data-i18n-placeholder="ban.target_placeholder" style="width: 100%;">
+                            <datalist id="ban-target-list"></datalist>
                         </div>
                         <input type="number" id="ban-duration-input" data-i18n-placeholder="ban.duration_placeholder" style="width: 120px;">
                         <input type="text" id="ban-reason-input" data-i18n-placeholder="ban.reason_placeholder" style="flex: 1;">
@@ -309,53 +305,42 @@
             } catch (e) { console.error('Failed to fetch rooms', e); }
         }
 
+        let onlinePlayers = [];
+
         async function fetchOnlinePlayers() {
             try {
                 const res = await fetch('/api/all-players');
-                const players = await res.json();
-                
-                const uSelect = document.getElementById('ban-user-select');
-                const iSelect = document.getElementById('ban-ip-select');
-                
-                const currentU = uSelect.value;
-                const currentI = iSelect.value;
-                
-                uSelect.innerHTML = '<option value="">-- Select Player --</option>';
-                iSelect.innerHTML = '<option value="">-- Select IP --</option>';
-                
-                players.forEach(p => {
-                    if (p.id === -1) return; // Skip system bot
-                    
-                    // Populate User ID select
-                    const uOption = document.createElement('option');
-                    uOption.value = p.id;
-                    uOption.textContent = `${p.name} (ID: ${p.id})`;
-                    uSelect.appendChild(uOption);
-                    
-                    // Populate IP select
-                    const iOption = document.createElement('option');
-                    iOption.value = p.ip;
-                    iOption.textContent = `${p.ip} (${p.name})`;
-                    iSelect.appendChild(iOption);
-                });
-                
-                uSelect.value = currentU;
-                iSelect.value = currentI;
+                onlinePlayers = await res.json();
+                updateBanDatalist();
             } catch (e) { console.error('Failed to fetch players', e); }
         }
 
-        function updateBanTargetUI() {
+        function updateBanDatalist() {
             const type = document.getElementById('ban-type-select').value;
-            const userSelect = document.getElementById('ban-user-select');
-            const ipSelect = document.getElementById('ban-ip-select');
+            const dl = document.getElementById('ban-target-list');
+            if (!dl) return;
             
-            if (type === 'id') {
-                userSelect.style.display = 'block';
-                ipSelect.style.display = 'none';
-            } else {
-                userSelect.style.display = 'none';
-                ipSelect.style.display = 'block';
-            }
+            dl.innerHTML = '';
+            
+            onlinePlayers.forEach(p => {
+                if (p.id === -1) return; // Skip system bot
+                
+                const option = document.createElement('option');
+                if (type === 'id') {
+                    option.value = p.id;
+                    option.textContent = `${p.name} (ID: ${p.id})`;
+                } else {
+                    option.value = p.ip;
+                    option.textContent = `${p.ip} (${p.name})`;
+                }
+                dl.appendChild(option);
+            });
+        }
+
+        function updateBanTargetUI() {
+            const input = document.getElementById('ban-target-input');
+            if (input) input.value = '';
+            updateBanDatalist();
         }
 
         function renderRoomChips(prefix) {
@@ -547,9 +532,7 @@
 
         async function executeBan() {
             const type = document.getElementById('ban-type-select').value;
-            const uSelect = document.getElementById('ban-user-select');
-            const iSelect = document.getElementById('ban-ip-select');
-            const target = (type === 'id' ? uSelect.value : iSelect.value).trim();
+            const target = document.getElementById('ban-target-input').value.trim();
             
             const duration = document.getElementById('ban-duration-input').value.trim();
             const reason = document.getElementById('ban-reason-input').value.trim();
@@ -564,6 +547,7 @@
                 });
                 if ((await res.json()).success) {
                     alert(I18n.t('room.admin.success'));
+                    document.getElementById('ban-target-input').value = '';
                     await fetchBans();
                     if (type === 'id') await fetchOnlinePlayers();
                 }

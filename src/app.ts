@@ -13,6 +13,7 @@ import { NetworkServer } from './network/NetworkServer';
 import { HttpServer } from './network/HttpServer';
 import { WebSocketServer } from './network/WebSocketServer';
 import { version } from '../package.json';
+import { FederationManager, FederationConfig } from './federation/FederationManager';
 
 export interface Application {
   readonly config: ServerConfig;
@@ -56,8 +57,9 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
   const authLogger = new ConsoleLogger('认证', logLevel);
   const protocolLogger = new ConsoleLogger('协议', logLevel);
   const webSocketLogger = new ConsoleLogger('WebSocket', logLevel);
+  const federationLogger = new ConsoleLogger('联邦', logLevel);
 
-  [logger, roomLogger, authLogger, protocolLogger, webSocketLogger].forEach(l => {
+  [logger, roomLogger, authLogger, protocolLogger, webSocketLogger, federationLogger].forEach(l => {
     l.setSilentIds(config.silentPhiraIds);
   });
 
@@ -91,6 +93,31 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
     config.defaultAvatar
   );
   
+  // ========== 联邦节点管理 ==========
+  let federationManager: FederationManager | undefined;
+  
+  if (config.federationEnabled) {
+    const fedConfig: FederationConfig = {
+      enabled: config.federationEnabled,
+      seedNodes: config.federationSeedNodes,
+      secret: config.federationSecret,
+      nodeId: config.federationNodeId,
+      nodeUrl: config.federationNodeUrl,
+      healthInterval: config.federationHealthInterval,
+      syncInterval: config.federationSyncInterval,
+      serverName: config.serverName,
+      allowLocal: config.federationAllowLocal,
+    };
+
+    federationManager = new FederationManager(fedConfig, federationLogger, roomManager);
+    
+    // 双向绑定：FederationManager <-> ProtocolHandler
+    federationManager.setProtocolHandler(protocolHandler);
+    protocolHandler.setFederationManager(federationManager);
+    
+    logger.info(`[联邦] 联邦节点已配置 (种子节点: ${config.federationSeedNodes.length} 个)`);
+  }
+
   const networkServer = new NetworkServer(config, logger, protocolHandler);
   let httpServer: HttpServer | undefined;
   
@@ -101,6 +128,7 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
         roomManager,
         protocolHandler,
         banManager,
+        federationManager,
       );
       webSocketServer = new WebSocketServer(
         httpServer.getInternalServer(),
@@ -108,7 +136,8 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
         protocolHandler,
         config,
         webSocketLogger,
-        httpServer.getSessionParser()
+        httpServer.getSessionParser(),
+        federationManager,
       );
   } else {
       logger.info('Web server is disabled via configuration.');
@@ -123,9 +152,19 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
         promises.push(httpServer.start());
     }
     await Promise.all(promises);
+
+    // 启动联邦节点（在HTTP服务器启动后，因为需要接收联邦请求）
+    if (federationManager) {
+      await federationManager.start();
+    }
   };
 
   const stop = async (): Promise<void> => {
+    // 先停止联邦（清理远程连接）
+    if (federationManager) {
+      await federationManager.stop();
+    }
+
     const promises: Promise<void>[] = [networkServer.stop()];
     if (httpServer) {
         promises.push(httpServer.stop());
@@ -140,8 +179,6 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
     start,
     stop,
     getTcpServer: () => networkServer,
-    getHttpServer: () => httpServer!, // Note: this might be undefined now, but interface requires it. 
-    // Ideally interface should be updated, but for minimal changes we can cast or update interface. 
-    // Let's check the interface definition.
+    getHttpServer: () => httpServer!, 
   };
 };

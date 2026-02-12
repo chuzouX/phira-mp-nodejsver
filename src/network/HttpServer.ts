@@ -9,6 +9,7 @@ import { ServerConfig } from '../config/config';
 import { RoomManager } from '../domain/rooms/RoomManager';
 import { ProtocolHandler } from '../domain/protocol/ProtocolHandler';
 import { BanManager } from '../domain/auth/BanManager';
+import { FederationManager } from '../federation/FederationManager';
 
 interface AdminSession extends SessionData {
   isAdmin?: boolean;
@@ -28,18 +29,23 @@ export class HttpServer {
   private readonly blacklistFile = path.join(process.cwd(), 'data', 'login_blacklist.json');
   private readonly cleanupInterval: NodeJS.Timeout;
   
+  private readonly rateLimits = new Map<string, { count: number; lastReset: number }>();
+  private cachedStatus: any = null;
+  private statusCacheTime = 0;
+
   constructor(
     private readonly config: ServerConfig,
     private readonly logger: Logger,
     private readonly roomManager: RoomManager,
     private readonly protocolHandler: ProtocolHandler,
     private readonly banManager: BanManager,
+    private readonly federationManager?: FederationManager,
   ) {
     this.app = express();
     this.server = createServer(this.app);
 
-    // Trust Nginx proxy headers (X-Forwarded-For)
-    this.app.set('trust proxy', true);
+    // Set trust proxy hops based on configuration
+    this.app.set('trust proxy', this.config.trustProxyHops);
 
     // Initialize session parser
     this.sessionParser = session({
@@ -56,9 +62,10 @@ export class HttpServer {
 
     this.setupMiddleware();
     this.setupRoutes();
+    this.setupFederationRoutes();
     this.loadBlacklist();
     
-    // Cleanup expired login attempts every hour to prevent memory leak
+    // Cleanup expired login attempts and rate limits every hour
     this.cleanupInterval = setInterval(() => {
         const now = Date.now();
         for (const [ip, attempt] of this.loginAttempts.entries()) {
@@ -66,7 +73,33 @@ export class HttpServer {
                 this.loginAttempts.delete(ip);
             }
         }
+        for (const [ip, limit] of this.rateLimits.entries()) {
+            if (now - limit.lastReset > 60 * 1000) {
+                this.rateLimits.delete(ip);
+            }
+        }
     }, 60 * 60 * 1000);
+  }
+
+  private rateLimitMiddleware(req: express.Request, res: express.Response, next: express.NextFunction): void {
+      const ip = this.getRealIp(req);
+      const now = Date.now();
+      const limit = this.rateLimits.get(ip) || { count: 0, lastReset: now };
+
+      if (now - limit.lastReset > 60000) { // 1 minute window
+          limit.count = 0;
+          limit.lastReset = now;
+      }
+
+      limit.count++;
+      this.rateLimits.set(ip, limit);
+
+      if (limit.count > 60) { // Max 60 requests per minute
+          res.status(429).json({ error: 'Too many requests. Please slow down.' });
+          return;
+      }
+
+      next();
   }
 
   private loadBlacklist(): void {
@@ -116,21 +149,19 @@ export class HttpServer {
   }
 
   private getRealIp(req: express.Request): string {
-    // Priority: HTTP Headers (Standard for Web Proxies)
-    const xForwardedFor = req.headers['x-forwarded-for'];
-    if (xForwardedFor) {
-      const ips = typeof xForwardedFor === 'string' ? xForwardedFor.split(',') : (Array.isArray(xForwardedFor) ? xForwardedFor : []);
-      if (ips.length > 0) {
-        return ips[0].trim();
-      }
-    }
-    const xRealIp = req.headers['x-real-ip'];
-    if (xRealIp && typeof xRealIp === 'string') {
-      return xRealIp.trim();
+    // 1. First priority: Express's req.ip (parsed from X-Forwarded-For via trustProxyHops)
+    const ip = req.ip;
+    
+    // 2. If req.ip is local/unset but X-Real-IP exists, it might be a direct proxy setup
+    const isLocal = !ip || ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+    if (isLocal) {
+        const xRealIp = req.headers['x-real-ip'];
+        if (xRealIp && typeof xRealIp === 'string') {
+            return xRealIp.trim();
+        }
     }
 
-    // Fallback: Express req.ip (if trust proxy is on) or socket remoteAddress
-    return req.ip || req.socket.remoteAddress || 'unknown';
+    return ip || req.socket.remoteAddress || 'unknown';
   }
 
   private isBlacklisted(ip: string): boolean {
@@ -203,7 +234,10 @@ export class HttpServer {
               }).toString();
 
               const verifyUrl = `http://gcaptcha4.geetest.com/validate?${query}`;
-              const response = await fetch(verifyUrl, { method: 'POST' });
+              const response = await fetch(verifyUrl, { 
+                  method: 'POST',
+                  redirect: 'error' // 防止 SSRF 重定向攻击
+              });
               const result = await response.json() as any;
 
               if (result.result === 'success') {
@@ -245,6 +279,49 @@ export class HttpServer {
   }
 
   private adminAuth(req: express.Request, res: express.Response, next: express.NextFunction): void {
+    // 1. Basic CSRF Protection: Verify Origin/Referer for sensitive state-changing methods
+    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
+        const origin = req.get('origin');
+        const referer = req.get('referer');
+        const host = req.get('host');
+
+        // If Origin is present, it must match our Host
+        if (origin) {
+            try {
+                const originUrl = new URL(origin);
+                const isAllowed = this.config.allowedOrigins.some(ao => {
+                    try { return new URL(ao).host === originUrl.host; } catch { return false; }
+                });
+
+                if (!isAllowed && originUrl.host !== host) {
+                    this.logger.warn(`CSRF 拦截: 异常的 Origin [${origin}], 预期 Host [${host}] 或白名单内容`);
+                    res.status(403).json({ error: 'Forbidden: CSRF validation failed (Origin mismatch)' });
+                    return;
+                }
+            } catch (e) {
+                res.status(403).json({ error: 'Forbidden: Invalid Origin header' });
+                return;
+            }
+        } else if (referer) {
+            // Fallback to Referer check
+            try {
+                const refererUrl = new URL(referer);
+                const isAllowed = this.config.allowedOrigins.some(ao => {
+                    try { return new URL(ao).host === refererUrl.host; } catch { return false; }
+                });
+
+                if (!isAllowed && refererUrl.host !== host) {
+                    this.logger.warn(`CSRF 拦截: 异常的 Referer [${referer}], 预期 Host [${host}] 或白名单内容`);
+                    res.status(403).json({ error: 'Forbidden: CSRF validation failed (Referer mismatch)' });
+                    return;
+                }
+            } catch (e) {
+                res.status(403).json({ error: 'Forbidden: Invalid Referer header' });
+                return;
+            }
+        }
+    }
+
     const isAdmin = (req.session as AdminSession).isAdmin;
     const providedSecret = req.header('X-Admin-Secret') || (req.query.admin_secret as string);
 
@@ -428,7 +505,7 @@ export class HttpServer {
         return res.json({ isAdmin });
     });
 
-    this.app.get('/api/all-players', this.adminAuth.bind(this), (_req, res) => {
+    this.app.get('/api/all-players', this.adminAuth.bind(this), this.rateLimitMiddleware.bind(this), (_req, res) => {
         const allPlayers = this.protocolHandler.getAllSessions().map(p => ({
             ...p,
             isAdmin: this.config.adminPhiraId.includes(p.id),
@@ -697,8 +774,14 @@ export class HttpServer {
     });
 
     // Public Status API for external servers
-    this.app.get('/api/status', (req, res) => {
+    this.app.get('/api/status', this.rateLimitMiddleware.bind(this), (req, res) => {
         const isAdmin = (req.session as AdminSession).isAdmin ?? false;
+
+        // Use cache for public requests (non-admin)
+        if (!isAdmin && Date.now() - this.statusCacheTime < 1000 && this.cachedStatus) {
+            return res.json(this.cachedStatus);
+        }
+
         const rooms = this.roomManager.listRooms()
             .filter(room => {
                 // Admin can see everything
@@ -742,11 +825,219 @@ export class HttpServer {
             serverName: this.config.serverName,
             onlinePlayers: this.protocolHandler.getSessionCount(),
             roomCount: rooms.length,
-            rooms: rooms
+            rooms: rooms,
+            // 联邦信息
+            federation: this.federationManager ? {
+              enabled: true,
+              nodeId: this.federationManager.getNodeId(),
+              remoteRooms: this.federationManager.getRemoteRooms().map((r: any) => ({
+                id: r.id,
+                name: r.name,
+                nodeId: r.nodeId,
+                nodeName: r.nodeName,
+                playerCount: r.playerCount,
+                maxPlayers: r.maxPlayers,
+                state: r.state,
+                locked: r.locked,
+                cycle: r.cycle,
+                players: r.players,
+              })),
+              nodes: this.federationManager.getOnlineNodes().map((n: any) => ({
+                id: n.id,
+                serverName: n.serverName,
+                status: n.status,
+              })),
+            } : { enabled: false },
         };
 
-        res.json(response);
+        if (!isAdmin) {
+            this.cachedStatus = response;
+            this.statusCacheTime = Date.now();
+        }
+
+        return res.json(response);
     });
+  }
+
+  // ==================== 联邦路由 ====================
+
+  private setupFederationRoutes(): void {
+    if (!this.federationManager) {
+      this.logger.debug('[联邦] 联邦管理器未提供，跳过联邦路由注册');
+      return;
+    }
+
+    const fm = this.federationManager;
+
+    // 联邦认证中间件：验证共享密钥
+    const authFederation = (req: express.Request, res: express.Response, next: express.NextFunction): void => {
+      const secret = req.header('X-Federation-Secret');
+      const expectedSecret = fm.getConfig().secret;
+      if (!secret || !expectedSecret || secret !== expectedSecret) {
+        res.status(403).json({ error: 'Invalid federation secret' });
+        return;
+      }
+      next();
+    };
+
+    // === 节点发现 ===
+
+    // 握手：接收其他节点的自我介绍，返回自身信息和已知节点列表
+    this.app.post('/api/federation/handshake', authFederation, (req, res) => {
+      const { nodeId, nodeUrl, serverName, isReverse } = req.body;
+      if (!nodeId || !nodeUrl) {
+        return res.status(400).json({ error: 'Missing nodeId or nodeUrl' });
+      }
+
+      this.logger.info(`[联邦HTTP] 收到握手请求: 来自 ${serverName} (ID: ${nodeId}, URL: ${nodeUrl}, 反向: ${!!isReverse})`);
+      const result = fm.handleIncomingHandshake({ nodeId, nodeUrl, serverName: serverName || 'Unknown', isReverse: !!isReverse });
+      this.logger.info(`[联邦HTTP] 握手响应已发送给 ${serverName}`);
+      return res.json(result);
+    });
+
+    // 健康检查：返回节点状态和已知节点列表
+    this.app.get('/api/federation/health', authFederation, (_req, res) => {
+      return res.json({
+        nodeId: fm.getNodeId(),
+        serverName: fm.getConfig().serverName,
+        status: 'online',
+        timestamp: Date.now(),
+        peers: fm.getNodes().filter(n => n.status === 'online').map(n => ({
+          id: n.id,
+          url: n.url,
+          serverName: n.serverName,
+        })),
+      });
+    });
+
+    // 获取已知节点列表
+    this.app.get('/api/federation/peers', authFederation, (_req, res) => {
+      return res.json({
+        peers: fm.getNodes().map(n => ({
+          id: n.id,
+          url: n.url,
+          serverName: n.serverName,
+          status: n.status,
+          lastSeen: n.lastSeen,
+        })),
+      });
+    });
+
+    // === 房间与玩家查询 ===
+
+    // 获取本节点的房间列表（供其他节点同步）
+    this.app.get('/api/federation/rooms', authFederation, (_req, res) => {
+      const rooms = fm.getLocalRoomsForFederation();
+      this.logger.info(`[联邦HTTP] 收到房间查询请求，返回 ${rooms.length} 个本地房间`);
+      return res.json({ rooms });
+    });
+
+    // 获取本节点的所有在线玩家
+    this.app.get('/api/federation/players', authFederation, (_req, res) => {
+      const players = this.protocolHandler.getAllSessions().map(p => ({
+        id: p.id,
+        name: p.name,
+        roomId: p.roomId,
+        roomName: p.roomName,
+      }));
+      return res.json({ players });
+    });
+
+    // === 跨服代理 ===
+
+    // 代理加入：远程玩家请求加入本地房间
+    this.app.post('/api/federation/proxy/join', authFederation, (req, res) => {
+      const { roomId, userId, userInfo, sourceNodeId, sourceNodeUrl } = req.body;
+      if (!roomId || !userId || !userInfo || !sourceNodeId || !sourceNodeUrl) {
+        return res.status(400).json({ success: false, error: 'Missing required fields' });
+      }
+
+      const result = fm.handleIncomingJoin({ roomId, userId, userInfo, sourceNodeId, sourceNodeUrl });
+      return res.json(result);
+    });
+
+    // 代理命令：远程玩家在本地房间执行命令
+    this.app.post('/api/federation/proxy/command', authFederation, async (req, res) => {
+      const { roomId, userId, command, sourceNodeId } = req.body;
+      if (!roomId || !userId || !command || !sourceNodeId) {
+        return res.status(400).json({ success: false, error: 'Missing required fields' });
+      }
+
+      try {
+        const result = await fm.handleIncomingCommand({ roomId, userId, command, sourceNodeId });
+        return res.json(result);
+      } catch (error) {
+        this.logger.error(`[联邦] 处理代理命令失败: ${error}`);
+        return res.status(500).json({ success: false, error: 'Internal error' });
+      }
+    });
+
+    // 代理离开：远程玩家离开本地房间
+    this.app.post('/api/federation/proxy/leave', authFederation, (req, res) => {
+      const { roomId, userId, sourceNodeId } = req.body;
+      if (!roomId || !userId || !sourceNodeId) {
+        return res.status(400).json({ success: false, error: 'Missing required fields' });
+      }
+
+      const result = fm.handleIncomingLeave({ roomId, userId, sourceNodeId });
+      return res.json(result);
+    });
+
+    // 事件回调：权威服务器推送广播事件给代理服务器上的玩家
+    this.app.post('/api/federation/proxy/callback', authFederation, (req, res) => {
+      const { targetUserId, command } = req.body;
+      if (targetUserId === undefined || !command) {
+        return res.status(400).json({ success: false, error: 'Missing required fields' });
+      }
+
+      const delivered = fm.handleEventCallback({ targetUserId, command });
+      return res.json({ success: delivered });
+    });
+
+    // === 事件广播 ===
+
+    // 接收来自其他节点的房间事件
+    this.app.post('/api/federation/event', authFederation, (req, res) => {
+      const event = req.body;
+      if (!event || !event.type || !event.sourceNodeId) {
+        return res.status(400).json({ error: 'Invalid event' });
+      }
+
+      this.logger.info(`[联邦HTTP] 收到节点事件: ${event.type} (房间: ${event.roomId}, 来源: ${event.sourceNodeId})`);
+      fm.handleIncomingEvent(event);
+      return res.json({ success: true });
+    });
+
+    // === 管理接口 ===
+
+    // 联邦状态查询（管理员用）
+    this.app.get('/api/federation/status', this.adminAuth.bind(this), (_req, res) => {
+      return res.json(fm.getStatus());
+    });
+
+    // 手动添加联邦节点（管理员用）
+    this.app.post('/api/federation/add-node', this.adminAuth.bind(this), async (req, res) => {
+      const { nodeUrl } = req.body;
+      if (!nodeUrl) {
+        return res.status(400).json({ error: 'Missing nodeUrl' });
+      }
+
+      const success = await fm.handshakeWithNode(nodeUrl);
+      return res.json({ success });
+    });
+
+    // 手动移除联邦节点（管理员用）
+    this.app.post('/api/federation/remove-node', this.adminAuth.bind(this), (req, res) => {
+      const { nodeId } = req.body;
+      if (!nodeId) {
+        return res.status(400).json({ error: 'Missing nodeId' });
+      }
+
+      fm.removeNode(nodeId);
+      return res.json({ success: true });
+    });
+
+    this.logger.info(`[联邦] 已注册 ${fm.getConfig().enabled ? '启用' : '未启用'} 的联邦 HTTP 路由`);
   }
 
   public getInternalServer(): Server {

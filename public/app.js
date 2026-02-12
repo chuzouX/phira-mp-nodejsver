@@ -83,14 +83,18 @@ function renderRooms(rooms) {
         rooms.forEach(room => {
             totalPlayers += room.playerCount;
             const roomCard = document.createElement('div');
-            roomCard.className = 'room-card';
+            roomCard.className = 'room-card' + (room.isRemote ? ' room-card-remote' : '');
 
             const lockIcon = room.locked ? '&#128274;' : '&#128275;';
             const lockStatusClass = room.locked ? 'locked-status' : 'unlocked-status';
             const roomMode = room.cycle ? I18n.t('room.mode_cycle') : I18n.t('room.mode_normal');
 
+            const serverTag = room.isRemote 
+                ? `<span class="room-server-tag room-server-remote" title="${I18n.t('index.remote_room')}">🌐 ${room.serverName || I18n.t('common.unknown')}</span>` 
+                : (rooms.some(r => r.isRemote) ? `<span class="room-server-tag room-server-local">📍 ${room.serverName || I18n.t('index.local_server')}</span>` : '');
+
             roomCard.innerHTML = `
-                <h2>${I18n.t('room.room_no')}#${room.id}</h2>
+                <h2>${I18n.t('room.room_no')}#${room.id}${serverTag}</h2>
                 <div class="room-info">
                     <p>${I18n.t('room.mode')}: <span class="room-mode-tag">${roomMode}</span></p>
                     <p>${I18n.t('room.host')}: <span style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${room.ownerName} (ID: ${room.ownerId})">${room.ownerName} (ID: ${room.ownerId})</span></p>
@@ -101,7 +105,7 @@ function renderRooms(rooms) {
             `;
             
             const link = document.createElement('a');
-            link.href = `room.html?id=${room.id}`;
+            link.href = `room.html?id=${room.id}${room.isRemote ? '&remote=1&node=' + encodeURIComponent(room.nodeId || '') : ''}`;
             link.style.textDecoration = 'none';
             link.style.color = 'inherit';
             link.appendChild(roomCard);

@@ -72,6 +72,7 @@ npm install
 | `WEB_PORT` | HTTP/WS management server port | `8080` |
 | `TCP_ENABLED` | Enable/Disable TCP server | `true` |
 | `USE_PROXY_PROTOCOL` | Enable Proxy Protocol v2 for real IP | `false` |
+| `TRUST_PROXY_HOPS` | Number of proxy hops to trust (1 for Nginx, 2 for CDN+Nginx) | `1` |
 | `ENABLE_WEB_SERVER` | Enable/Disable HTTP server | `true` |
 | `SERVER_NAME` | Server broadcast name | `Server` |
 | `PHIRA_API_URL` | Base URL for Phira API | `https://phira.5wyxi.com` |
@@ -91,6 +92,38 @@ npm install
 | `DISPLAY_IP` | Server IP displayed at the bottom of the web pages | `phira.funxlink.fun:19723` |
 | `DEFAULT_AVATAR` | Default avatar URL for users/bots without one | (Phira Default) |
 | `CAPTCHA_PROVIDER` | Captcha system (`geetest` or `none`) | `none` |
+| `FEDERATION_ENABLED` | Enable Federation server mode | `false` |
+| `FEDERATION_SEED_NODES` | Comma separated list of initial seed nodes | (Empty) |
+| `FEDERATION_SECRET` | Shared secret for federation communication | (Empty) |
+| `FEDERATION_NODE_URL` | Publicly accessible URL/IP:Port of this node | (Empty) |
+
+## 🌟 Federation Server
+
+### 1. Purpose & Benefits
+Federation mode is designed to break "server islands". By enabling this feature, your server can connect with other Phira multiplayer servers:
+*   **Global Lobby**: Players can see public rooms from all servers in the federation network directly on your web dashboard.
+*   **Interconnectivity**: Increase visibility for smaller servers and help players find active matches more easily.
+*   **Decentralized**: No central authority; any server can join or leave the network at any time.
+
+### 2. How it Works
+*   **Node Discovery**: Upon startup, the server connects to the "Seed Nodes" defined in `FEDERATION_SEED_NODES` to fetch the list of all active nodes.
+*   **Health Checks**: Nodes exchange heartbeat packets regularly. If a server goes offline, it will be removed from the network list by other nodes.
+*   **State Sync**: Servers periodically broadcast their public room lists and online player counts to the network.
+*   **Security**: All peer-to-peer communication requires a matching `FEDERATION_SECRET`. Only servers with the same secret can exchange data.
+
+### 3. How to Configure
+Set the following variables in your `.env` file:
+
+1.  **Enable Feature**: Set `FEDERATION_ENABLED` to `true`.
+2.  **Identify Your Node**:
+    *   `FEDERATION_NODE_ID`: A unique identifier for your node (e.g., `EU-Phira-Node-1`). Auto-generated if left empty.
+    *   `FEDERATION_NODE_URL`: **Critical**. The publicly accessible URL of your Web port (e.g., `http://your-domain.com:8080`).
+3.  **Join the Network**:
+    *   `FEDERATION_SEED_NODES`: Addresses of known active nodes (comma separated).
+    *   `FEDERATION_SECRET`: A shared secret key. Ensure all servers you wish to connect with use the exact same key.
+4.  **Adjust Intervals** (Optional):
+    *   `FEDERATION_HEALTH_INTERVAL`: Heartbeat frequency (default 30000ms).
+    *   `FEDERATION_SYNC_INTERVAL`: State sync frequency (default 15000ms).
 
 ## Deployment & Running
 

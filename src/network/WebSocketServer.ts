@@ -6,6 +6,7 @@ import { RoomManager, Room } from '../domain/rooms/RoomManager';
 import { ProtocolHandler } from '../domain/protocol/ProtocolHandler';
 import { ServerConfig } from '../config/config';
 import { UserInfo } from '../domain/protocol/Commands';
+import { FederationManager } from '../federation/FederationManager';
 
 // Define the structure of messages between client and server
 interface WebSocketMessage {
@@ -19,6 +20,8 @@ interface ExtWebSocket extends WebSocket {
 
 export class WebSocketServer {
   private wss: WsServer;
+  private lastBroadcastTime = 0;
+  private broadcastTimer: NodeJS.Timeout | null = null;
 
   constructor(
     server: HttpServer,
@@ -27,6 +30,7 @@ export class WebSocketServer {
     private readonly config: ServerConfig,
     private readonly logger: Logger,
     private readonly sessionParser: express.RequestHandler,
+    private readonly federationManager?: FederationManager,
   ) {
     this.wss = new WsServer({ server });
     this.setupConnectionHandler();
@@ -34,30 +38,60 @@ export class WebSocketServer {
 
   private setupConnectionHandler(): void {
     this.wss.on('connection', (ws: ExtWebSocket, req: IncomingMessage) => {
+      // 1. WebSocket Hijacking Protection: Verify Origin
+      const origin = req.headers['origin'];
+      const forwardedHost = req.headers['x-forwarded-host'];
+      const host = (typeof forwardedHost === 'string' ? forwardedHost : forwardedHost?.[0]) || req.headers['host'];
+
+      if (origin && host) {
+          try {
+              const originUrl = new URL(origin);
+              
+              // Check against whitelist first
+              const isAllowed = this.config.allowedOrigins.some(ao => {
+                  try { return new URL(ao).host === originUrl.host; } catch { return false; }
+              });
+
+              if (!isAllowed && originUrl.host !== host) {
+                  this.logger.warn(`WebSocket 握手拒绝: Origin 不匹配 [${origin}] vs Host [${host}] (可能包含转发头)`);
+                  ws.close(1008, 'Policy Violation: Origin mismatch');
+                  return;
+              }
+          } catch (e) {
+              ws.close(1008, 'Invalid Origin');
+              return;
+          }
+      }
+
       // Priority: HTTP Headers (Standard for Web Proxies)
-      let ip = 'unknown';
+      let ip = req.socket.remoteAddress || 'unknown';
       const xForwardedFor = req.headers['x-forwarded-for'];
-      if (xForwardedFor) {
+      const trustHops = this.config.trustProxyHops;
+
+      if (xForwardedFor && trustHops > 0) {
         const ips = typeof xForwardedFor === 'string' ? xForwardedFor.split(',') : (Array.isArray(xForwardedFor) ? xForwardedFor : []);
-        if (ips.length > 0) ip = ips[0].trim();
+        // Pick the N-th IP from the right
+        if (ips.length >= trustHops) {
+          ip = ips[ips.length - trustHops].trim();
+        } else if (ips.length > 0) {
+          ip = ips[0].trim();
+        }
       } else {
         const xRealIp = req.headers['x-real-ip'];
         if (xRealIp && typeof xRealIp === 'string') {
           ip = xRealIp.trim();
-        } else {
-          ip = req.socket.remoteAddress || 'unknown';
         }
       }
       
       const connectionId = `ws-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
-      this.logger.info(`WebSocket 客户端已连接: ${ip}`);
+      this.logger.debug(`WebSocket 客户端已连接: ${ip}`);
 
       this.protocolHandler.handleConnection(connectionId, () => ws.close(), ip);
 
       ws.on('close', () => {
         this.protocolHandler.handleDisconnection(connectionId);
-        this.logger.info('WebSocket 客户端已断开');
+        this.logger.debug('WebSocket 客户端已断开');
       });
 
       // Link express session to WebSocket
@@ -80,7 +114,7 @@ export class WebSocketServer {
           ws.isAdmin = isAdmin;
 
           if (isAdmin) {
-            this.logger.info('管理员 WebSocket 客户端已连接');
+            this.logger.debug('管理员 WebSocket 客户端已连接');
           }
 
           // Send the current room list immediately on connection
@@ -179,8 +213,8 @@ export class WebSocketServer {
     }
   }
 
-  private getSanitizedRoomList(isAdmin: boolean = false): Partial<Room>[] {
-    return this.roomManager.listRooms()
+  private getSanitizedRoomList(isAdmin: boolean = false): any[] {
+    const localRooms = this.roomManager.listRooms()
       .filter(room => {
         if (isAdmin) return true;
         // Mode 1: Public Web Only (Whitelist)
@@ -210,8 +244,35 @@ export class WebSocketServer {
             } as any,
             locked: room.locked,
             cycle: room.cycle,
+            isRemote: false,
+            serverName: this.config.serverName,
         };
       });
+
+    // 合并联邦远程房间
+    let remoteRooms: any[] = [];
+    if (this.federationManager) {
+      try {
+        remoteRooms = this.federationManager.getRemoteRooms().map(room => ({
+          id: room.id,
+          name: room.name,
+          ownerId: room.ownerId,
+          ownerName: room.players.find(p => p.id === room.ownerId)?.name || 'Unknown',
+          playerCount: room.playerCount,
+          maxPlayers: room.maxPlayers,
+          state: room.state,
+          locked: room.locked,
+          cycle: room.cycle,
+          isRemote: true,
+          serverName: room.nodeName,
+          nodeId: room.nodeId,
+        }));
+      } catch (e) {
+        this.logger.error(`获取联邦远程房间失败: ${e}`);
+      }
+    }
+
+    return [...localRooms, ...remoteRooms];
   }
 
   private getSanitizedRoomDetails(room: Room, isAdmin: boolean = false) {
@@ -269,35 +330,64 @@ export class WebSocketServer {
             };
         }),
         players: players,
-        otherRooms: this.roomManager.listRooms()
-            .filter(r => {
-                if (r.id === room.id) return false;
-                if (isAdmin) return true;
-                // Apply same visibility rules as room list
-                if (this.config.enablePubWeb) {
-                  return r.id.startsWith(this.config.pubPrefix);
-                }
-                if (this.config.enablePriWeb) {
-                  return !r.id.startsWith(this.config.priPrefix);
-                }
-                return true;
-            })
-            .map(r => ({
-                id: r.id,
-                name: r.name,
-                playerCount: r.players.size,
-                maxPlayers: r.maxPlayers,
-                state: {
-                    ...r.state,
-                    chartId: (r.state as any).chartId ?? r.selectedChart?.id ?? null,
-                    chartName: r.selectedChart?.name ?? null,
-                }
-            })),
+        otherRooms: [
+            ...this.roomManager.listRooms()
+                .filter(r => {
+                    if (r.id === room.id) return false;
+                    if (isAdmin) return true;
+                    // Apply same visibility rules as room list
+                    if (this.config.enablePubWeb) {
+                      return r.id.startsWith(this.config.pubPrefix);
+                    }
+                    if (this.config.enablePriWeb) {
+                      return !r.id.startsWith(this.config.priPrefix);
+                    }
+                    return true;
+                })
+                .map(r => ({
+                    id: r.id,
+                    name: r.name,
+                    playerCount: r.players.size,
+                    maxPlayers: r.maxPlayers,
+                    state: {
+                        ...r.state,
+                        chartId: (r.state as any).chartId ?? r.selectedChart?.id ?? null,
+                        chartName: r.selectedChart?.name ?? null,
+                    },
+                    isRemote: false,
+                    serverName: this.config.serverName,
+                })),
+            ...(this.federationManager ? this.federationManager.getRemoteRooms()
+                .filter(r => r.id !== room.id)
+                .map(r => ({
+                    id: r.id,
+                    name: r.name,
+                    playerCount: r.playerCount,
+                    maxPlayers: r.maxPlayers,
+                    state: r.state,
+                    isRemote: true,
+                    serverName: r.nodeName,
+                })) : []),
+        ],
     };
   }
 
   public broadcastRooms(): void {
-    this.logger.debug('正在向所有 WebSocket 客户端广播房间列表');
+    // 1. Throttle broadcasts to max once every 100ms
+    if (this.broadcastTimer) return;
+
+    const now = Date.now();
+    const delay = Math.max(0, 100 - (now - this.lastBroadcastTime));
+
+    this.broadcastTimer = setTimeout(() => {
+        this.executeBroadcast();
+        this.broadcastTimer = null;
+        this.lastBroadcastTime = Date.now();
+    }, delay);
+  }
+
+  private executeBroadcast(): void {
+    this.logger.debug('正在执行节流后的房间列表广播');
     
     const adminList = JSON.stringify({
       type: 'roomList',

@@ -36,6 +36,16 @@ const main = async () => {
 
     process.on('SIGTERM', () => shutdown('SIGTERM'));
     process.on('SIGINT', () => shutdown('SIGINT'));
+
+    // Global Error Handling to prevent process crash
+    process.on('uncaughtException', (error) => {
+      console.error('致命错误: 未捕获的异常:', error);
+      // In a real production app, you might want to shutdown gracefully here
+    });
+
+    process.on('unhandledRejection', (reason, _promise) => {
+      console.error('异步错误: 未处理的 Promise 拒绝:', reason);
+    });
   } catch (error) {
     console.error('启动程序失败:', error);
     process.exit(1);
