@@ -78,6 +78,7 @@ export interface RoomManager {
   count(): number;
   addPlayerToRoom(roomId: string, userId: number, userInfo: UserInfo, connectionId: string): boolean;
   removePlayerFromRoom(roomId: string, userId: number): boolean;
+  removePlayerFromAllRooms(userId: number): void;
   getRoomByUserId(userId: number): Room | undefined;
   setRoomState(roomId: string, state: RoomState): boolean;
   setRoomLocked(roomId: string, locked: boolean): boolean;
@@ -291,6 +292,14 @@ export class InMemoryRoomManager implements RoomManager {
     }
 
     return removed;
+  }
+
+  removePlayerFromAllRooms(userId: number): void {
+    for (const room of this.rooms.values()) {
+      if (room.players.has(userId)) {
+        this.removePlayerFromRoom(room.id, userId);
+      }
+    }
   }
 
   getRoomByUserId(userId: number): Room | undefined {
