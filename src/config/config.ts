@@ -27,6 +27,7 @@ PORT=12346
 HOST=0.0.0.0
 TCP_ENABLED=true
 USE_PROXY_PROTOCOL=false
+TRUST_PROXY_HOPS=1
 LOG_LEVEL=info
 NODE_ENV=development
 PHIRA_API_URL=https://phira.5wyxi.com
@@ -133,6 +134,7 @@ export interface ServerConfig {
   displayIp: string;
   defaultAvatar: string;
   enableUpdateCheck: boolean;
+  trustProxyHops: number;
   captchaProvider: 'geetest' | 'none';
   geetestId?: string;
   geetestKey?: string;
@@ -180,6 +182,7 @@ const defaultConfig: ServerConfig = {
   displayIp: 'phira.funxlink.fun:19723',
   defaultAvatar: 'https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404',
   enableUpdateCheck: true,
+  trustProxyHops: 1,
   captchaProvider: 'none',
   // 联邦节点配置
   federationEnabled: false,
@@ -309,6 +312,7 @@ export const createServerConfig = (overrides: Partial<ServerConfig> = {}): Serve
     displayIp: process.env.DISPLAY_IP ?? defaultConfig.displayIp,
     defaultAvatar: process.env.DEFAULT_AVATAR ?? defaultConfig.defaultAvatar,
     enableUpdateCheck: parseBoolean(process.env.ENABLE_UPDATE_CHECK, defaultConfig.enableUpdateCheck),
+    trustProxyHops: Number.parseInt(process.env.TRUST_PROXY_HOPS ?? `${defaultConfig.trustProxyHops}`, 10),
     captchaProvider: (process.env.CAPTCHA_PROVIDER || 'none').toLowerCase() as  'geetest' | 'none',
     geetestId: process.env.GEETEST_ID,
     geetestKey: process.env.GEETEST_KEY,

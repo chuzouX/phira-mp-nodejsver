@@ -29,6 +29,10 @@ export class HttpServer {
   private readonly blacklistFile = path.join(process.cwd(), 'data', 'login_blacklist.json');
   private readonly cleanupInterval: NodeJS.Timeout;
   
+  private readonly rateLimits = new Map<string, { count: number; lastReset: number }>();
+  private cachedStatus: any = null;
+  private statusCacheTime = 0;
+
   constructor(
     private readonly config: ServerConfig,
     private readonly logger: Logger,
@@ -40,8 +44,8 @@ export class HttpServer {
     this.app = express();
     this.server = createServer(this.app);
 
-    // Trust Nginx proxy headers (X-Forwarded-For)
-    this.app.set('trust proxy', true);
+    // Set trust proxy hops based on configuration
+    this.app.set('trust proxy', this.config.trustProxyHops);
 
     // Initialize session parser
     this.sessionParser = session({
@@ -61,7 +65,7 @@ export class HttpServer {
     this.setupFederationRoutes();
     this.loadBlacklist();
     
-    // Cleanup expired login attempts every hour to prevent memory leak
+    // Cleanup expired login attempts and rate limits every hour
     this.cleanupInterval = setInterval(() => {
         const now = Date.now();
         for (const [ip, attempt] of this.loginAttempts.entries()) {
@@ -69,7 +73,33 @@ export class HttpServer {
                 this.loginAttempts.delete(ip);
             }
         }
+        for (const [ip, limit] of this.rateLimits.entries()) {
+            if (now - limit.lastReset > 60 * 1000) {
+                this.rateLimits.delete(ip);
+            }
+        }
     }, 60 * 60 * 1000);
+  }
+
+  private rateLimitMiddleware(req: express.Request, res: express.Response, next: express.NextFunction): void {
+      const ip = this.getRealIp(req);
+      const now = Date.now();
+      const limit = this.rateLimits.get(ip) || { count: 0, lastReset: now };
+
+      if (now - limit.lastReset > 60000) { // 1 minute window
+          limit.count = 0;
+          limit.lastReset = now;
+      }
+
+      limit.count++;
+      this.rateLimits.set(ip, limit);
+
+      if (limit.count > 60) { // Max 60 requests per minute
+          res.status(429).json({ error: 'Too many requests. Please slow down.' });
+          return;
+      }
+
+      next();
   }
 
   private loadBlacklist(): void {
@@ -119,21 +149,19 @@ export class HttpServer {
   }
 
   private getRealIp(req: express.Request): string {
-    // Priority: HTTP Headers (Standard for Web Proxies)
-    const xForwardedFor = req.headers['x-forwarded-for'];
-    if (xForwardedFor) {
-      const ips = typeof xForwardedFor === 'string' ? xForwardedFor.split(',') : (Array.isArray(xForwardedFor) ? xForwardedFor : []);
-      if (ips.length > 0) {
-        return ips[0].trim();
-      }
-    }
-    const xRealIp = req.headers['x-real-ip'];
-    if (xRealIp && typeof xRealIp === 'string') {
-      return xRealIp.trim();
+    // 1. First priority: Express's req.ip (parsed from X-Forwarded-For via trustProxyHops)
+    const ip = req.ip;
+    
+    // 2. If req.ip is local/unset but X-Real-IP exists, it might be a direct proxy setup
+    const isLocal = !ip || ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+    if (isLocal) {
+        const xRealIp = req.headers['x-real-ip'];
+        if (xRealIp && typeof xRealIp === 'string') {
+            return xRealIp.trim();
+        }
     }
 
-    // Fallback: Express req.ip (if trust proxy is on) or socket remoteAddress
-    return req.ip || req.socket.remoteAddress || 'unknown';
+    return ip || req.socket.remoteAddress || 'unknown';
   }
 
   private isBlacklisted(ip: string): boolean {
@@ -251,6 +279,41 @@ export class HttpServer {
   }
 
   private adminAuth(req: express.Request, res: express.Response, next: express.NextFunction): void {
+    // 1. Basic CSRF Protection: Verify Origin/Referer for sensitive state-changing methods
+    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
+        const origin = req.get('origin');
+        const referer = req.get('referer');
+        const host = req.get('host');
+
+        // If Origin is present, it must match our Host
+        if (origin) {
+            try {
+                const originUrl = new URL(origin);
+                if (originUrl.host !== host) {
+                    this.logger.warn(`CSRF 拦截: 异常的 Origin [${origin}], 预期 Host [${host}]`);
+                    res.status(403).json({ error: 'Forbidden: CSRF validation failed (Origin mismatch)' });
+                    return;
+                }
+            } catch (e) {
+                res.status(403).json({ error: 'Forbidden: Invalid Origin header' });
+                return;
+            }
+        } else if (referer) {
+            // Fallback to Referer check
+            try {
+                const refererUrl = new URL(referer);
+                if (refererUrl.host !== host) {
+                    this.logger.warn(`CSRF 拦截: 异常的 Referer [${referer}], 预期 Host [${host}]`);
+                    res.status(403).json({ error: 'Forbidden: CSRF validation failed (Referer mismatch)' });
+                    return;
+                }
+            } catch (e) {
+                res.status(403).json({ error: 'Forbidden: Invalid Referer header' });
+                return;
+            }
+        }
+    }
+
     const isAdmin = (req.session as AdminSession).isAdmin;
     const providedSecret = req.header('X-Admin-Secret') || (req.query.admin_secret as string);
 
@@ -434,7 +497,7 @@ export class HttpServer {
         return res.json({ isAdmin });
     });
 
-    this.app.get('/api/all-players', this.adminAuth.bind(this), (_req, res) => {
+    this.app.get('/api/all-players', this.adminAuth.bind(this), this.rateLimitMiddleware.bind(this), (_req, res) => {
         const allPlayers = this.protocolHandler.getAllSessions().map(p => ({
             ...p,
             isAdmin: this.config.adminPhiraId.includes(p.id),
@@ -703,8 +766,14 @@ export class HttpServer {
     });
 
     // Public Status API for external servers
-    this.app.get('/api/status', (req, res) => {
+    this.app.get('/api/status', this.rateLimitMiddleware.bind(this), (req, res) => {
         const isAdmin = (req.session as AdminSession).isAdmin ?? false;
+
+        // Use cache for public requests (non-admin)
+        if (!isAdmin && Date.now() - this.statusCacheTime < 1000 && this.cachedStatus) {
+            return res.json(this.cachedStatus);
+        }
+
         const rooms = this.roomManager.listRooms()
             .filter(room => {
                 // Admin can see everything
@@ -773,7 +842,12 @@ export class HttpServer {
             } : { enabled: false },
         };
 
-        res.json(response);
+        if (!isAdmin) {
+            this.cachedStatus = response;
+            this.statusCacheTime = Date.now();
+        }
+
+        return res.json(response);
     });
   }
 

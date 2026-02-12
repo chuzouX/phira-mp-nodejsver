@@ -35,7 +35,12 @@ interface ConnectionState {
 export class TcpServer {
   private server?: NetServer;
   private readonly connections = new Map<string, ConnectionState>();
+  private readonly connectionsPerIp = new Map<string, number>();
   private readonly illegalPacketCounts = new Map<string, { count: number; lastTime: number }>();
+  
+  private readonly MAX_PACKET_SIZE = 1024 * 1024; // 1MB limit per packet
+  private readonly MAX_CONNECTIONS_PER_IP = 50;   // DoS protection
+
   private readonly PROXY_V2_SIGNATURE = Buffer.from([
     0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D, 0x0A, 0x51, 0x55, 0x49, 0x54, 0x0A,
   ]);
@@ -110,6 +115,19 @@ export class TcpServer {
     const ip = socket.remoteAddress || 'unknown';
     const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
 
+    // Latency and Reliability optimizations
+    socket.setNoDelay(true);
+    socket.setKeepAlive(true, 60000); // 1 minute keep-alive
+
+    // Limit connections per IP
+    const currentCount = this.connectionsPerIp.get(ip) || 0;
+    if (currentCount >= this.MAX_CONNECTIONS_PER_IP) {
+        this.logger.warn(`拦截到来自 IP ${ip} 的过多 TCP 连接尝试 (${currentCount})`);
+        socket.destroy();
+        return;
+    }
+    this.connectionsPerIp.set(ip, currentCount + 1);
+
     // Anti-clogging: Check if IP is already banned (skip for local proxy)
     const banManager = this.protocolHandler.getBanManager();
     const banInfo = banManager?.isIpBanned(ip);
@@ -176,6 +194,14 @@ export class TcpServer {
     socket.on('close', () => {
       this.clearTimeoutMonitor(state);
       this.connections.delete(connectionId);
+      
+      const currentCount = this.connectionsPerIp.get(ip) || 1;
+      if (currentCount <= 1) {
+          this.connectionsPerIp.delete(ip);
+      } else {
+          this.connectionsPerIp.set(ip, currentCount - 1);
+      }
+
       this.protocolHandler.handleDisconnection(connectionId);
       this.logger.debug(`TCP 连接被关闭: ${connectionId}`);
     });
@@ -303,6 +329,14 @@ export class TcpServer {
       }
 
       const { value: packetLength, bytesRead: lengthBytes } = lengthResult;
+
+      if (packetLength > this.MAX_PACKET_SIZE) {
+          const ip = state.socket.remoteAddress || 'unknown';
+          this.logger.error(`收到过大的包: ${connectionId} (${ip}) (大小: ${packetLength} bytes), 强制断开连接`);
+          this.forceCloseConnection(connectionId);
+          this.reportSuspiciousActivity(ip, connectionId, '包大小超限');
+          return;
+      }
 
       if (state.buffer.length < lengthBytes + packetLength) {
         break;

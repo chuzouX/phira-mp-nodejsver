@@ -53,17 +53,35 @@ describe('IP 识别测试 (HTTP Headers)', () => {
     await httpServer.stop();
   });
 
-  test('应当优先从 X-Forwarded-For 获取真实 IP', async () => {
-    const fakeIp = '1.2.3.4';
-    await request(httpServer.getInternalServer())
-      .get('/api/status')
-      .set('X-Forwarded-For', `${fakeIp}, 192.168.1.1`);
+  test('应当根据 trustProxyHops 从 X-Forwarded-For 获取真实 IP', async () => {
+    // 模拟 2 层代理 (CDN + Nginx)
+    const clientIp = '1.2.3.4';
+    const cdnIp = '111.111.111.111';
+    
+    const customConfig = createServerConfig({ trustProxyHops: 2 });
+    const testServer = new HttpServer(customConfig, mockLogger, mockRoomManager, mockProtocolHandler, mockBanManager);
 
-    expect(mockBanManager.isIpBanned).toHaveBeenCalledWith(fakeIp);
+    await request(testServer.getInternalServer())
+      .get('/api/status')
+      .set('X-Forwarded-For', `${clientIp}, ${cdnIp}`);
+
+    expect(mockBanManager.isIpBanned).toHaveBeenCalledWith(clientIp);
+    await testServer.stop();
   });
 
-  test('当 X-Forwarded-For 不存在时应当从 X-Real-IP 获取 IP', async () => {
-    const fakeIp = '5.6.7.8';
+  test('当 trustProxyHops 为 1 时应当获取最左侧 IP', async () => {
+    const clientIp = '5.6.7.8';
+    
+    // 默认配置 trustProxyHops 为 1
+    await request(httpServer.getInternalServer())
+      .get('/api/status')
+      .set('X-Forwarded-For', clientIp);
+
+    expect(mockBanManager.isIpBanned).toHaveBeenCalledWith(clientIp);
+  });
+
+  test('应当支持从 X-Real-IP 获取 IP', async () => {
+    const fakeIp = '9.9.9.9';
     await request(httpServer.getInternalServer())
       .get('/api/status')
       .set('X-Real-IP', fakeIp);
