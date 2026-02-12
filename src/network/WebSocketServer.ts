@@ -154,7 +154,7 @@ export class WebSocketServer {
       }
 
       ws.on('close', () => {
-        this.logger.info('WebSocket 客户端已断开');
+        this.logger.debug('WebSocket 客户端已断开');
       });
 
       ws.on('error', (error) => {
@@ -175,12 +175,19 @@ export class WebSocketServer {
   }
 
   private sendRoomDetails(ws: ExtWebSocket, roomId: string, isAdmin: boolean): void {
-    const room = this.roomManager.getRoom(roomId);
+    let room = this.roomManager.getRoom(roomId) as any;
+    let isRemote = false;
+
+    // 如果本地找不到，尝试从联邦中查找
+    if (!room && this.federationManager) {
+      room = this.federationManager.getRemoteRoomInfo(roomId);
+      if (room) isRemote = true;
+    }
     
     // Check access logic similar to list filtering for security/consistency
     if (room) {
         let isVisible = true;
-        if (!isAdmin) {
+        if (!isAdmin && !isRemote) { // 远程房间暂不应用本地过滤规则
             if (this.config.enablePubWeb) {
                 if (!room.id.startsWith(this.config.pubPrefix)) isVisible = false;
             } else if (this.config.enablePriWeb) {
@@ -197,7 +204,10 @@ export class WebSocketServer {
             return;
         }
 
-      const details = this.getSanitizedRoomDetails(room, isAdmin);
+      const details = isRemote 
+        ? this.getSanitizedRemoteRoomDetails(room)
+        : this.getSanitizedRoomDetails(room, isAdmin);
+
       const message: WebSocketMessage = {
         type: 'roomDetails',
         payload: details,
@@ -209,7 +219,8 @@ export class WebSocketServer {
         payload: null, // Or an error object
       };
       ws.send(JSON.stringify(message));
-      this.logger.warn(`客户端请求不存在的房间详情: ${roomId}`);
+      // 只有在彻底找不到（本地和联邦都没有）时才记录调试信息，避免干扰正常日志
+      this.logger.debug(`客户端请求不存在的房间详情: ${roomId}`);
     }
   }
 
@@ -273,6 +284,51 @@ export class WebSocketServer {
     }
 
     return [...localRooms, ...remoteRooms];
+  }
+
+  private getSanitizedRemoteRoomDetails(room: any) {
+    const players = room.players.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        avatar: p.avatar || this.config.defaultAvatar, // 使用玩家真实的头像
+        isReady: false,
+        isFinished: false,
+        score: null,
+        isAdmin: this.config.adminPhiraId.includes(p.id),
+        isOwner: this.config.ownerPhiraId.includes(p.id),
+        rks: 0,
+        bio: '',
+    }));
+
+    // 远程房间手动添加其所属服务器的虚拟用户
+    players.unshift({
+        id: -1,
+        name: room.nodeName || 'Remote Server',
+        avatar: 'https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404',
+        isReady: false,
+        isFinished: false,
+        score: null,
+        isAdmin: false,
+        isOwner: false,
+        rks: 0,
+        bio: 'Federated Node',
+    });
+
+    return {
+        id: room.id,
+        name: room.name,
+        ownerId: room.ownerId,
+        maxPlayers: room.maxPlayers,
+        state: room.state,
+        locked: room.locked,
+        cycle: room.cycle,
+        live: room.live || false,
+        selectedChart: room.selectedChart, // 包含当前谱面信息
+        messages: room.messages || [], // 联邦房间的事件消息
+        isRemote: true,
+        serverName: room.nodeName,
+        players,
+    };
   }
 
   private getSanitizedRoomDetails(room: Room, isAdmin: boolean = false) {

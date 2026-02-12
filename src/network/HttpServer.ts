@@ -32,6 +32,7 @@ export class HttpServer {
   private readonly rateLimits = new Map<string, { count: number; lastReset: number }>();
   private cachedStatus: any = null;
   private statusCacheTime = 0;
+  private lastFederationRoomCount = -1; // 上次联邦房间查询返回的数量（防止日志刷屏）
 
   constructor(
     private readonly config: ServerConfig,
@@ -174,6 +175,30 @@ export class HttpServer {
         return false;
     }
     return true;
+  }
+
+  public getBlacklistedIps(): { ip: string; expiresAt: number }[] {
+    return Array.from(this.blacklistedIps.entries()).map(([ip, expiresAt]) => ({
+        ip,
+        expiresAt
+    }));
+  }
+
+  public blacklistIpManual(ip: string, durationSeconds: number, adminName: string = 'Console'): void {
+    const expiresAt = Date.now() + durationSeconds * 1000;
+    this.blacklistedIps.set(ip, expiresAt);
+    this.saveBlacklist();
+    const durationStr = durationSeconds >= 3600 ? `${(durationSeconds / 3600).toFixed(1)}小时` : `${Math.floor(durationSeconds / 60)}分钟`;
+    this.logger.ban(`IP ${ip} 被管理员 ${adminName} 手动加入登录黑名单。时长: ${durationStr}`);
+  }
+
+  public unblacklistIpManual(ip: string, adminName: string = 'Console'): boolean {
+    const success = this.blacklistedIps.delete(ip);
+    if (success) {
+        this.saveBlacklist();
+        this.logger.ban(`IP ${ip} 被管理员 ${adminName} 从登录黑名单中移除。`);
+    }
+    return success;
   }
 
   private getRemainingBlacklistTimeStr(ip: string): string {
@@ -884,13 +909,19 @@ export class HttpServer {
 
     // 握手：接收其他节点的自我介绍，返回自身信息和已知节点列表
     this.app.post('/api/federation/handshake', authFederation, (req, res) => {
-      const { nodeId, nodeUrl, serverName, isReverse } = req.body;
+      const { nodeId, nodeUrl, serverName, instanceId, isReverse } = req.body;
       if (!nodeId || !nodeUrl) {
         return res.status(400).json({ error: 'Missing nodeId or nodeUrl' });
       }
 
-      this.logger.info(`[联邦HTTP] 收到握手请求: 来自 ${serverName} (ID: ${nodeId}, URL: ${nodeUrl}, 反向: ${!!isReverse})`);
-      const result = fm.handleIncomingHandshake({ nodeId, nodeUrl, serverName: serverName || 'Unknown', isReverse: !!isReverse });
+      this.logger.info(`[联邦HTTP] 收到握手请求: 来自 ${serverName} (ID: ${nodeId}, 实例: ${instanceId}, URL: ${nodeUrl}, 反向: ${!!isReverse})`);
+      const result = fm.handleIncomingHandshake({ 
+        nodeId, 
+        nodeUrl, 
+        serverName: serverName || 'Unknown', 
+        instanceId,
+        isReverse: !!isReverse 
+      });
       this.logger.info(`[联邦HTTP] 握手响应已发送给 ${serverName}`);
       return res.json(result);
     });
@@ -899,12 +930,14 @@ export class HttpServer {
     this.app.get('/api/federation/health', authFederation, (_req, res) => {
       return res.json({
         nodeId: fm.getNodeId(),
+        instanceId: fm.getInstanceId(),
         serverName: fm.getConfig().serverName,
         status: 'online',
         timestamp: Date.now(),
         peers: fm.getNodes().filter(n => n.status === 'online').map(n => ({
           id: n.id,
           url: n.url,
+          instanceId: n.instanceId,
           serverName: n.serverName,
         })),
       });
@@ -928,7 +961,10 @@ export class HttpServer {
     // 获取本节点的房间列表（供其他节点同步）
     this.app.get('/api/federation/rooms', authFederation, (_req, res) => {
       const rooms = fm.getLocalRoomsForFederation();
-      this.logger.info(`[联邦HTTP] 收到房间查询请求，返回 ${rooms.length} 个本地房间`);
+      if (rooms.length !== this.lastFederationRoomCount) {
+        this.logger.info(`[联邦HTTP] 房间查询: 本地房间数 ${this.lastFederationRoomCount === -1 ? '初始化' : this.lastFederationRoomCount} → ${rooms.length}`);
+        this.lastFederationRoomCount = rooms.length;
+      }
       return res.json({ rooms });
     });
 
