@@ -85,13 +85,13 @@ export class WebSocketServer {
       
       const connectionId = `ws-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
-      this.logger.info(`WebSocket 客户端已连接: ${ip}`);
+      this.logger.debug(`WebSocket 客户端已连接: ${ip}`);
 
       this.protocolHandler.handleConnection(connectionId, () => ws.close(), ip);
 
       ws.on('close', () => {
         this.protocolHandler.handleDisconnection(connectionId);
-        this.logger.info('WebSocket 客户端已断开');
+        this.logger.debug('WebSocket 客户端已断开');
       });
 
       // Link express session to WebSocket
@@ -114,7 +114,7 @@ export class WebSocketServer {
           ws.isAdmin = isAdmin;
 
           if (isAdmin) {
-            this.logger.info('管理员 WebSocket 客户端已连接');
+            this.logger.debug('管理员 WebSocket 客户端已连接');
           }
 
           // Send the current room list immediately on connection
