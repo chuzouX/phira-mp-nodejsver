@@ -41,13 +41,26 @@ export class ProtocolHandler {
     private readonly roomManager: RoomManager,
     private readonly authService: AuthService,
     private readonly logger: Logger,
-    private readonly serverName: string,
-    private readonly phiraApiUrl: string,
+    private serverName: string,
+    private phiraApiUrl: string,
     private readonly onSessionChange?: () => void,
     private readonly banManager?: BanManager,
-    private readonly serverAnnouncement: string = '你好{{name}}，欢迎来到 {{serverName}} 服务器',
-    private readonly defaultAvatar: string = 'https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404',
+    private serverAnnouncement: string = '你好{{name}}，欢迎来到 {{serverName}} 服务器',
+    private defaultAvatar: string = 'https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404',
   ) {}
+
+  public reloadConfig(
+    serverName: string,
+    phiraApiUrl: string,
+    serverAnnouncement: string,
+    defaultAvatar: string,
+  ): void {
+    this.serverName = serverName;
+    this.phiraApiUrl = phiraApiUrl;
+    this.serverAnnouncement = serverAnnouncement;
+    this.defaultAvatar = defaultAvatar;
+    this.logger.info('[协议] 已重新加载配置');
+  }
 
   public getSessionCount(): number {
     return this.sessions.size;
