@@ -85,9 +85,9 @@ FEDERATION_NODE_ID=
 # 是否允许联邦连接本地/私有 IP (生产环境建议设为 false)
 FEDERATION_ALLOW_LOCAL=false
 # 联邦健康检查间隔 (ms)
-FEDERATION_HEALTH_INTERVAL=30000
-# 联邦状态同步间隔 (ms)
-FEDERATION_SYNC_INTERVAL=15000
+FEDERATION_HEALTH_INTERVAL=300
+# 状态同步间隔 (ms)
+FEDERATION_SYNC_INTERVAL=150
 `;
     }
 
@@ -191,7 +191,7 @@ const defaultConfig: ServerConfig = {
   banIdWhitelist: [],
   banIpWhitelist: [],
   silentPhiraIds: [],
-  serverAnnouncement: `你好{{name}}，欢迎来到 {{serverName}} 服务器`,
+  serverAnnouncement: \`你好{{name}}锛屾杩庢潵鍒 {{serverName}} 鏈嶅姟鍣甽`,
   sessionSecret: 'a-very-insecure-secret-change-it',
   loginBlacklistDuration: 600, // 10 minutes
   displayIp: 'phira.funxlink.fun:19723',
@@ -206,8 +206,8 @@ const defaultConfig: ServerConfig = {
   federationSecret: '',
   federationNodeId: '',
   federationNodeUrl: '',
-  federationHealthInterval: 30000,
-  federationSyncInterval: 15000,
+  federationHealthInterval: 300,
+  federationSyncInterval: 150,
   federationAllowLocal: false,
 };
 
@@ -290,15 +290,15 @@ const requiredEnvVars: string[] = [];
 
 for (const varName of requiredEnvVars) {
   if (!process.env[varName]) {
-    throw new Error(`缺少必需的环境变量: ${varName}`);
+    throw new Error(\`缺少必需的环境变量: \${varName}\`);
   }
 }
 
 export const createServerConfig = (overrides: Partial<ServerConfig> = {}): ServerConfig => {
   const envConfig: ServerConfig = {
-    port: Number.parseInt(process.env.PORT ?? `${defaultConfig.port}`, 10),
+    port: Number.parseInt(process.env.PORT ?? \`\${defaultConfig.port}\`, 10),
     host: process.env.HOST ?? defaultConfig.host,
-    webPort: Number.parseInt(process.env.WEB_PORT ?? `${defaultConfig.webPort}`, 10),
+    webPort: Number.parseInt(process.env.WEB_PORT ?? \`\${defaultConfig.webPort}\`, 10),
     enableWebServer: parseBoolean(process.env.ENABLE_WEB_SERVER, defaultConfig.enableWebServer),
     enablePubWeb: parseBoolean(process.env.ENABLE_PUB_WEB, defaultConfig.enablePubWeb),
     pubPrefix: process.env.PUB_PREFIX ?? defaultConfig.pubPrefix,
@@ -313,7 +313,7 @@ export const createServerConfig = (overrides: Partial<ServerConfig> = {}): Serve
     },
     phiraApiUrl: process.env.PHIRA_API_URL ?? defaultConfig.phiraApiUrl,
     serverName: process.env.SERVER_NAME ?? defaultConfig.serverName,
-    roomSize: Number.parseInt(process.env.ROOM_SIZE ?? `${defaultConfig.roomSize}`, 10),
+    roomSize: Number.parseInt(process.env.ROOM_SIZE ?? \`\${defaultConfig.roomSize}\`, 10),
     adminName: process.env.ADMIN_NAME ?? defaultConfig.adminName,
     adminPassword: process.env.ADMIN_PASSWORD ?? defaultConfig.adminPassword,
     adminSecret: process.env.ADMIN_SECRET ?? defaultConfig.adminSecret,
@@ -324,11 +324,11 @@ export const createServerConfig = (overrides: Partial<ServerConfig> = {}): Serve
     silentPhiraIds: parseNumberList(process.env.SILENT_PHIRA_IDS, defaultConfig.silentPhiraIds),
     serverAnnouncement: process.env.SERVER_ANNOUNCEMENT ?? defaultConfig.serverAnnouncement,
     sessionSecret: process.env.SESSION_SECRET ?? defaultConfig.sessionSecret,
-    loginBlacklistDuration: Number.parseInt(process.env.LOGIN_BLACKLIST_DURATION ?? `${defaultConfig.loginBlacklistDuration}`, 10),
+    loginBlacklistDuration: Number.parseInt(process.env.LOGIN_BLACKLIST_DURATION ?? \`\${defaultConfig.loginBlacklistDuration}\`, 10),
     displayIp: process.env.DISPLAY_IP ?? defaultConfig.displayIp,
     defaultAvatar: process.env.DEFAULT_AVATAR ?? defaultConfig.defaultAvatar,
     enableUpdateCheck: parseBoolean(process.env.ENABLE_UPDATE_CHECK, defaultConfig.enableUpdateCheck),
-    trustProxyHops: Number.parseInt(process.env.TRUST_PROXY_HOPS ?? `${defaultConfig.trustProxyHops}`, 10),
+    trustProxyHops: Number.parseInt(process.env.TRUST_PROXY_HOPS ?? \`\${defaultConfig.trustProxyHops}\`, 10),
     allowedOrigins: (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(s => s !== ''),
     captchaProvider: (process.env.CAPTCHA_PROVIDER || 'none').toLowerCase() as  'geetest' | 'none',
     geetestId: process.env.GEETEST_ID,
@@ -339,8 +339,8 @@ export const createServerConfig = (overrides: Partial<ServerConfig> = {}): Serve
     federationSecret: process.env.FEDERATION_SECRET ?? defaultConfig.federationSecret,
     federationNodeId: process.env.FEDERATION_NODE_ID ?? defaultConfig.federationNodeId,
     federationNodeUrl: process.env.FEDERATION_NODE_URL ?? defaultConfig.federationNodeUrl,
-    federationHealthInterval: Number.parseInt(process.env.FEDERATION_HEALTH_INTERVAL ?? `${defaultConfig.federationHealthInterval}`, 10),
-    federationSyncInterval: Number.parseInt(process.env.FEDERATION_SYNC_INTERVAL ?? `${defaultConfig.federationSyncInterval}`, 10),
+    federationHealthInterval: Number.parseInt(process.env.FEDERATION_HEALTH_INTERVAL ?? \`\${defaultConfig.federationHealthInterval}\`, 10),
+    federationSyncInterval: Number.parseInt(process.env.FEDERATION_SYNC_INTERVAL ?? \`\${defaultConfig.federationSyncInterval}\`, 10),
     federationAllowLocal: parseBoolean(process.env.FEDERATION_ALLOW_LOCAL, defaultConfig.federationAllowLocal),
   };
 
