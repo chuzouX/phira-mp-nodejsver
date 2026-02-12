@@ -885,13 +885,19 @@ export class HttpServer {
 
     // 握手：接收其他节点的自我介绍，返回自身信息和已知节点列表
     this.app.post('/api/federation/handshake', authFederation, (req, res) => {
-      const { nodeId, nodeUrl, serverName, isReverse } = req.body;
+      const { nodeId, nodeUrl, serverName, instanceId, isReverse } = req.body;
       if (!nodeId || !nodeUrl) {
         return res.status(400).json({ error: 'Missing nodeId or nodeUrl' });
       }
 
-      this.logger.info(`[联邦HTTP] 收到握手请求: 来自 ${serverName} (ID: ${nodeId}, URL: ${nodeUrl}, 反向: ${!!isReverse})`);
-      const result = fm.handleIncomingHandshake({ nodeId, nodeUrl, serverName: serverName || 'Unknown', isReverse: !!isReverse });
+      this.logger.info(`[联邦HTTP] 收到握手请求: 来自 ${serverName} (ID: ${nodeId}, 实例: ${instanceId}, URL: ${nodeUrl}, 反向: ${!!isReverse})`);
+      const result = fm.handleIncomingHandshake({ 
+        nodeId, 
+        nodeUrl, 
+        serverName: serverName || 'Unknown', 
+        instanceId,
+        isReverse: !!isReverse 
+      });
       this.logger.info(`[联邦HTTP] 握手响应已发送给 ${serverName}`);
       return res.json(result);
     });
@@ -900,12 +906,14 @@ export class HttpServer {
     this.app.get('/api/federation/health', authFederation, (_req, res) => {
       return res.json({
         nodeId: fm.getNodeId(),
+        instanceId: fm.getInstanceId(),
         serverName: fm.getConfig().serverName,
         status: 'online',
         timestamp: Date.now(),
         peers: fm.getNodes().filter(n => n.status === 'online').map(n => ({
           id: n.id,
           url: n.url,
+          instanceId: n.instanceId,
           serverName: n.serverName,
         })),
       });
