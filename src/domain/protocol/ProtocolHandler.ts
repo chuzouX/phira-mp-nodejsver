@@ -104,6 +104,10 @@ export class ProtocolHandler {
     return true;
   }
 
+  public getConnectionIdByUserId(userId: number): string | undefined {
+    return this.userConnections.get(userId);
+  }
+
   /** 广播联邦玩家加入房间事件 */
   public broadcastFederatedJoin(room: Room, userInfo: UserInfo, userId: number): void {
     this.broadcastToRoom(room, {
@@ -532,6 +536,13 @@ export class ProtocolHandler {
         callback(serverCmd);
       }
     }
+
+    // 联邦：广播房间事件消息
+    if (this.federationManager?.getConfig?.()?.enabled) {
+      this.federationManager.broadcastRoomEvent('room_updated', room.id,
+        this.federationManager.buildLocalRoomInfo(room)
+      ).catch(() => {});
+    }
   }
 
   private broadcastToRoom(room: Room, command: ServerCommand, excludeConnectionId?: string): void {
@@ -640,6 +651,7 @@ export class ProtocolHandler {
       if (room) {
         const roomId = room.id;
         const wasPlaying = room.state.type === 'Playing';
+        const wasHost = room.ownerId === session.userId;
         
         if (wasPlaying) {
           const player = room.players.get(session.userId);
@@ -667,8 +679,49 @@ export class ProtocolHandler {
         
         this.roomManager.removePlayerFromRoom(roomId, session.userId);
         
+        const updatedRoom = this.roomManager.getRoom(roomId);
+
+        // 处理房主转移广播
+        if (updatedRoom && wasHost && updatedRoom.ownerId !== session.userId) {
+          this.broadcastMessage(updatedRoom, {
+            type: 'NewHost',
+            user: updatedRoom.ownerId,
+          });
+
+          for (const playerInfo of updatedRoom.players.values()) {
+            const isHost = playerInfo.user.id === updatedRoom.ownerId;
+            const callback = this.broadcastCallbacks.get(playerInfo.connectionId);
+            if (callback) {
+              callback({
+                type: ServerCommandType.ChangeHost,
+                isHost,
+              });
+            }
+          }
+        }
+
+        // 广播离开事件给房间内其他人
+        this.broadcastToRoom(room, {
+          type: ServerCommandType.Message,
+          message: {
+            type: 'LeaveRoom',
+            user: session.userId,
+            name: session.userInfo.name,
+          },
+        });
+
+        // 广播给联邦节点
+        if (this.federationManager?.getConfig?.()?.enabled) {
+          if (updatedRoom) {
+            this.federationManager.broadcastRoomEvent('room_updated', roomId, 
+              this.federationManager.buildLocalRoomInfo(updatedRoom)
+            ).catch(() => {});
+          } else {
+            this.federationManager.broadcastRoomEvent('room_deleted', roomId, { id: roomId }).catch(() => {});
+          }
+        }
+
         if (wasPlaying) {
-          const updatedRoom = this.roomManager.getRoom(roomId);
           if (updatedRoom) {
             this.checkGameEnd(updatedRoom);
           }
@@ -1003,6 +1056,15 @@ export class ProtocolHandler {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.CreateRoom,
         result: { ok: false, error: '你已经在房间了哦喵' },
+      });
+      return;
+    }
+
+    // 联邦检查：防止房间号与远程节点冲突
+    if (this.federationManager && this.federationManager.isRemoteRoom(roomId)) {
+      this.respond(connectionId, sendResponse, {
+        type: ServerCommandType.CreateRoom,
+        result: { ok: false, error: '房间号已被联邦服务器占用' },
       });
       return;
     }
