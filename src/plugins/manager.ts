@@ -151,16 +151,17 @@ export class PluginManager {
           info.missingDeps = missingDeps.map(d => d.uuid);
 
           // 输出缺失依赖信息
-          const missingDepsInfo = missingDeps.map(dep => {
-            if (dep.name) {
-              return `  - ${dep.name} (${dep.uuid})`;
-            }
-            return `  - 未知插件 (${dep.uuid})`;
-          });
-
           this.context.logger.plugin(
-            `${metadata.name} (${metadata.uuid}) 缺少依赖插件，跳过加载:\n${missingDepsInfo.join('\n')}`
+            `${metadata.name} (${metadata.uuid}) 缺少依赖插件，跳过加载:`
           );
+
+          missingDeps.forEach(dep => {
+            if (dep.name) {
+              this.context.logger.plugin(`  - ${dep.name} (${dep.uuid})`);
+            } else {
+              this.context.logger.plugin(`  - 未知插件 (${dep.uuid})`);
+            }
+          });
         }
       }
     }
