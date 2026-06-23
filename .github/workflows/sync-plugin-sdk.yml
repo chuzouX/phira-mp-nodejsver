@@ -9,6 +9,7 @@ on:
       - 'plugin-api.d.ts'
       - 'plugins/**'
       - 'Plugins.md'
+  workflow_dispatch:  # 支持手动触发
 
 jobs:
   sync:
