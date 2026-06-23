@@ -275,21 +275,39 @@ export class PluginManager {
     }
 
     try {
-      // 调用插件的 destroy 方法
+      // 1. 查找依赖此插件的其他插件
+      const dependentPlugins = Array.from(this.plugins.values()).filter(p => {
+        const deps = p.metadata.dependencies || [];
+        return deps.some((dep: any) => {
+          const depUuid = typeof dep === 'string' ? dep : dep.uuid;
+          return depUuid === plugin.metadata.uuid;
+        });
+      });
+
+      // 2. 先卸载依赖此插件的其他插件（级联卸载）
+      if (dependentPlugins.length > 0) {
+        this.context.logger.plugin(`检测到 ${dependentPlugins.length} 个插件依赖 ${plugin.metadata.name}，将一并卸载`);
+        for (const depPlugin of dependentPlugins) {
+          this.context.logger.plugin(`  - 级联卸载: ${depPlugin.metadata.name}`);
+          await this.unloadPlugin(depPlugin.metadata.id);
+        }
+      }
+
+      // 3. 调用插件的 destroy 方法
       await plugin.module.destroy?.();
 
-      // 从映射中移除
+      // 4. 从映射中移除
       this.plugins.delete(pluginName);
       this.pluginsByUuid.delete(plugin.metadata.uuid);
 
-      // 清除路由记录（路由本身仍在 Express 中，但会返回 503）
+      // 5. 清除路由记录
       const routes = this.pluginRoutes.get(pluginName);
       if (routes && routes.size > 0) {
         this.context.logger.plugin(`插件 ${pluginName} 的 ${routes.size} 个路由已禁用`);
       }
       this.pluginRoutes.delete(pluginName);
 
-      // 清除 Node.js 模块缓存
+      // 6. 清除 Node.js 模块缓存
       const modulePath = plugin.modulePath;
       delete require.cache[require.resolve(modulePath)];
 
