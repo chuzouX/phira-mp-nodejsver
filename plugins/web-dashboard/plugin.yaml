@@ -8,7 +8,8 @@ author: Phira MP Server Team
 license: MIT
 homepage: https://github.com/chuzouX/phira-mp-nodejsver
 main: main.js
-dependencies: []  # 无依赖
+dependencies:
+  - c8d4e5f6-9a2b-4c7d-8e1f-3a9b6c5d7e2a  # websocket UUID
 serverVersion: ">=0.4.0"
 tags:
   - web
