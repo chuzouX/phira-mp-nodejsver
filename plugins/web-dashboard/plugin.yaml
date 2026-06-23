@@ -9,7 +9,8 @@ license: MIT
 homepage: https://github.com/chuzouX/phira-mp-nodejsver
 main: main.js
 dependencies:
-  - c8d4e5f6-9a2b-4c7d-8e1f-3a9b6c5d7e2a  # websocket UUID
+  - uuid: c8d4e5f6-9a2b-4c7d-8e1f-3a9b6c5d7e2a
+    name: WebSocket Support
 serverVersion: ">=0.4.0"
 tags:
   - web
