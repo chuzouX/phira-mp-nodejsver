@@ -289,6 +289,18 @@ export class PluginManager {
     return true;
   }
 
+  public getLoadedPlugins(): LoadedPlugin[] {
+    return Array.from(this.plugins.values());
+  }
+
+  public getPluginByName(name: string): LoadedPlugin | undefined {
+    return this.plugins.get(name);
+  }
+
+  public getPluginByUuid(uuid: string): LoadedPlugin | undefined {
+    return this.pluginsByUuid.get(uuid);
+  }
+
   private createApi(pluginName: string, resDir: string): PluginApi {
     const pluginConfigDir = path.join(process.cwd(), 'config', pluginName);
     const pluginConfigPath = path.join(pluginConfigDir, 'config.yaml');

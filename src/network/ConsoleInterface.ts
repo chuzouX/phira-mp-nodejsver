@@ -15,10 +15,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { version } from '../../package.json';
 import { ConsoleLogger } from '../logging/logger';
+import { PluginManager } from '../plugins/manager';
 
 export class ConsoleInterface {
   private rl: readline.Interface;
   private readonly adminName: string = 'ConsoleAdmin';
+  private pluginManager?: PluginManager;
 
   constructor(
     private readonly config: ServerConfig,
@@ -37,7 +39,7 @@ export class ConsoleInterface {
         '/help', '/room', '/status', '/ping', '/list', '/broadcast',
         '/kick', '/fstart', '/lock', '/maxp', '/close', '/tmode', '/smsg', '/bulk',
         '/bans', '/ban', '/unban', '/blist', '/blip', '/ublip', '/stop', '/restart',
-        '/reload', '/op', '/deop', '/info', '/set', '/log'
+        '/reload', '/op', '/deop', '/info', '/set', '/log', '/plugins'
     ];
 
     const logLevels = ['debug', 'info', 'mark', 'warn', 'error'];
@@ -116,6 +118,10 @@ export class ConsoleInterface {
 
     // Bind readline to ConsoleLogger to coordinate log output
     ConsoleLogger.setReadline(this.rl);
+  }
+
+  public setPluginManager(pluginManager: PluginManager): void {
+    this.pluginManager = pluginManager;
   }
 
   public start(): void {
@@ -248,6 +254,9 @@ export class ConsoleInterface {
       case '/log':
         this.handleLog(args);
         break;
+      case '/plugins':
+        this.handlePlugins(args);
+        break;
       default:
         this.logger.info(`[控制台] 未知命令: ${command}。输入 /help 查看命令列表。`);
     }
@@ -294,6 +303,7 @@ export class ConsoleInterface {
 /info - 展示服务器状态以及各种信息
 /set "{env变量}" "{值}" - 设置 env 变量的值
 /log debug|info|mark|warn|error - 调整日志等级 (可多选，例如: /log warn|error)
+/plugins [list|info|reload] - 插件管理 (查看、详情、重载)
 ==============================
 `;
     console.log(help);
@@ -702,6 +712,140 @@ export class ConsoleInterface {
     } else {
         this.logger.warn('[控制台] 此环境不支持动态重新加载配置。');
     }
+  }
+
+  private handlePlugins(args: string[]): void {
+    if (!this.pluginManager) {
+      this.logger.warn('[控制台] 插件系统未启用');
+      return;
+    }
+
+    const subCommand = args[1]?.toLowerCase();
+
+    switch (subCommand) {
+      case 'list':
+      case undefined:
+        // /plugins 或 /plugins list - 列出所有插件
+        this.listPlugins();
+        break;
+
+      case 'info':
+        // /plugins info <name> - 显示插件详细信息
+        if (!args[2]) {
+          this.logger.warn('[控制台] 用法: /plugins info <plugin-name>');
+          return;
+        }
+        this.showPluginInfo(args[2]);
+        break;
+
+      case 'reload':
+        // /plugins reload - 重新加载所有插件
+        this.logger.warn('[控制台] 插件热重载功能暂未实现');
+        break;
+
+      default:
+        this.logger.warn('[控制台] 未知子命令。用法: /plugins [list|info|reload]');
+        break;
+    }
+  }
+
+  private listPlugins(): void {
+    const plugins = this.pluginManager!.getLoadedPlugins();
+
+    if (plugins.length === 0) {
+      this.logger.command('[插件列表] 当前没有加载任何插件');
+      return;
+    }
+
+    this.logger.command(`[插件列表] 已加载 ${plugins.length} 个插件:`);
+    this.logger.command('═════════════════════════════════════════════════════════');
+
+    plugins.forEach((plugin, index) => {
+      const { metadata } = plugin;
+      const status = '✓ 已加载';
+      const deps = metadata.dependencies && metadata.dependencies.length > 0
+        ? ` (${metadata.dependencies.length} 个依赖)`
+        : '';
+
+      this.logger.command(`${index + 1}. ${metadata.name} v${metadata.version}${deps}`);
+      this.logger.command(`   ID: ${metadata.id} | UUID: ${metadata.uuid}`);
+      this.logger.command(`   状态: ${status}`);
+
+      if (metadata.description) {
+        this.logger.command(`   描述: ${metadata.description}`);
+      }
+
+      if (index < plugins.length - 1) {
+        this.logger.command('─────────────────────────────────────────────────────────');
+      }
+    });
+
+    this.logger.command('═════════════════════════════════════════════════════════');
+    this.logger.command(`提示: 使用 /plugins info <name> 查看插件详细信息`);
+  }
+
+  private showPluginInfo(pluginName: string): void {
+    const plugin = this.pluginManager!.getPluginByName(pluginName);
+
+    if (!plugin) {
+      this.logger.warn(`[插件信息] 未找到插件: ${pluginName}`);
+      this.logger.warn('提示: 使用 /plugins list 查看所有已加载的插件');
+      return;
+    }
+
+    const { metadata } = plugin;
+
+    this.logger.command(`[插件信息] ${metadata.name}`);
+    this.logger.command('═════════════════════════════════════════════════════════');
+    this.logger.command(`名称: ${metadata.name}`);
+    this.logger.command(`版本: ${metadata.version}`);
+    this.logger.command(`ID: ${metadata.id}`);
+    this.logger.command(`UUID: ${metadata.uuid}`);
+
+    if (metadata.description) {
+      this.logger.command(`描述: ${metadata.description}`);
+    }
+
+    if (metadata.author) {
+      this.logger.command(`作者: ${metadata.author}`);
+    }
+
+    if (metadata.license) {
+      this.logger.command(`许可证: ${metadata.license}`);
+    }
+
+    if (metadata.homepage) {
+      this.logger.command(`主页: ${metadata.homepage}`);
+    }
+
+    if (metadata.repository) {
+      this.logger.command(`仓库: ${metadata.repository}`);
+    }
+
+    if (metadata.dependencies && metadata.dependencies.length > 0) {
+      this.logger.command(`依赖 (${metadata.dependencies.length}):`);
+      metadata.dependencies.forEach(depUuid => {
+        const depPlugin = this.pluginManager!.getPluginByUuid(depUuid);
+        if (depPlugin) {
+          this.logger.command(`  - ${depPlugin.metadata.name} (${depUuid})`);
+        } else {
+          this.logger.command(`  - ${depUuid}`);
+        }
+      });
+    } else {
+      this.logger.command('依赖: 无');
+    }
+
+    if (metadata.tags && metadata.tags.length > 0) {
+      this.logger.command(`标签: ${metadata.tags.join(', ')}`);
+    }
+
+    if (metadata.serverVersion) {
+      this.logger.command(`要求服务器版本: ${metadata.serverVersion}`);
+    }
+
+    this.logger.command(`主文件: ${plugin.modulePath}`);
+    this.logger.command('═════════════════════════════════════════════════════════');
   }
 
   private async handleOp(args: string[], isAdmin: boolean): Promise<void> {
