@@ -130,33 +130,35 @@ export class PluginManager {
       const { metadata } = info;
 
       if (metadata.dependencies && Array.isArray(metadata.dependencies) && metadata.dependencies.length > 0) {
-        const missingDeps: string[] = [];
+        const missingDeps: Array<{ uuid: string; name?: string }> = [];
 
-        for (const depUuid of metadata.dependencies) {
+        for (const dep of metadata.dependencies) {
+          // 支持两种格式：字符串 UUID 或对象 { uuid, name }
+          const depUuid = typeof dep === 'string' ? dep : dep.uuid;
+          const depName = typeof dep === 'object' && dep.name ? dep.name : undefined;
+
           // 查找依赖的插件
           const depPlugin = Array.from(pluginMetadata.values()).find(p => p.metadata.uuid === depUuid);
 
           if (!depPlugin) {
-            missingDeps.push(depUuid);
+            missingDeps.push({ uuid: depUuid, name: depName });
           }
         }
 
         if (missingDeps.length > 0) {
           info.hasMissingDeps = true;
-          info.missingDeps = missingDeps;
+          info.missingDeps = missingDeps.map(d => d.uuid);
 
-          // 尝试查找 UUID 对应的插件名称
-          const missingDepsInfo = missingDeps.map(uuid => {
-            const depPlugin = Array.from(pluginMetadata.values()).find(p => p.metadata.uuid === uuid);
-            if (depPlugin) {
-              return `  - ${depPlugin.metadata.name} (${uuid})`;
+          // 输出缺失依赖信息
+          const missingDepsInfo = missingDeps.map(dep => {
+            if (dep.name) {
+              return `  - ${dep.name} (${dep.uuid})`;
             }
-            return `  - 未知插件 (${uuid})`;
+            return `  - 未知插件 (${dep.uuid})`;
           });
 
           this.context.logger.plugin(
-            `${metadata.name} (${metadata.uuid}) 缺少依赖插件，跳过加载:\n` +
-            missingDepsInfo.join('\n')
+            `${metadata.name} (${metadata.uuid}) 缺少依赖插件，跳过加载:\n${missingDepsInfo.join('\n')}`
           );
         }
       }
