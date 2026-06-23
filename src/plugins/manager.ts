@@ -145,9 +145,18 @@ export class PluginManager {
           info.hasMissingDeps = true;
           info.missingDeps = missingDeps;
 
+          // 尝试查找 UUID 对应的插件名称
+          const missingDepsInfo = missingDeps.map(uuid => {
+            const depPlugin = Array.from(pluginMetadata.values()).find(p => p.metadata.uuid === uuid);
+            if (depPlugin) {
+              return `  - ${depPlugin.metadata.name} (${uuid})`;
+            }
+            return `  - 未知插件 (${uuid})`;
+          });
+
           this.context.logger.plugin(
             `${metadata.name} (${metadata.uuid}) 缺少依赖插件，跳过加载:\n` +
-            missingDeps.map(uuid => `  - UUID: ${uuid}`).join('\n')
+            missingDepsInfo.join('\n')
           );
         }
       }
