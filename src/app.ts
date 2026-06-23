@@ -254,6 +254,7 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
       federationManager,
     });
     protocolHandler.setPluginManager(pluginManager);
+    consoleInterface.setPluginManager(pluginManager);
     logger.plugin('插件系统已启用，将自动加载 plugins 目录中的全部插件');
   }
 
