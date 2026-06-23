@@ -49,6 +49,7 @@ class SafePluginEventBus implements PluginEventBus {
 
 export class PluginManager {
   private readonly plugins = new Map<string, LoadedPlugin>();
+  private readonly pluginsByUuid = new Map<string, LoadedPlugin>(); // UUID 索引
   private readonly packetHandlers = new Map<number, Array<PacketHandlerRegistration & { pluginName: string }>>();
   private readonly eventsBus: SafePluginEventBus;
   private readonly commandHandlers = new Map<string, (...args: string[]) => void | Promise<void>>();
@@ -74,8 +75,78 @@ export class PluginManager {
       .map((entry) => entry.name)
       .sort();
 
+    // 第一遍：读取所有插件元数据，检查依赖
+    const pluginMetadata = new Map<string, { name: string; metadata: any; hasMissingDeps: boolean; missingDeps: string[] }>();
+
     for (const pluginName of pluginNames) {
-      await this.loadPlugin(pluginName);
+      const pluginDir = path.join(process.cwd(), 'plugins', pluginName);
+      const metadataPath = path.join(pluginDir, 'plugin.yaml');
+
+      if (!fs.existsSync(metadataPath)) {
+        this.context.logger.warn(`[插件] ${pluginName} 缺少 plugin.yaml 元数据文件，跳过加载`);
+        continue;
+      }
+
+      try {
+        const metadataRaw = fs.readFileSync(metadataPath, 'utf8');
+        const metadata = yaml.load(metadataRaw) as any;
+
+        if (!metadata || typeof metadata !== 'object') {
+          this.context.logger.error(`[插件] ${pluginName} 的 plugin.yaml 格式无效，跳过加载`);
+          continue;
+        }
+
+        // 验证必需字段
+        if (!metadata.id || !metadata.name || !metadata.version) {
+          this.context.logger.error(`[插件] ${pluginName} 缺少必需字段 (id, name, version)，跳过加载`);
+          continue;
+        }
+
+        // 验证 UUID
+        if (!metadata.uuid) {
+          this.context.logger.error(`[插件] ${pluginName} 缺少 uuid 字段，跳过加载`);
+          continue;
+        }
+
+        pluginMetadata.set(pluginName, { name: pluginName, metadata, hasMissingDeps: false, missingDeps: [] });
+      } catch (error) {
+        this.context.logger.error(`[插件] 读取 ${pluginName} 元数据失败: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    // 第二遍：检查依赖关系
+    for (const [pluginName, info] of pluginMetadata.entries()) {
+      const { metadata } = info;
+
+      if (metadata.dependencies && Array.isArray(metadata.dependencies) && metadata.dependencies.length > 0) {
+        const missingDeps: string[] = [];
+
+        for (const depUuid of metadata.dependencies) {
+          // 查找依赖的插件
+          const depPlugin = Array.from(pluginMetadata.values()).find(p => p.metadata.uuid === depUuid);
+
+          if (!depPlugin) {
+            missingDeps.push(depUuid);
+          }
+        }
+
+        if (missingDeps.length > 0) {
+          info.hasMissingDeps = true;
+          info.missingDeps = missingDeps;
+
+          this.context.logger.error(
+            `[插件] ${metadata.name} (${metadata.uuid}) 缺少依赖插件，跳过加载:\n` +
+            missingDeps.map(uuid => `  - UUID: ${uuid}`).join('\n')
+          );
+        }
+      }
+    }
+
+    // 第三遍：加载没有依赖问题的插件
+    for (const [pluginName, info] of pluginMetadata.entries()) {
+      if (!info.hasMissingDeps) {
+        await this.loadPlugin(pluginName);
+      }
     }
   }
 
@@ -107,6 +178,17 @@ export class PluginManager {
         throw new Error('plugin.yaml 缺少必需字段 (id, name, version)');
       }
 
+      // 验证 UUID
+      if (!metadata.uuid) {
+        throw new Error('plugin.yaml 缺少 uuid 字段');
+      }
+
+      // 检查 UUID 是否重复
+      if (this.pluginsByUuid.has(metadata.uuid)) {
+        const existing = this.pluginsByUuid.get(metadata.uuid);
+        throw new Error(`UUID 冲突: ${metadata.uuid} 已被插件 ${existing?.name} 使用`);
+      }
+
       // 确定主文件路径
       const mainFile = metadata.main || 'main.js';
       const resDir = path.join(pluginDir, 'res');
@@ -128,13 +210,18 @@ export class PluginManager {
 
       const api = this.createApi(pluginName, resDir);
       await pluginModule.init(api);
-      this.plugins.set(pluginName, {
+
+      const loadedPlugin: LoadedPlugin = {
         name: metadata.name,
         metadata: metadata as any,
         modulePath: resolvedPath,
         module: pluginModule,
-      });
-      this.context.logger.info(`[插件] 已加载 ${metadata.name} v${metadata.version}`);
+      };
+
+      this.plugins.set(pluginName, loadedPlugin);
+      this.pluginsByUuid.set(metadata.uuid, loadedPlugin); // 添加 UUID 索引
+
+      this.context.logger.info(`[插件] 已加载 ${metadata.name} v${metadata.version} (${metadata.uuid})`);
     } catch (error) {
       this.context.logger.error(`[插件] 加载 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`);
     }

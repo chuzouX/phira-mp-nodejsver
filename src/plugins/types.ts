@@ -72,6 +72,7 @@ export interface PluginApi extends PluginContext {
 
 export interface PluginMetadata {
   id: string;
+  uuid: string;            // 插件唯一标识符（UUID）
   name: string;
   version: string;
   description?: string;
@@ -80,7 +81,7 @@ export interface PluginMetadata {
   homepage?: string;
   repository?: string;
   main?: string;
-  dependencies?: Record<string, string>;
+  dependencies?: string[]; // 依赖的插件 UUID 列表
   serverVersion?: string;
   tags?: string[];
 }
