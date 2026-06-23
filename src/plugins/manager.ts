@@ -332,9 +332,24 @@ export class PluginManager {
 
     this.context.logger.plugin(`正在重载 ${plugin.metadata.name}...`);
 
-    // 卸载插件
-    const unloaded = await this.unloadPlugin(pluginName);
-    if (!unloaded) {
+    // 直接卸载插件（不触发级联卸载）
+    try {
+      await plugin.module.destroy?.();
+      this.plugins.delete(pluginName);
+      this.pluginsByUuid.delete(plugin.metadata.uuid);
+
+      const routes = this.pluginRoutes.get(pluginName);
+      if (routes && routes.size > 0) {
+        this.context.logger.plugin(`插件 ${pluginName} 的 ${routes.size} 个路由已禁用`);
+      }
+      this.pluginRoutes.delete(pluginName);
+
+      const modulePath = plugin.modulePath;
+      delete require.cache[require.resolve(modulePath)];
+
+      this.context.logger.plugin(`已卸载 ${plugin.metadata.name} v${plugin.metadata.version}`);
+    } catch (error) {
+      this.context.logger.plugin(`卸载 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`);
       return false;
     }
 
@@ -355,15 +370,40 @@ export class PluginManager {
   public async reloadAllPlugins(): Promise<void> {
     this.context.logger.plugin('开始重载所有插件...');
 
+    // 获取所有插件名称
     const pluginNames = Array.from(this.plugins.keys());
+
+    // 先卸载所有插件（不触发级联）
+    for (const pluginName of pluginNames) {
+      const plugin = this.plugins.get(pluginName);
+      if (plugin) {
+        try {
+          await plugin.module.destroy?.();
+          this.context.logger.plugin(`已卸载 ${plugin.metadata.name} v${plugin.metadata.version}`);
+        } catch (error) {
+          this.context.logger.plugin(`卸载 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+    }
+
+    // 清空所有映射
+    this.plugins.clear();
+    this.pluginsByUuid.clear();
+    this.pluginRoutes.clear();
+
+    // 等待资源释放
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // 重新加载所有插件
     let successCount = 0;
     let failCount = 0;
 
     for (const pluginName of pluginNames) {
-      const success = await this.reloadPlugin(pluginName);
-      if (success) {
+      try {
+        await this.loadPlugin(pluginName);
         successCount++;
-      } else {
+      } catch (error) {
+        this.context.logger.plugin(`重载 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`);
         failCount++;
       }
     }
