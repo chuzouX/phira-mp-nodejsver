@@ -396,10 +396,25 @@ export class PluginManager {
       return false;
     }
 
-    // 检查插件目录是否存在
+    // 检查插件目录是否存在（优先检查正常目录，然后检查禁用目录）
     const pluginsDir = path.join(process.cwd(), 'plugins');
     const pluginPath = path.join(pluginsDir, pluginName);
-    if (!fs.existsSync(pluginPath)) {
+    const disabledPath = path.join(pluginsDir, `!${pluginName}`);
+
+    // 如果是禁用状态（!开头），需要先重命名
+    if (fs.existsSync(disabledPath)) {
+      try {
+        // 等待确保目录没有被占用
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // 重命名目录（移除 ! 前缀）
+        fs.renameSync(disabledPath, pluginPath);
+        this.context.logger.plugin(`已将 !${pluginName} 重命名为 ${pluginName}`);
+      } catch (error) {
+        this.context.logger.plugin(`重命名插件目录失败: ${error instanceof Error ? error.message : String(error)}`);
+        return false;
+      }
+    } else if (!fs.existsSync(pluginPath)) {
       this.context.logger.plugin(`插件 ${pluginName} 不存在`);
       return false;
     }
