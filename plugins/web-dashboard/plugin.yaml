@@ -2,7 +2,7 @@
 id: web-dashboard
 uuid: b9e2f5a8-7c3d-4f1e-9a6b-2d8c4e5f7a1b
 name: Web Dashboard
-version: 1.0.0
+version: 1.1.0
 description: Web 管理面板，提供服务器状态监控、房间管理、玩家管理等功能
 author: Phira MP Server Team
 license: MIT

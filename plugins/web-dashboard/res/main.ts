@@ -271,10 +271,10 @@ class WebDashboardPlugin {
     }
 
     this.app.use(this.sessionParser);
-    
+
     this.app.use((_req, res, next) => {
       res.header('Access-Control-Allow-Origin', '*');
-      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, X-Admin-Secret, x-admin-token');
+      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, x-admin-token');
       next();
     });
   }
