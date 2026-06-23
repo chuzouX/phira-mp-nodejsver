@@ -1,0 +1,12 @@
+# Example Plugin Metadata
+id: example
+name: Example Plugin
+version: 1.0.0
+description: 示例插件 — 展示插件系统核心 API 的用法
+author: Phira MP Server Team
+license: MIT
+main: main.js
+serverVersion: ">=0.4.0"
+tags:
+  - example
+  - template

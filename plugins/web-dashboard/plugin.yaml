@@ -1,0 +1,15 @@
+# Web Dashboard Plugin Metadata
+id: web-dashboard
+name: Web Dashboard
+version: 1.0.0
+description: Web 管理面板，提供服务器状态监控、房间管理、玩家管理等功能
+author: Phira MP Server Team
+license: MIT
+homepage: https://github.com/chuzouX/phira-mp-nodejsver
+main: main.js
+serverVersion: ">=0.4.0"
+tags:
+  - web
+  - dashboard
+  - admin
+  - ui

@@ -9,3 +9,10 @@ GEMINI.md
 logs/
 data/
 outputs/
+.vscode/
+.claude/
+CLAUDE.md
+
+config/*
+
+plugins/*

@@ -8,6 +8,32 @@
 
 import { BinaryReader, BinaryWriter } from './BinaryProtocol';
 
+export interface CompactPos {
+  xBits: number;
+  yBits: number;
+}
+
+export interface TouchFrame {
+  time: number;
+  points: Array<{ id: number; pos: CompactPos }>;
+}
+
+export enum Judgement {
+  Perfect = 0,
+  Good = 1,
+  Bad = 2,
+  Miss = 3,
+  HoldPerfect = 4,
+  HoldGood = 5,
+}
+
+export interface JudgeEvent {
+  time: number;
+  lineId: number;
+  noteId: number;
+  judgement: Judgement;
+}
+
 // Source: phira-mp-common/src/command.rs:157-178
 export enum ClientCommandType {
   Ping = 0,
@@ -58,8 +84,8 @@ export type ClientCommand =
   | { type: ClientCommandType.Ping }
   | { type: ClientCommandType.Authenticate; token: string }
   | { type: ClientCommandType.Chat; message: string }
-  | { type: ClientCommandType.Touches }
-  | { type: ClientCommandType.Judges }
+  | { type: ClientCommandType.Touches; frames: TouchFrame[] }
+  | { type: ClientCommandType.Judges; judges: JudgeEvent[] }
   | { type: ClientCommandType.CreateRoom; id: string }
   | { type: ClientCommandType.JoinRoom; id: string; monitor: boolean }
   | { type: ClientCommandType.LeaveRoom }
@@ -162,8 +188,8 @@ export type ServerCommand =
   | { type: ServerCommandType.Pong }
   | { type: ServerCommandType.Authenticate; result: Result<[UserInfo, ClientRoomState | null]> }
   | { type: ServerCommandType.Chat; result: Result<void> }
-  | { type: ServerCommandType.Touches; player: number; frames: unknown }
-  | { type: ServerCommandType.Judges; player: number; judges: unknown }
+  | { type: ServerCommandType.Touches; player: number; frames: TouchFrame[] }
+  | { type: ServerCommandType.Judges; player: number; judges: JudgeEvent[] }
   | { type: ServerCommandType.Message; message: Message }
   | { type: ServerCommandType.ChangeState; state: RoomState }
   | { type: ServerCommandType.ChangeHost; isHost: boolean }
@@ -290,10 +316,29 @@ export class CommandParser {
         };
       }
 
-      case ClientCommandType.Touches:
-      case ClientCommandType.Judges:
-        reader.readRemaining();
-        return { rawType: commandType };
+      case ClientCommandType.Touches: {
+        const frames = reader.array(() => ({
+          time: reader.f32(),
+          points: reader.array(() => ({
+            id: reader.i8(),
+            pos: {
+              xBits: reader.u16(),
+              yBits: reader.u16(),
+            },
+          })),
+        }));
+        return { rawType: commandType, command: { type: ClientCommandType.Touches, frames } };
+      }
+
+      case ClientCommandType.Judges: {
+        const judges = reader.array(() => ({
+          time: reader.f32(),
+          lineId: reader.u32(),
+          noteId: reader.u32(),
+          judgement: reader.u8() as Judgement,
+        }));
+        return { rawType: commandType, command: { type: ClientCommandType.Judges, judges } };
+      }
 
       default:
         reader.readRemaining();
@@ -377,9 +422,26 @@ export class CommandParser {
         break;
 
       case ServerCommandType.Touches:
+        writer.i32(command.player);
+        writer.array(command.frames, (frame) => {
+          writer.f32(frame.time);
+          writer.array(frame.points, (point) => {
+            writer.i8(point.id);
+            writer.u16(point.pos.xBits);
+            writer.u16(point.pos.yBits);
+          });
+        });
+        break;
+
       case ServerCommandType.Judges:
-        // Not implemented - these are monitor-only features
-        throw new Error('Touches/Judges not implemented');
+        writer.i32(command.player);
+        writer.array(command.judges, (judge) => {
+          writer.f32(judge.time);
+          writer.u32(judge.lineId);
+          writer.u32(judge.noteId);
+          writer.u8(judge.judgement);
+        });
+        break;
 
       default:
         throw new Error('Unimplemented server command type');

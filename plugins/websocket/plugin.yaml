@@ -1,0 +1,15 @@
+# WebSocket Plugin Metadata
+id: websocket
+name: WebSocket Support
+version: 1.0.0
+description: WebSocket 实时通信支持，为 Web 管理面板提供实时房间和玩家状态更新
+author: Phira MP Server Team
+license: MIT
+main: main.js
+serverVersion: ">=0.4.0"
+dependencies:
+  web-dashboard: ">=1.0.0"
+tags:
+  - websocket
+  - realtime
+  - network

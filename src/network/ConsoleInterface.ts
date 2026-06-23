@@ -44,13 +44,14 @@ export class ConsoleInterface {
 
     const envKeys = [
         'PORT', 'HOST', 'TCP_ENABLED', 'USE_PROXY_PROTOCOL', 'TRUST_PROXY_HOPS',
-        'ALLOWED_ORIGINS', 'LOG_LEVEL', 'PHIRA_API_URL', 'SERVER_NAME', 'ROOM_SIZE',
-        'SERVER_ANNOUNCEMENT', 'WEB_PORT', 'ENABLE_WEB_SERVER', 'DISPLAY_IP',
-        'DEFAULT_AVATAR', 'SESSION_SECRET', 'LOGIN_BLACKLIST_DURATION', 'ENABLE_UPDATE_CHECK',
-        'ADMIN_NAME', 'ADMIN_PASSWORD', 'ADMIN_SECRET', 'ADMIN_PHIRA_ID', 'OWNER_PHIRA_ID',
-        'BAN_ID_WHITELIST', 'BAN_IP_WHITELIST', 'SILENT_PHIRA_IDS', 'ENABLE_PUB_WEB',
-        'PUB_PREFIX', 'ENABLE_PRI_WEB', 'PRI_PREFIX', 'CAPTCHA_PROVIDER', 'GEETEST_ID',
-        'GEETEST_KEY', 'FEDERATION_ENABLED', 'FEDERATION_SEED_NODES', 'FEDERATION_SECRET',
+        'LOG_LEVEL', 'PHIRA_API_URL', 'SERVER_NAME', 'ROOM_SIZE',
+        'SERVER_ANNOUNCEMENT', 'WEB_PORT', 'ENABLE_WEB_SERVER',
+        'DEFAULT_AVATAR', 'ENABLE_UPDATE_CHECK',
+        'ADMIN_PHIRA_ID', 'OWNER_PHIRA_ID',
+        'BAN_ID_WHITELIST', 'BAN_IP_WHITELIST', 'SILENT_PHIRA_IDS',
+        'ENABLE_PUB_WEB', 'PUB_PREFIX', 'ENABLE_PRI_WEB', 'PRI_PREFIX',
+        'PLUGINS_ENABLED',
+        'FEDERATION_ENABLED', 'FEDERATION_SEED_NODES', 'FEDERATION_SECRET',
         'FEDERATION_NODE_URL', 'FEDERATION_NODE_ID', 'FEDERATION_ALLOW_LOCAL',
         'FEDERATION_HEALTH_INTERVAL', 'FEDERATION_SYNC_INTERVAL'
     ];
@@ -636,7 +637,7 @@ export class ConsoleInterface {
       return;
     }
     const ip = args[1];
-    const duration = args[2] ? Number(args[2]) : this.config.loginBlacklistDuration;
+    const duration = args[2] ? Number(args[2]) : (this.config.loginBlacklistDuration ?? 600);
     if (isNaN(duration)) {
         this.logger.warn('[控制台] 非法的时长数值');
         return;
@@ -666,6 +667,15 @@ export class ConsoleInterface {
   private stopServer(): void {
     this.logger.command('[控制台] 正在关闭服务器...');
     setTimeout(() => {
+        const isNodemon = process.env.NODEMON === 'true';
+        if (isNodemon && process.ppid) {
+            try {
+                // /stop should fully terminate in dev mode too, not leave nodemon waiting.
+                process.kill(process.ppid, 'SIGTERM');
+            } catch (e: any) {
+                this.logger.warn(`[控制台] 终止 nodemon 进程失败: ${e?.message || e}`);
+            }
+        }
         process.exit(0);
     }, 500);
   }

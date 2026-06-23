@@ -11,16 +11,18 @@ import { BanManager } from './domain/auth/BanManager';
 import { ProtocolHandler } from './domain/protocol/ProtocolHandler';
 import { NetworkServer } from './network/NetworkServer';
 import { HttpServer } from './network/HttpServer';
-import { WebSocketServer } from './network/WebSocketServer';
 import { version } from '../package.json';
 import { FederationManager, FederationConfig } from './federation/FederationManager';
 import { ConsoleInterface } from './network/ConsoleInterface';
+import { PluginManager } from './plugins/manager';
+import { PluginEventName } from './plugins/types';
 
 export interface Application {
   readonly config: ServerConfig;
   readonly logger: Logger;
   readonly roomManager: RoomManager;
   readonly startTime: number;
+  readonly pluginManager?: PluginManager;
   start(): Promise<void>;
   stop(): Promise<void>;
   reloadConfig(): void;
@@ -71,19 +73,11 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
     l.setSilentIds(config.silentPhiraIds);
   });
 
-  let webSocketServer: WebSocketServer;
+  const webSocketServer = undefined;
 
-  const broadcastRooms = () => {
-    if (webSocketServer) {
-      webSocketServer.broadcastRooms();
-    }
-  };
+  const broadcastRooms = () => {};
 
-  const broadcastStats = () => {
-    if (webSocketServer) {
-      webSocketServer.broadcastStats();
-    }
-  };
+  const broadcastStats = () => {};
 
   const roomManager = new InMemoryRoomManager(roomLogger, config.roomSize, broadcastRooms);
   const authService = new PhiraAuthService(config.phiraApiUrl, authLogger, config.defaultAvatar);
@@ -128,27 +122,19 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
 
   const networkServer = new NetworkServer(config, logger, protocolHandler);
   let httpServer: HttpServer | undefined;
-  
+
   if (config.enableWebServer) {
-      httpServer = new HttpServer(
-        config,
-        logger,
-        roomManager,
-        protocolHandler,
-        banManager,
-        federationManager,
-      );
-      webSocketServer = new WebSocketServer(
-        httpServer.getInternalServer(),
-        roomManager,
-        protocolHandler,
-        config,
-        webSocketLogger,
-        httpServer.getSessionParser(),
-        federationManager,
-      );
+    httpServer = new HttpServer(
+      config,
+      logger,
+      roomManager,
+      protocolHandler,
+      banManager,
+      federationManager,
+    );
+    logger.info('[程序] Web 功能将完全由插件系统承载。');
   } else {
-      logger.info('Web server is disabled via configuration.');
+    logger.info('Web server is disabled via configuration.');
   }
 
   const reloadConfig = (): void => {
@@ -251,6 +237,26 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
     setLogLevels,
   );
 
+  // ========== 插件系统初始化 ==========
+  let pluginManager: PluginManager | undefined;
+
+  if (config.pluginsEnabled) {
+    pluginManager = new PluginManager({
+      config,
+      logger,
+      roomManager,
+      protocolHandler,
+      networkServer,
+      httpServer,
+      webSocketServer,
+      expressApp: httpServer?.getExpressApp(),
+      banManager,
+      federationManager,
+    });
+    protocolHandler.setPluginManager(pluginManager);
+    logger.info('[插件] 插件系统已启用，将自动加载 plugins 目录中的全部插件');
+  }
+
   const start = async (): Promise<void> => {
     if (config.enableUpdateCheck) {
         void checkForUpdates(logger);
@@ -266,11 +272,21 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
       await federationManager.start();
     }
 
+    // 加载插件
+    if (pluginManager) {
+      await pluginManager.loadAllFromDirectory();
+    }
+
     consoleInterface.start();
   };
 
   const stop = async (): Promise<void> => {
     consoleInterface.stop();
+
+    // 销毁所有插件
+    if (pluginManager) {
+      await pluginManager.destroyAll();
+    }
 
     // 先停止联邦（清理远程连接）
     if (federationManager) {
@@ -289,6 +305,7 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
     logger,
     roomManager,
     startTime,
+    pluginManager,
     start,
     stop,
     reloadConfig,
@@ -297,6 +314,6 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
     setLogLevel,
     setLogLevels,
     getTcpServer: () => networkServer,
-    getHttpServer: () => httpServer!, 
+    getHttpServer: () => httpServer!,
   };
 };
