@@ -2,7 +2,7 @@
 id: example
 uuid: a7f3e8d1-4b2c-4a9f-8e7d-1c5b9a3f6e2d
 name: Example Plugin
-version: 1.0.0
+version: 1.1.0
 description: 示例插件，展示插件系统的基本功能
 author: Phira NodejsVer MP Server Team - chuzouX
 license: MIT
