@@ -1,5 +1,5 @@
-# Web Dashboard 插件配置示例
-# 复制此文件为 config.yaml 并根据需要修改
+# Web Dashboard 插件配置
+# 这些配置项已从 .env 迁移到此文件
 
 # 显示的服务器 IP/域名（用于前端显示）
 displayIp: "your-server.com:666"
@@ -19,16 +19,13 @@ captchaProvider: none
 
 # 允许的跨域来源 (多个用数组格式)
 allowedOrigins:
-  - http://localhost:28080
-  - https://your-domain.com
+  - http://localhost:5173
+  - http://localhost:3000
 
-# Web 房间过滤规则
-# 启用公开模式（仅显示特定前缀的房间）
+# 公开房间过滤（是否只显示带特定前缀的房间）
 enablePubWeb: false
-# 公开房间前缀
 pubPrefix: "pub"
 
-# 启用私密模式（隐藏特定前缀的房间）
+# 私密房间过滤（是否隐藏带特定前缀的房间）
 enablePriWeb: false
-# 私密房间前缀
 priPrefix: "sm"
