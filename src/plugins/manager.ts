@@ -254,6 +254,81 @@ export class PluginManager {
       }
     }
     this.plugins.clear();
+    this.pluginsByUuid.clear();
+  }
+
+  public async unloadPlugin(pluginName: string): Promise<boolean> {
+    const plugin = this.plugins.get(pluginName);
+    if (!plugin) {
+      return false;
+    }
+
+    try {
+      // 调用插件的 destroy 方法
+      await plugin.module.destroy?.();
+
+      // 从映射中移除
+      this.plugins.delete(pluginName);
+      this.pluginsByUuid.delete(plugin.metadata.uuid);
+
+      // 清除 Node.js 模块缓存
+      const modulePath = plugin.modulePath;
+      delete require.cache[require.resolve(modulePath)];
+
+      this.context.logger.plugin(`已卸载 ${plugin.metadata.name} v${plugin.metadata.version}`);
+      return true;
+    } catch (error) {
+      this.context.logger.plugin(`卸载 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+  }
+
+  public async reloadPlugin(pluginName: string): Promise<boolean> {
+    const plugin = this.plugins.get(pluginName);
+    if (!plugin) {
+      this.context.logger.plugin(`插件 ${pluginName} 不存在`);
+      return false;
+    }
+
+    this.context.logger.plugin(`正在重载 ${plugin.metadata.name}...`);
+
+    // 卸载插件
+    const unloaded = await this.unloadPlugin(pluginName);
+    if (!unloaded) {
+      return false;
+    }
+
+    // 等待一小段时间，确保资源释放
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // 重新加载插件
+    try {
+      await this.loadPlugin(pluginName);
+      this.context.logger.plugin(`${pluginName} 重载成功`);
+      return true;
+    } catch (error) {
+      this.context.logger.plugin(`${pluginName} 重载失败: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+  }
+
+  public async reloadAllPlugins(): Promise<void> {
+    this.context.logger.plugin('开始重载所有插件...');
+
+    const pluginNames = Array.from(this.plugins.keys());
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const pluginName of pluginNames) {
+      const success = await this.reloadPlugin(pluginName);
+      if (success) {
+        successCount++;
+      } else {
+        failCount++;
+      }
+    }
+
+    this.context.logger.plugin(`插件重载完成：成功 ${successCount}，失败 ${failCount}`);
   }
 
   public async emitAsync<T = any>(event: PluginEventName, payload: T): Promise<void> {

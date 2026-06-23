@@ -303,7 +303,7 @@ export class ConsoleInterface {
 /info - 展示服务器状态以及各种信息
 /set "{env变量}" "{值}" - 设置 env 变量的值
 /log debug|info|mark|warn|error - 调整日志等级 (可多选，例如: /log warn|error)
-/plugins [list|info|reload] - 插件管理 (查看、详情、重载)
+/plugins [list|info <name>|reload [name]] - 插件管理 (查看、详情、重载)
 ==============================
 `;
     console.log(help);
@@ -739,12 +739,18 @@ export class ConsoleInterface {
         break;
 
       case 'reload':
-        // /plugins reload - 重新加载所有插件
-        this.logger.warn('[控制台] 插件热重载功能暂未实现');
+        // /plugins reload [name] - 重载插件
+        if (args[2]) {
+          // 重载指定插件
+          this.reloadPlugin(args[2]);
+        } else {
+          // 重载所有插件
+          this.reloadAllPlugins();
+        }
         break;
 
       default:
-        this.logger.warn('[控制台] 未知子命令。用法: /plugins [list|info|reload]');
+        this.logger.warn('[控制台] 未知子命令。用法: /plugins [list|info <name>|reload [name]]');
         break;
     }
   }
@@ -782,6 +788,22 @@ export class ConsoleInterface {
 
     this.logger.command('═════════════════════════════════════════════════════════');
     this.logger.command(`提示: 使用 /plugins info <name> 查看插件详细信息`);
+  }
+
+  private async reloadPlugin(pluginName: string): Promise<void> {
+    this.logger.command(`[插件重载] 正在重载插件: ${pluginName}`);
+    const success = await this.pluginManager!.reloadPlugin(pluginName);
+    if (success) {
+      this.logger.command(`[插件重载] ✓ ${pluginName} 重载成功`);
+    } else {
+      this.logger.warn(`[插件重载] ✗ ${pluginName} 重载失败`);
+    }
+  }
+
+  private async reloadAllPlugins(): Promise<void> {
+    this.logger.command('[插件重载] 正在重载所有插件...');
+    await this.pluginManager!.reloadAllPlugins();
+    this.logger.command('[插件重载] 重载完成');
   }
 
   private showPluginInfo(pluginName: string): void {
