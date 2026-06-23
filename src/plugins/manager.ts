@@ -54,6 +54,7 @@ export class PluginManager {
   private readonly eventsBus: SafePluginEventBus;
   private readonly commandHandlers = new Map<string, (...args: string[]) => void | Promise<void>>();
   private readonly pluginRoutes = new Map<string, Set<string>>(); // 记录每个插件的路由
+  private readonly cascadeUnloadHistory = new Map<string, Set<string>>(); // 记录级联卸载历史
 
   constructor(private readonly context: PluginContext) {
     this.eventsBus = new SafePluginEventBus(context.logger);
@@ -370,29 +371,16 @@ export class PluginManager {
   }
 
   public async disablePlugin(pluginName: string): Promise<boolean> {
-    const pluginsDir = path.join(process.cwd(), 'plugins');
-    const pluginPath = path.join(pluginsDir, pluginName);
-    const disabledPath = path.join(pluginsDir, `!${pluginName}`);
-
-    if (!fs.existsSync(pluginPath)) {
-      this.context.logger.plugin(`插件 ${pluginName} 不存在`);
-      return false;
-    }
-
-    if (fs.existsSync(disabledPath)) {
-      this.context.logger.plugin(`插件 ${pluginName} 已经被禁用`);
+    const plugin = this.plugins.get(pluginName);
+    if (!plugin) {
+      this.context.logger.plugin(`插件 ${pluginName} 未加载或不存在`);
       return false;
     }
 
     try {
-      // 先卸载插件
-      if (this.plugins.has(pluginName)) {
-        await this.unloadPlugin(pluginName);
-      }
-
-      // 重命名目录（添加 ! 前缀）
-      fs.renameSync(pluginPath, disabledPath);
-      this.context.logger.plugin(`已禁用插件: ${pluginName}`);
+      // 临时卸载插件（不修改文件系统）
+      await this.unloadPlugin(pluginName);
+      this.context.logger.plugin(`已禁用插件: ${pluginName}（重启后会重新加载）`);
       return true;
     } catch (error) {
       this.context.logger.plugin(`禁用插件 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`);
@@ -401,22 +389,43 @@ export class PluginManager {
   }
 
   public async enablePlugin(pluginName: string): Promise<boolean> {
-    const pluginsDir = path.join(process.cwd(), 'plugins');
-    const disabledPath = path.join(pluginsDir, `!${pluginName}`);
-    const enabledPath = path.join(pluginsDir, pluginName);
+    // 检查插件是否已加载
+    if (this.plugins.has(pluginName)) {
+      this.context.logger.plugin(`插件 ${pluginName} 已经在运行`);
+      return false;
+    }
 
-    if (!fs.existsSync(disabledPath)) {
-      this.context.logger.plugin(`插件 !${pluginName} 不存在或未被禁用`);
+    // 检查插件目录是否存在
+    const pluginsDir = path.join(process.cwd(), 'plugins');
+    const pluginPath = path.join(pluginsDir, pluginName);
+    if (!fs.existsSync(pluginPath)) {
+      this.context.logger.plugin(`插件 ${pluginName} 不存在`);
       return false;
     }
 
     try {
-      // 重命名目录（移除 ! 前缀）
-      fs.renameSync(disabledPath, enabledPath);
+      // 临时加载插件
+      await this.loadPlugin(pluginName);
       this.context.logger.plugin(`已启用插件: ${pluginName}`);
 
-      // 加载插件
-      await this.loadPlugin(pluginName);
+      // 检查是否有级联卸载的历史记录
+      const cascaded = this.cascadeUnloadHistory.get(pluginName);
+      if (cascaded && cascaded.size > 0) {
+        this.context.logger.plugin(`检测到 ${cascaded.size} 个插件曾被级联卸载，正在重新加载`);
+
+        for (const cascadedPluginName of cascaded) {
+          // 检查插件目录是否存在
+          const cascadedPluginPath = path.join(pluginsDir, cascadedPluginName);
+          if (fs.existsSync(cascadedPluginPath)) {
+            this.context.logger.plugin(`  - 级联加载: ${cascadedPluginName}`);
+            await this.loadPlugin(cascadedPluginName);
+          }
+        }
+
+        // 清除历史记录
+        this.cascadeUnloadHistory.delete(pluginName);
+      }
+
       return true;
     } catch (error) {
       this.context.logger.plugin(`启用插件 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`);
