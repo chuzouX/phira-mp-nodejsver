@@ -1,0 +1,73 @@
+name: Sync Plugin SDK
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - 'plugin-api.d.ts'
+      - 'plugins/**'
+      - 'Plugins.md'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout plugin SDK repo
+        uses: actions/checkout@v4
+        with:
+          repository: chuzouX/phira-mp-nodejsver-plugin
+          token: ${{ secrets.PLUGIN_SDK_TOKEN }}
+          path: plugin-sdk
+
+      - name: Copy updated files
+        run: |
+          # 复制类型定义
+          cp plugin-api.d.ts plugin-sdk/
+
+          # 复制示例插件
+          mkdir -p plugin-sdk/example
+          if [ -f "plugins/example/plugin.yaml" ]; then
+            cp plugins/example/plugin.yaml plugin-sdk/example/
+          fi
+          if [ -f "plugins/example/res/main.ts" ]; then
+            cp plugins/example/res/main.ts plugin-sdk/example/index.ts
+          fi
+          if [ -f "plugins/example/res/main.js" ]; then
+            cp plugins/example/res/main.js plugin-sdk/example/index.js
+          fi
+
+          # 复制插件文档（如果需要）
+          if [ -f "Plugins.md" ]; then
+            cp Plugins.md plugin-sdk/
+          fi
+
+      - name: Commit and push changes
+        run: |
+          cd plugin-sdk
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 检查是否有更改
+          if git diff --quiet; then
+            echo "No changes to sync"
+            exit 0
+          fi
+
+          git add .
+          git commit -m "chore: sync from main repo
+
+Automated sync of:
+- plugin-api.d.ts
+- example plugin
+- documentation
+
+Source commit: ${{ github.sha }}"
+
+          git push
