@@ -53,6 +53,7 @@ export class PluginManager {
   private readonly packetHandlers = new Map<number, Array<PacketHandlerRegistration & { pluginName: string }>>();
   private readonly eventsBus: SafePluginEventBus;
   private readonly commandHandlers = new Map<string, (...args: string[]) => void | Promise<void>>();
+  private readonly pluginRoutes = new Map<string, Set<string>>(); // 记录每个插件的路由
 
   constructor(private readonly context: PluginContext) {
     this.eventsBus = new SafePluginEventBus(context.logger);
@@ -272,6 +273,13 @@ export class PluginManager {
       this.plugins.delete(pluginName);
       this.pluginsByUuid.delete(plugin.metadata.uuid);
 
+      // 清除路由记录（路由本身仍在 Express 中，但会返回 503）
+      const routes = this.pluginRoutes.get(pluginName);
+      if (routes && routes.size > 0) {
+        this.context.logger.plugin(`插件 ${pluginName} 的 ${routes.size} 个路由已禁用`);
+      }
+      this.pluginRoutes.delete(pluginName);
+
       // 清除 Node.js 模块缓存
       const modulePath = plugin.modulePath;
       delete require.cache[require.resolve(modulePath)];
@@ -461,8 +469,27 @@ export class PluginManager {
           this.context.logger.plugin(`${pluginName} 注册路由失败，HTTP 服务未启用: ${method.toUpperCase()} ${routePath}`);
           return;
         }
+
+        // 记录路由
+        if (!this.pluginRoutes.has(pluginName)) {
+          this.pluginRoutes.set(pluginName, new Set());
+        }
+        this.pluginRoutes.get(pluginName)!.add(`${method.toUpperCase()} ${routePath}`);
+
+        // 包装 handler，添加插件状态检查
+        const wrappedHandler: express.RequestHandler = (req, res, next) => {
+          // 检查插件是否仍然加载
+          if (!this.plugins.has(pluginName)) {
+            return res.status(503).json({
+              error: 'Service Unavailable',
+              message: `Plugin '${pluginName}' is not loaded`
+            });
+          }
+          return handler(req, res, next);
+        };
+
         const expressMethod = method.toLowerCase() as PluginRouteMethod;
-        (app[expressMethod] as any).call(app, routePath, handler);
+        (app[expressMethod] as any).call(app, routePath, wrappedHandler);
         this.context.logger.plugin(`${pluginName} 注册路由 ${method.toUpperCase()} ${routePath}`);
       },
       serveStatic: (mountPath: string, rootDir: string) => {
