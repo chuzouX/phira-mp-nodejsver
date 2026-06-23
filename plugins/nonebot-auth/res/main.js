@@ -55,7 +55,7 @@ const pluginModule = {
         const enableLogging = pluginConfig.enableLogging ?? true;
         if (!adminSecret) {
             api.logger.warn('[NoneBotAuth] ADMIN_SECRET 未配置，插件功能将不可用');
-            api.logger.warn('[NoneBotAuth] 请在 .env 中设置 ADMIN_SECRET 或在插件配置中设置 adminSecret');
+            api.logger.warn('[NoneBotAuth] 请在 config/nonebot-auth/config.yaml 中修改配置');
             return;
         }
         // 中间件：验证 Admin Secret
