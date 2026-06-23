@@ -723,14 +723,16 @@ export class ConsoleInterface {
     const subCommand = args[1]?.toLowerCase();
 
     switch (subCommand) {
+      case 'help':
+        this.showPluginsHelp();
+        break;
+
       case 'list':
       case undefined:
-        // /plugins 或 /plugins list - 列出所有插件
         this.listPlugins();
         break;
 
       case 'info':
-        // /plugins info <name> - 显示插件详细信息
         if (!args[2]) {
           this.logger.warn('[控制台] 用法: /plugins info <plugin-name>');
           return;
@@ -739,55 +741,101 @@ export class ConsoleInterface {
         break;
 
       case 'reload':
-        // /plugins reload [name] - 重载插件
         if (args[2]) {
-          // 重载指定插件
           this.reloadPlugin(args[2]);
         } else {
-          // 重载所有插件
           this.reloadAllPlugins();
         }
         break;
 
+      case 'disable':
+        if (!args[2]) {
+          this.logger.warn('[控制台] 用法: /plugins disable <plugin-name>');
+          return;
+        }
+        this.disablePlugin(args[2]);
+        break;
+
+      case 'enable':
+        if (!args[2]) {
+          this.logger.warn('[控制台] 用法: /plugins enable <plugin-name>');
+          return;
+        }
+        this.enablePlugin(args[2]);
+        break;
+
+      case 'install':
+        if (!args[2]) {
+          this.logger.warn('[控制台] 用法: /plugins install <plugin-name>');
+          return;
+        }
+        this.installPlugin(args[2]);
+        break;
+
+      case 'uninstall':
+        if (!args[2]) {
+          this.logger.warn('[控制台] 用法: /plugins uninstall <plugin-name>');
+          return;
+        }
+        this.uninstallPlugin(args[2]);
+        break;
+
       default:
-        this.logger.warn('[控制台] 未知子命令。用法: /plugins [list|info <name>|reload [name]]');
+        this.logger.warn('[控制台] 未知子命令。使用 /plugins help 查看帮助');
         break;
     }
   }
 
   private listPlugins(): void {
-    const plugins = this.pluginManager!.getLoadedPlugins();
+    const allPlugins = this.pluginManager!.getAllPlugins();
 
-    if (plugins.length === 0) {
-      this.logger.command('[插件列表] 当前没有加载任何插件');
+    if (allPlugins.length === 0) {
+      this.logger.command('[插件列表] 当前没有任何插件');
       return;
     }
 
-    this.logger.command(`[插件列表] 已加载 ${plugins.length} 个插件:`);
+    const enabledPlugins = allPlugins.filter(p => p.enabled);
+    const disabledPlugins = allPlugins.filter(p => !p.enabled);
+
+    this.logger.command(`[插件列表] 共 ${allPlugins.length} 个插件 (已启用: ${enabledPlugins.length}, 已禁用: ${disabledPlugins.length})`);
     this.logger.command('═════════════════════════════════════════════════════════');
 
-    plugins.forEach((plugin, index) => {
-      const { metadata } = plugin;
-      const status = '✓ 已加载';
-      const deps = metadata.dependencies && metadata.dependencies.length > 0
-        ? ` (${metadata.dependencies.length} 个依赖)`
-        : '';
+    // 显示已启用的插件
+    if (enabledPlugins.length > 0) {
+      this.logger.command('✓ 已启用的插件:');
+      enabledPlugins.forEach((item, index) => {
+        const plugin = this.pluginManager!.getPluginByName(item.name);
+        if (plugin) {
+          const { metadata } = plugin;
+          const deps = metadata.dependencies && metadata.dependencies.length > 0
+            ? ` (${metadata.dependencies.length} 个依赖)`
+            : '';
+          this.logger.command(`  ${index + 1}. ${metadata.name} v${metadata.version}${deps}`);
+          this.logger.command(`     ID: ${metadata.id} | UUID: ${metadata.uuid}`);
+          if (metadata.description) {
+            this.logger.command(`     描述: ${metadata.description}`);
+          }
+        } else {
+          this.logger.command(`  ${index + 1}. ${item.name} (未加载)`);
+        }
+        if (index < enabledPlugins.length - 1) {
+          this.logger.command('     ─────────────────────────────────────────────────────');
+        }
+      });
+    }
 
-      this.logger.command(`${index + 1}. ${metadata.name} v${metadata.version}${deps}`);
-      this.logger.command(`   ID: ${metadata.id} | UUID: ${metadata.uuid}`);
-      this.logger.command(`   状态: ${status}`);
-
-      if (metadata.description) {
-        this.logger.command(`   描述: ${metadata.description}`);
-      }
-
-      if (index < plugins.length - 1) {
-        this.logger.command('─────────────────────────────────────────────────────────');
-      }
-    });
+    // 显示已禁用的插件
+    if (disabledPlugins.length > 0) {
+      this.logger.command('');
+      this.logger.command('✗ 已禁用的插件:');
+      disabledPlugins.forEach((item, index) => {
+        this.logger.command(`  ${index + 1}. !${item.name} (已禁用)`);
+      });
+    }
 
     this.logger.command('═════════════════════════════════════════════════════════');
     this.logger.command(`提示: 使用 /plugins info <name> 查看插件详细信息`);
+    this.logger.command(`      使用 /plugins help 查看所有命令`);
   }
 
   private async reloadPlugin(pluginName: string): Promise<void> {
@@ -868,6 +916,86 @@ export class ConsoleInterface {
 
     this.logger.command(`主文件: ${plugin.modulePath}`);
     this.logger.command('═════════════════════════════════════════════════════════');
+  }
+
+  private showPluginsHelp(): void {
+    const help = `
+[插件管理帮助]
+═════════════════════════════════════════════════════════
+命令列表：
+
+  /plugins [list]              列出所有插件（包括已禁用）
+  /plugins info <name>         查看插件详细信息
+  /plugins help                显示此帮助信息
+
+插件控制：
+  /plugins reload [name]       重载插件（不指定则重载全部）
+  /plugins enable <name>       启用已禁用的插件
+  /plugins disable <name>      禁用插件（添加前缀 !）
+
+插件管理：
+  /plugins install <name>      安装并永久加载插件（暂未实现）
+  /plugins uninstall <name>    卸载并删除插件目录
+
+说明：
+  • enable/disable - 启用/禁用，重启后保持
+  • 禁用的插件目录名会添加 ! 前缀
+  • 默认情况下，以 ! 开头的目录不会被加载
+
+═════════════════════════════════════════════════════════
+`;
+    this.logger.command(help);
+  }
+
+  private async disablePlugin(pluginName: string): Promise<void> {
+    this.logger.command(`[插件管理] 正在禁用插件: ${pluginName}`);
+    const success = await this.pluginManager!.disablePlugin(pluginName);
+    if (success) {
+      this.logger.command(`[插件管理] ✓ ${pluginName} 已禁用（目录已重命名为 !${pluginName}）`);
+    } else {
+      this.logger.warn(`[插件管理] ✗ ${pluginName} 禁用失败`);
+    }
+  }
+
+  private async enablePlugin(pluginName: string): Promise<void> {
+    this.logger.command(`[插件管理] 正在启用插件: ${pluginName}`);
+    const success = await this.pluginManager!.enablePlugin(pluginName);
+    if (success) {
+      this.logger.command(`[插件管理] ✓ ${pluginName} 已启用并加载`);
+    } else {
+      this.logger.warn(`[插件管理] ✗ ${pluginName} 启用失败`);
+    }
+  }
+
+  private async installPlugin(pluginName: string): Promise<void> {
+    this.logger.command(`[插件管理] install 功能暂未实现`);
+    this.logger.command(`[插件管理] 请手动将插件放置到 plugins/${pluginName}/ 目录`);
+    this.logger.command(`[插件管理] 然后使用 /plugins reload 重新加载`);
+  }
+
+  private async uninstallPlugin(pluginName: string): Promise<void> {
+    this.logger.command(`[插件管理] 正在卸载插件: ${pluginName}`);
+
+    if (this.pluginManager!.getPluginByName(pluginName)) {
+      await this.pluginManager!.unloadPlugin(pluginName);
+    }
+
+    const pluginsDir = path.join(process.cwd(), 'plugins');
+    const pluginPath = path.join(pluginsDir, pluginName);
+    const disabledPath = path.join(pluginsDir, `!${pluginName}`);
+
+    try {
+      const targetPath = fs.existsSync(pluginPath) ? pluginPath : disabledPath;
+
+      if (fs.existsSync(targetPath)) {
+        fs.rmSync(targetPath, { recursive: true, force: true });
+        this.logger.command(`[插件管理] ✓ ${pluginName} 已卸载并删除`);
+      } else {
+        this.logger.warn(`[插件管理] ✗ 插件目录不存在: ${pluginName}`);
+      }
+    } catch (error: any) {
+      this.logger.warn(`[插件管理] ✗ 删除失败: ${error.message}`);
+    }
   }
 
   private async handleOp(args: string[], isAdmin: boolean): Promise<void> {

@@ -75,6 +75,7 @@ export class PluginManager {
     const pluginNames = fs.readdirSync(pluginsDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name)
+      .filter((name) => !name.startsWith('!')) // 跳过以 ! 开头的目录（禁用的插件）
       .sort();
 
     if (pluginNames.length === 0) {
@@ -329,6 +330,76 @@ export class PluginManager {
     }
 
     this.context.logger.plugin(`插件重载完成：成功 ${successCount}，失败 ${failCount}`);
+  }
+
+  public async disablePlugin(pluginName: string): Promise<boolean> {
+    const pluginsDir = path.join(process.cwd(), 'plugins');
+    const pluginPath = path.join(pluginsDir, pluginName);
+    const disabledPath = path.join(pluginsDir, `!${pluginName}`);
+
+    if (!fs.existsSync(pluginPath)) {
+      this.context.logger.plugin(`插件 ${pluginName} 不存在`);
+      return false;
+    }
+
+    if (fs.existsSync(disabledPath)) {
+      this.context.logger.plugin(`插件 ${pluginName} 已经被禁用`);
+      return false;
+    }
+
+    try {
+      // 先卸载插件
+      if (this.plugins.has(pluginName)) {
+        await this.unloadPlugin(pluginName);
+      }
+
+      // 重命名目录（添加 ! 前缀）
+      fs.renameSync(pluginPath, disabledPath);
+      this.context.logger.plugin(`已禁用插件: ${pluginName}`);
+      return true;
+    } catch (error) {
+      this.context.logger.plugin(`禁用插件 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+  }
+
+  public async enablePlugin(pluginName: string): Promise<boolean> {
+    const pluginsDir = path.join(process.cwd(), 'plugins');
+    const disabledPath = path.join(pluginsDir, `!${pluginName}`);
+    const enabledPath = path.join(pluginsDir, pluginName);
+
+    if (!fs.existsSync(disabledPath)) {
+      this.context.logger.plugin(`插件 !${pluginName} 不存在或未被禁用`);
+      return false;
+    }
+
+    try {
+      // 重命名目录（移除 ! 前缀）
+      fs.renameSync(disabledPath, enabledPath);
+      this.context.logger.plugin(`已启用插件: ${pluginName}`);
+
+      // 加载插件
+      await this.loadPlugin(pluginName);
+      return true;
+    } catch (error) {
+      this.context.logger.plugin(`启用插件 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+  }
+
+  public getAllPlugins(): { name: string; enabled: boolean }[] {
+    const pluginsDir = path.join(process.cwd(), 'plugins');
+    if (!fs.existsSync(pluginsDir)) {
+      return [];
+    }
+
+    return fs.readdirSync(pluginsDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => ({
+        name: entry.name.startsWith('!') ? entry.name.substring(1) : entry.name,
+        enabled: !entry.name.startsWith('!')
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   public async emitAsync<T = any>(event: PluginEventName, payload: T): Promise<void> {
