@@ -66,14 +66,23 @@ export class PluginManager {
     const pluginsDir = path.join(process.cwd(), 'plugins');
     if (!fs.existsSync(pluginsDir)) {
       fs.mkdirSync(pluginsDir, { recursive: true });
-      this.context.logger.info(`[插件] 已自动创建插件目录: ${pluginsDir}`);
+      this.context.logger.plugin(`已自动创建插件目录: ${pluginsDir}`);
       return;
     }
+
+    this.context.logger.plugin('开始加载插件...');
 
     const pluginNames = fs.readdirSync(pluginsDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name)
       .sort();
+
+    if (pluginNames.length === 0) {
+      this.context.logger.plugin('未发现任何插件');
+      return;
+    }
+
+    this.context.logger.plugin(`发现 ${pluginNames.length} 个插件: ${pluginNames.join(', ')}`);
 
     // 第一遍：读取所有插件元数据，检查依赖
     const pluginMetadata = new Map<string, { name: string; metadata: any; hasMissingDeps: boolean; missingDeps: string[] }>();
@@ -83,7 +92,7 @@ export class PluginManager {
       const metadataPath = path.join(pluginDir, 'plugin.yaml');
 
       if (!fs.existsSync(metadataPath)) {
-        this.context.logger.warn(`[插件] ${pluginName} 缺少 plugin.yaml 元数据文件，跳过加载`);
+        this.context.logger.plugin(`${pluginName} 缺少 plugin.yaml 元数据文件，跳过加载`);
         continue;
       }
 
@@ -92,25 +101,25 @@ export class PluginManager {
         const metadata = yaml.load(metadataRaw) as any;
 
         if (!metadata || typeof metadata !== 'object') {
-          this.context.logger.error(`[插件] ${pluginName} 的 plugin.yaml 格式无效，跳过加载`);
+          this.context.logger.plugin(`${pluginName} 的 plugin.yaml 格式无效，跳过加载`);
           continue;
         }
 
         // 验证必需字段
         if (!metadata.id || !metadata.name || !metadata.version) {
-          this.context.logger.error(`[插件] ${pluginName} 缺少必需字段 (id, name, version)，跳过加载`);
+          this.context.logger.plugin(`${pluginName} 缺少必需字段 (id, name, version)，跳过加载`);
           continue;
         }
 
         // 验证 UUID
         if (!metadata.uuid) {
-          this.context.logger.error(`[插件] ${pluginName} 缺少 uuid 字段，跳过加载`);
+          this.context.logger.plugin(`${pluginName} 缺少 uuid 字段，跳过加载`);
           continue;
         }
 
         pluginMetadata.set(pluginName, { name: pluginName, metadata, hasMissingDeps: false, missingDeps: [] });
       } catch (error) {
-        this.context.logger.error(`[插件] 读取 ${pluginName} 元数据失败: ${error instanceof Error ? error.message : String(error)}`);
+        this.context.logger.plugin(`读取 ${pluginName} 元数据失败: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
 
@@ -134,8 +143,8 @@ export class PluginManager {
           info.hasMissingDeps = true;
           info.missingDeps = missingDeps;
 
-          this.context.logger.error(
-            `[插件] ${metadata.name} (${metadata.uuid}) 缺少依赖插件，跳过加载:\n` +
+          this.context.logger.plugin(
+            `${metadata.name} (${metadata.uuid}) 缺少依赖插件，跳过加载:\n` +
             missingDeps.map(uuid => `  - UUID: ${uuid}`).join('\n')
           );
         }
@@ -143,11 +152,18 @@ export class PluginManager {
     }
 
     // 第三遍：加载没有依赖问题的插件
+    const loadedCount = Array.from(pluginMetadata.values()).filter(info => !info.hasMissingDeps).length;
+    const skippedCount = Array.from(pluginMetadata.values()).filter(info => info.hasMissingDeps).length;
+
     for (const [pluginName, info] of pluginMetadata.entries()) {
       if (!info.hasMissingDeps) {
         await this.loadPlugin(pluginName);
       }
     }
+
+    this.context.logger.plugin(
+      `插件加载完成：成功 ${this.plugins.size}/${loadedCount}，跳过 ${skippedCount}`
+    );
   }
 
   public async loadPlugin(pluginName: string): Promise<void> {
@@ -155,12 +171,14 @@ export class PluginManager {
       return;
     }
 
+    this.context.logger.plugin(`正在加载 ${pluginName}...`);
+
     const pluginDir = path.join(process.cwd(), 'plugins', pluginName);
     const metadataPath = path.join(pluginDir, 'plugin.yaml');
 
     // 检查是否存在 plugin.yaml
     if (!fs.existsSync(metadataPath)) {
-      this.context.logger.warn(`[插件] 插件 ${pluginName} 缺少 plugin.yaml 元数据文件`);
+      this.context.logger.plugin(`插件 ${pluginName} 缺少 plugin.yaml 元数据文件`);
       return;
     }
 
@@ -221,9 +239,9 @@ export class PluginManager {
       this.plugins.set(pluginName, loadedPlugin);
       this.pluginsByUuid.set(metadata.uuid, loadedPlugin); // 添加 UUID 索引
 
-      this.context.logger.info(`[插件] 已加载 ${metadata.name} v${metadata.version} (${metadata.uuid})`);
+      this.context.logger.plugin(`已加载 ${metadata.name} v${metadata.version} (${metadata.uuid})`);
     } catch (error) {
-      this.context.logger.error(`[插件] 加载 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`);
+      this.context.logger.plugin(`加载 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -232,7 +250,7 @@ export class PluginManager {
       try {
         await plugin.module.destroy?.();
       } catch (error) {
-        this.context.logger.error(`[插件] 销毁 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`);
+        this.context.logger.plugin(`销毁 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
     this.plugins.clear();
@@ -252,7 +270,7 @@ export class PluginManager {
       try {
         await registration.handler({ connectionId, command });
       } catch (error) {
-        this.context.logger.error(`[插件] 数据包处理失败 ${registration.pluginName}: ${error instanceof Error ? error.message : String(error)}`);
+        this.context.logger.plugin(`数据包处理失败 ${registration.pluginName}: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
   }
@@ -282,23 +300,23 @@ export class PluginManager {
       registerRoute: (method: PluginRouteMethod, routePath: string, handler: express.RequestHandler) => {
         const app = this.context.expressApp ?? this.context.httpServer?.getExpressApp();
         if (!app) {
-          this.context.logger.warn(`[插件] ${pluginName} 注册路由失败，HTTP 服务未启用: ${method.toUpperCase()} ${routePath}`);
+          this.context.logger.plugin(`${pluginName} 注册路由失败，HTTP 服务未启用: ${method.toUpperCase()} ${routePath}`);
           return;
         }
         const expressMethod = method.toLowerCase() as PluginRouteMethod;
         (app[expressMethod] as any).call(app, routePath, handler);
-        this.context.logger.info(`[插件] ${pluginName} 注册路由 ${method.toUpperCase()} ${routePath}`);
+        this.context.logger.plugin(`${pluginName} 注册路由 ${method.toUpperCase()} ${routePath}`);
       },
       serveStatic: (mountPath: string, rootDir: string) => {
         const app = this.context.expressApp ?? this.context.httpServer?.getExpressApp();
         if (!app) {
-          this.context.logger.warn(`[插件] ${pluginName} 挂载静态目录失败，HTTP 服务未启用: ${mountPath}`);
+          this.context.logger.plugin(`${pluginName} 挂载静态目录失败，HTTP 服务未启用: ${mountPath}`);
           return;
         }
         // 如果 rootDir 是相对路径，相对于插件的 res 目录解析
         const resolvedDir = path.isAbsolute(rootDir) ? rootDir : path.join(resDir, rootDir);
         app.use(mountPath, express.static(resolvedDir));
-        this.context.logger.info(`[插件] ${pluginName} 挂载静态目录 ${mountPath} -> ${resolvedDir}`);
+        this.context.logger.plugin(`${pluginName} 挂载静态目录 ${mountPath} -> ${resolvedDir}`);
       },
       getExpressApp: () => this.context.expressApp ?? this.context.httpServer?.getExpressApp(),
       getPluginConfigDir: () => pluginConfigDir,
