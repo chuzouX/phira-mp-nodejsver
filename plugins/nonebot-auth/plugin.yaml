@@ -1,0 +1,19 @@
+# NoneBot Auth Plugin Metadata
+id: nonebot-auth
+uuid: d5a7b8c9-3e4f-4d1a-9b2c-6e8f7a9d5b3c
+name: NoneBot Auth
+version: 1.0.0
+description: 基于密钥的管理员鉴权插件，为 NoneBot 机器人和外部脚本提供 API 访问鉴权。通过 X-Admin-Secret 请求头发送加密后的密钥进行身份验证。
+author: Phira MP Server Team
+license: MIT
+homepage: https://github.com/chuzouX/phira-mp-nodejsver
+main: main.js
+dependencies:
+  - b9e2f5a8-7c3d-4f1e-9a6b-2d8c4e5f7a1b  # web-dashboard UUID（需要 HTTP 服务器）
+serverVersion: ">=0.4.0"
+tags:
+  - auth
+  - nonebot
+  - bot
+  - security
+  - api
