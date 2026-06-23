@@ -63,11 +63,11 @@ jobs:
           git add .
           git commit -m "chore: sync from main repo
 
-Automated sync of:
-- plugin-api.d.ts
-- example plugin
-- documentation
+          Automated sync of:
+          - plugin-api.d.ts
+          - example plugin
+          - documentation
 
-Source commit: ${{ github.sha }}"
+          Source commit: ${{ github.sha }}"
 
           git push
