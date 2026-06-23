@@ -9,7 +9,8 @@ license: MIT
 homepage: https://github.com/chuzouX/phira-mp-nodejsver
 main: main.js
 dependencies:
-  - b9e2f5a8-7c3d-4f1e-9a6b-2d8c4e5f7a1b  # web-dashboard UUID（需要 HTTP 服务器）
+  - uuid: b9e2f5a8-7c3d-4f1e-9a6b-2d8c4e5f7a1b
+    name: Web Dashboard
 serverVersion: ">=0.4.0"
 tags:
   - auth
