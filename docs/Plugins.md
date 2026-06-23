@@ -61,6 +61,9 @@ plugins/
 # 插件唯一标识符（必需）
 id: my-plugin
 
+# 插件 UUID（必需，使用 UUID v4 格式）
+uuid: a7f3e8d1-4b2c-4a9f-8e7d-1c5b9a3f6e2d
+
 # 插件显示名称（必需）
 name: My Plugin
 
@@ -85,8 +88,9 @@ repository: https://github.com/user/my-plugin
 # 插件主文件（可选，默认为 main.js）
 main: main.js
 
-# 依赖的其他插件（可选）
+# 依赖的其他插件（可选，使用依赖插件的 UUID）
 dependencies:
+  - b9e2f5a8-7c3d-4f1e-9a6b-2d8c4e5f7a1b  # web-dashboard 的 UUID
   web-dashboard: ">=1.0.0"
 
 # 要求的服务器版本（可选）

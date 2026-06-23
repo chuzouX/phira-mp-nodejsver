@@ -1,14 +1,15 @@
 # WebSocket Plugin Metadata
 id: websocket
+uuid: c8d4e5f6-9a2b-4c7d-8e1f-3a9b6c5d7e2a
 name: WebSocket Support
 version: 1.0.0
 description: WebSocket 实时通信支持，为 Web 管理面板提供实时房间和玩家状态更新
 author: Phira MP Server Team
 license: MIT
 main: main.js
-serverVersion: ">=0.4.0"
 dependencies:
-  web-dashboard: ">=1.0.0"
+  - b9e2f5a8-7c3d-4f1e-9a6b-2d8c4e5f7a1b  # web-dashboard UUID
+serverVersion: ">=0.4.0"
 tags:
   - websocket
   - realtime
