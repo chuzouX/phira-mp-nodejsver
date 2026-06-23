@@ -41,16 +41,23 @@ async function createPlugin() {
 
   const name = await question('插件名称 (中文或英文): ') || id;
   const description = await question('插件描述: ') || '一个新的插件';
-  const author = await question('作者: ') || 'Phira MP Server Team';
+  const author = await question('作者: ') || 'Phira NodejsVer MP Server Team - chuzouX';
+
+  // 选择语言
+  const languageChoice = await question('选择开发语言 (1=TypeScript, 2=JavaScript) [默认: 1]: ') || '1';
+  const useTypeScript = languageChoice === '1' || languageChoice.toLowerCase() === 'typescript' || languageChoice.toLowerCase() === 'ts';
+
   const hasDependencies = await question('是否依赖其他插件？ (y/n): ');
 
   let dependencies = [];
   if (hasDependencies.toLowerCase() === 'y') {
     console.log('\n可用的插件 UUID:');
-    console.log('  - websocket: c8d4e5f6-9a2b-4c7d-8e1f-3a9b6c5d7e2a');
-    console.log('  - web-dashboard: b9e2f5a8-7c3d-4f1e-9a6b-2d8c4e5f7a1b');
-    console.log('  - admin-secret-auth: d5a7b8c9-3e4f-4d1a-9b2c-6e8f7a9d5b3c');
-    const depsInput = await question('依赖的插件 UUID (多个用逗号分隔): ');
+    console.log('  - websocket: c8d4e5f6-9a2b-4c7d-8e1f-3a9b6c5d7e2a (WebSocket Support)');
+    console.log('  - web-dashboard: b9e2f5a8-7c3d-4f1e-9a6b-2d8c4e5f7a1b (Web Dashboard)');
+    console.log('  - nonebot-auth: d5a7b8c9-3e4f-4d1a-9b2c-6e8f7a9d5b3c (NoneBot Auth)');
+    console.log('\n格式: uuid: <uuid>');
+    console.log('      name: <插件名称>\n');
+    const depsInput = await question('依赖的插件 UUID (多个用逗号分隔，或输入完整格式): ');
     if (depsInput) {
       dependencies = depsInput.split(',').map(s => s.trim()).filter(Boolean);
     }
@@ -59,6 +66,7 @@ async function createPlugin() {
   const uuid = generateUUID();
 
   console.log(`\n✅ 插件 UUID 已生成: ${uuid}`);
+  console.log(`✅ 开发语言: ${useTypeScript ? 'TypeScript' : 'JavaScript'}`);
   console.log('\n正在创建插件文件...\n');
 
   // 创建目录结构
@@ -83,8 +91,10 @@ tags:
 
   fs.writeFileSync(path.join(pluginDir, 'plugin.yaml'), pluginYaml);
 
-  // 创建 main.ts
-  const mainTs = `import type { PluginApi, PluginModule } from 'phira-plugin-api';
+  // 根据选择创建不同的主文件
+  if (useTypeScript) {
+    // 创建 main.ts (TypeScript)
+    const mainTs = `import type { PluginApi, PluginModule } from 'phira-plugin-api';
 
 /**
  * ${name}
@@ -105,7 +115,7 @@ const pluginModule: PluginModule = {
     // });
 
     // 示例：注册一个 HTTP 路由
-    // api.registerRoute('/api/${id}/test', 'get', (req, res) => {
+    // api.registerRoute('get', '/api/${id}/test', (req, res) => {
     //   res.json({ success: true, message: 'Hello from ${name}!' });
     // });
 
@@ -129,8 +139,55 @@ const pluginModule: PluginModule = {
 
 export default pluginModule;
 `;
+    fs.writeFileSync(path.join(pluginDir, 'res', 'main.ts'), mainTs);
+  } else {
+    // 创建 main.js (JavaScript)
+    const mainJs = `/**
+ * ${name}
+ *
+ * ${description}
+ */
 
-  fs.writeFileSync(path.join(pluginDir, 'res', 'main.ts'), mainTs);
+const pluginModule = {
+  name: '${id}',
+
+  async init(api) {
+    api.logger.info('[${name}] 插件已加载');
+
+    // TODO: 在这里添加你的插件逻辑
+
+    // 示例：注册一个控制台命令
+    // api.registerCommand('mycommand', (arg1, arg2) => {
+    //   api.logger.info(\`执行命令: \${arg1}, \${arg2}\`);
+    // });
+
+    // 示例：注册一个 HTTP 路由
+    // api.registerRoute('get', '/api/${id}/test', (req, res) => {
+    //   res.json({ success: true, message: 'Hello from ${name}!' });
+    // });
+
+    // 示例：监听服务器事件
+    // api.events.on('player:auth:success', ({ user }) => {
+    //   api.logger.info(\`玩家登录: \${user.name}\`);
+    // });
+
+    // 示例：读取插件配置
+    // const config = api.readPluginConfig();
+    // if (config?.myOption) {
+    //   api.logger.info(\`配置项: \${config.myOption}\`);
+    // }
+  },
+
+  async destroy() {
+    // 清理资源
+    console.log('[${name}] 插件已卸载');
+  }
+};
+
+module.exports = pluginModule;
+`;
+    fs.writeFileSync(path.join(pluginDir, 'res', 'main.js'), mainJs);
+  }
 
   // 创建 README.md
   const readme = `# ${name}
@@ -143,6 +200,7 @@ ${description}
 - **UUID**: ${uuid}
 - **版本**: 1.0.0
 - **作者**: ${author}
+- **开发语言**: ${useTypeScript ? 'TypeScript' : 'JavaScript'}
 
 ## 依赖
 
@@ -167,13 +225,18 @@ TODO: 添加使用说明
 
 ## 开发
 
-\`\`\`bash
+${useTypeScript ? `\`\`\`bash
 # 编译插件
 npm run build:plugins
 
 # 或者只编译单个插件
 npx tsc plugins/${id}/res/main.ts --outDir plugins/${id}/res
-\`\`\`
+\`\`\`` : `\`\`\`bash
+# JavaScript 插件无需编译，直接修改 main.js 即可
+
+# 重载插件
+在服务器控制台输入: /plugins reload ${id}
+\`\`\``}
 `;
 
   fs.writeFileSync(path.join(pluginDir, 'README.md'), readme);
@@ -193,10 +256,16 @@ npx tsc plugins/${id}/res/main.ts --outDir plugins/${id}/res
   console.log('✅ 插件创建完成！\n');
   console.log('📁 插件目录:', pluginDir);
   console.log('📝 配置目录:', configDir);
+  console.log(`📄 主文件: plugins/${id}/res/main.${useTypeScript ? 'ts' : 'js'}`);
   console.log('\n📋 下一步:');
-  console.log(`  1. 编辑 plugins/${id}/res/main.ts 实现你的插件逻辑`);
-  console.log(`  2. 运行 npm run build:plugins 编译插件`);
-  console.log('  3. 重启服务器以加载新插件\n');
+  console.log(`  1. 编辑 plugins/${id}/res/main.${useTypeScript ? 'ts' : 'js'} 实现你的插件逻辑`);
+  if (useTypeScript) {
+    console.log('  2. 运行 npm run build:plugins 编译插件');
+    console.log('  3. 重启服务器以加载新插件');
+  } else {
+    console.log('  2. 重启服务器或运行 /plugins reload 以加载新插件');
+  }
+  console.log('');
 
   rl.close();
 }
