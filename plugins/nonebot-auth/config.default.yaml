@@ -1,0 +1,17 @@
+# NoneBot Auth 插件默认配置
+
+# 管理员密钥（强烈建议使用强随机字符串）
+# 也可以在 .env 中设置 ADMIN_SECRET
+adminSecret: ""
+
+# 哈希算法 (sha256 或 sha512)
+secretHashAlgorithm: sha256
+
+# 认证模式:
+# - "sha256": 仅支持 SHA-256 哈希认证（传统方式）
+# - "aes-cbc": 仅支持 AES-256-CBC 加密认证（nonebot 插件使用）
+# - "both": 同时支持两种认证方式（推荐）
+authMode: both
+
+# 是否启用日志记录（记录鉴权成功/失败）
+enableLogging: true

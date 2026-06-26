@@ -230,9 +230,52 @@ class WebDashboardPlugin {
             next();
         });
     }
+    // AES-256-CBC 解密函数（兼容 nonebot 插件）
+    decryptAesCbcToken(encryptedHex, secret) {
+        try {
+            const encryptedBuffer = Buffer.from(encryptedHex, 'hex');
+            if (encryptedBuffer.length < 17)
+                return null;
+            const iv = encryptedBuffer.subarray(0, 16);
+            const ciphertext = encryptedBuffer.subarray(16);
+            const key = crypto_1.default.createHash('sha256').update(secret).digest();
+            const decipher = crypto_1.default.createDecipheriv('aes-256-cbc', key, iv);
+            let decrypted = decipher.update(ciphertext);
+            decrypted = Buffer.concat([decrypted, decipher.final()]);
+            return decrypted.toString('utf-8');
+        }
+        catch {
+            return null;
+        }
+    }
+    // 验证 AES-256-CBC token
+    verifyAesCbcToken(token, secret) {
+        const decrypted = this.decryptAesCbcToken(token, secret);
+        if (!decrypted)
+            return false;
+        const dateStr = new Date().toISOString().substring(0, 10);
+        const expectedPlain = `${dateStr}_${secret}_xy521`;
+        return decrypted === expectedPlain;
+    }
     verifyUserRole(minRole) {
         return (req, res, next) => {
             let token = undefined;
+            let isNoneBotAuth = false;
+            // 检查 X-Admin-Secret 头（nonebot 插件使用）
+            const adminSecretHeader = req.headers['x-admin-secret'];
+            if (adminSecretHeader) {
+                // 使用环境变量或默认配置中的 adminSecret
+                const adminSecret = process.env.ADMIN_SECRET;
+                if (adminSecret && this.verifyAesCbcToken(adminSecretHeader, adminSecret)) {
+                    isNoneBotAuth = true;
+                    // AES-CBC 认证成功，检查是否是管理员
+                    // nonebot 插件的用户已经是 SUPERUSER，所以直接放行
+                    this.logger.info(`[WebDashboard] NoneBot AES-CBC 认证成功，IP: ${this.getRealIp(req)}`);
+                    next();
+                    return;
+                }
+            }
+            // 原有的 token 认证逻辑
             if (req.cookies && req.cookies['access_token']) {
                 token = req.cookies['access_token'];
             }
@@ -289,8 +332,30 @@ class WebDashboardPlugin {
         this.app.get(['/room', '/room.html'], (_req, res) => {
             this.serveHtmlWithConfig(res, path_1.default.join(publicPath, 'room.html'));
         });
-        this.app.get(['/players', '/players.html'], (_req, res) => {
-            return res.redirect('/');
+        this.app.get(['/players', '/players.html'], (req, res) => {
+            // 检查用户是否有管理员权限
+            let token = undefined;
+            if (req.cookies && req.cookies['access_token']) {
+                token = req.cookies['access_token'];
+            }
+            if (!token) {
+                const authHeader = req.headers['authorization'];
+                if (authHeader && authHeader.startsWith('Bearer ')) {
+                    token = authHeader.substring(7);
+                }
+            }
+            if (!token) {
+                return res.redirect('/');
+            }
+            const session = this.userSessions.get(token);
+            if (!session || Date.now() > session.expiresAt) {
+                return res.redirect('/');
+            }
+            if (!session.isAdmin && !session.isOwner) {
+                return res.redirect('/');
+            }
+            // 管理员可以访问 players 页面
+            this.serveHtmlWithConfig(res, path_1.default.join(publicPath, 'players.html'));
         });
         this.app.get(['/manage', '/manage.html'], (_req, res) => {
             this.serveHtmlWithConfig(res, path_1.default.join(publicPath, 'manage.html'));
@@ -338,12 +403,12 @@ class WebDashboardPlugin {
                 }
             }
             if (!token)
-                return res.json({ isAdmin: false, isOwner: false });
+                return res.json({ isAdmin: false, isOwner: false, userId: null });
             const session = this.userSessions.get(token);
             if (!session || Date.now() > session.expiresAt) {
-                return res.json({ isAdmin: false, isOwner: false });
+                return res.json({ isAdmin: false, isOwner: false, userId: null });
             }
-            return res.json({ isAdmin: session.isAdmin, isOwner: session.isOwner });
+            return res.json({ isAdmin: session.isAdmin, isOwner: session.isOwner, userId: session.userId });
         });
         this.app.get('/check-session', (req, res) => {
             let token = undefined;
@@ -685,7 +750,7 @@ class WebDashboardPlugin {
             });
             html = html.replace('</head>', `
     <script>
-      window.serverConfig = ${serverConfig};
+      window.SERVER_CONFIG = ${serverConfig};
     </script>
   </head>`);
             res.setHeader('Content-Type', 'text/html');

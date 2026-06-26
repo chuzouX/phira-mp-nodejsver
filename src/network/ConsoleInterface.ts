@@ -258,6 +258,14 @@ export class ConsoleInterface {
         this.handlePlugins(args);
         break;
       default:
+        // 尝试执行插件注册的命令
+        if (this.pluginManager) {
+          const pluginCommand = command.substring(1); // 移除开头的 /
+          const handled = await this.pluginManager.executeCommand(pluginCommand, args.slice(1));
+          if (handled) {
+            break;
+          }
+        }
         this.logger.info(`[控制台] 未知命令: ${command}。输入 /help 查看命令列表。`);
     }
   }
@@ -934,10 +942,11 @@ export class ConsoleInterface {
   /plugins disable <name>      禁用插件（添加前缀 !）
 
 插件管理：
-  /plugins install <name>      安装并永久加载插件（暂未实现）
+  /plugins install <name>      安装并加载 plugins 目录下的插件
   /plugins uninstall <name>    卸载并删除插件目录
 
 说明：
+  • install - 加载 plugins 目录下未加载的插件（支持已禁用的插件）
   • enable/disable - 启用/禁用，重启后保持
   • 禁用的插件目录名会添加 ! 前缀
   • 默认情况下，以 ! 开头的目录不会被加载
@@ -968,9 +977,15 @@ export class ConsoleInterface {
   }
 
   private async installPlugin(pluginName: string): Promise<void> {
-    this.logger.command(`[插件管理] install 功能暂未实现`);
-    this.logger.command(`[插件管理] 请手动将插件放置到 plugins/${pluginName}/ 目录`);
-    this.logger.command(`[插件管理] 然后使用 /plugins reload 重新加载`);
+    this.logger.command(`[插件安装] 正在安装插件: ${pluginName}`);
+
+    const result = await this.pluginManager!.installPlugin(pluginName);
+
+    if (result.success) {
+      this.logger.command(`[插件安装] ✓ ${result.message}`);
+    } else {
+      this.logger.warn(`[插件安装] ✗ ${result.message}`);
+    }
   }
 
   private async uninstallPlugin(pluginName: string): Promise<void> {

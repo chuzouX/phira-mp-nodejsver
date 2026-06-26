@@ -5,15 +5,18 @@ const totalPlayersDiv = document.getElementById('total-players');
 let socket;
 let isAdmin = false;
 let currentTotalPlayers = 0;
+let currentUserId = null; // 当前登录用户的 ID
 
 async function checkAdminStatus() {
     try {
         const response = await fetch('/check-auth');
         const data = await response.json();
         isAdmin = data.isAdmin;
+        currentUserId = data.userId || null;
     } catch (error) {
         console.error('Failed to check admin status:', error);
         isAdmin = false;
+        currentUserId = null;
     }
     updateTotalPlayers(currentTotalPlayers); // Update display after checking auth
 }
@@ -40,6 +43,9 @@ function connectWebSocket() {
             } else if (message.type === 'serverStats') {
                 console.log('Received server stats:', message.payload);
                 updateTotalPlayers(message.payload.totalPlayers);
+            } else if (message.type === 'room:announcement') {
+                console.log('Received room announcement:', message.payload);
+                handleRoomAnnouncement(message.payload);
             }
         } catch (error) {
             console.error('Error parsing room data:', error);
@@ -65,6 +71,28 @@ function updateTotalPlayers(count) {
         totalPlayersDiv.innerHTML = `<a href="/players.html">${content}</a><a href="/logout" class="logout-icon" title="Logout">&#10145;&#65039;</a>`;
     } else {
         totalPlayersDiv.innerHTML = content;
+    }
+}
+
+function handleRoomAnnouncement(payload) {
+    // 检查是否是目标用户（如果有指定）
+    if (payload.targetUserId && payload.targetUserId !== currentUserId) {
+        return;
+    }
+
+    // 显示房间播报通知
+    const announcementDiv = document.getElementById('room-announcement');
+    if (announcementDiv) {
+        announcementDiv.textContent = payload.message;
+        announcementDiv.style.display = 'block';
+
+        // 10秒后自动隐藏
+        setTimeout(() => {
+            announcementDiv.style.display = 'none';
+        }, 10000);
+    } else {
+        // 如果没有专门的元素，使用 alert 或创建临时元素
+        console.log('Room announcement:', payload.message);
     }
 }
 

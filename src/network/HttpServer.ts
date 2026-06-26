@@ -93,10 +93,6 @@ export class HttpServer {
       return res.json({ version });
     });
 
-    this.app.get('/check-auth', (_req, res) => {
-      return res.json({ isAdmin: false, isOwner: false });
-    });
-
     this.app.get('/api/status', this.rateLimitMiddleware.bind(this), (_req, res) => {
       if (Date.now() - this.statusCacheTime < 1000 && this.cachedStatus) {
         return res.json(this.cachedStatus);

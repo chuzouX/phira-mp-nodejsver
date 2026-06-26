@@ -53,77 +53,99 @@ const pluginModule = {
         const adminSecret = pluginConfig.adminSecret || process.env.ADMIN_SECRET;
         const hashAlgorithm = pluginConfig.secretHashAlgorithm || 'sha256';
         const enableLogging = pluginConfig.enableLogging ?? true;
+        const authMode = pluginConfig.authMode || 'both'; // 默认支持两种认证方式
         if (!adminSecret) {
             api.logger.warn('[NoneBotAuth] ADMIN_SECRET 未配置，插件功能将不可用');
             api.logger.warn('[NoneBotAuth] 请在 config/nonebot-auth/config.yaml 中修改配置');
             return;
         }
-        // 中间件：验证 Admin Secret
+        // AES-256-CBC 解密函数（兼容 nonebot 插件）
+        function decryptAesCbcToken(encryptedHex, secret) {
+            try {
+                const encryptedBuffer = Buffer.from(encryptedHex, 'hex');
+                if (encryptedBuffer.length < 17)
+                    return null; // 至少 16 字节 IV + 1 字节数据
+                const iv = encryptedBuffer.subarray(0, 16);
+                const ciphertext = encryptedBuffer.subarray(16);
+                const key = crypto_1.default.createHash('sha256').update(secret).digest();
+                const decipher = crypto_1.default.createDecipheriv('aes-256-cbc', key, iv);
+                let decrypted = decipher.update(ciphertext);
+                decrypted = Buffer.concat([decrypted, decipher.final()]);
+                return decrypted.toString('utf-8');
+            }
+            catch {
+                return null;
+            }
+        }
+        // 验证 AES-256-CBC token（兼容 nonebot 插件）
+        function verifyAesCbcToken(token, secret) {
+            const decrypted = decryptAesCbcToken(token, secret);
+            if (!decrypted)
+                return false;
+            // 解密后的格式：{date}_{secret}_xy521
+            const dateStr = new Date().toISOString().substring(0, 10); // YYYY-MM-DD
+            const expectedPlain = `${dateStr}_${secret}_xy521`;
+            return decrypted === expectedPlain;
+        }
+        // 中间件：验证 Admin Secret（支持多种认证方式）
         const verifyAdminSecret = (req, res, next) => {
             const secretHeader = req.headers['x-admin-secret'];
-            const timestampHeader = req.headers['x-admin-timestamp'];
-            if (!secretHeader || !timestampHeader) {
+            if (!secretHeader) {
                 return res.status(401).json({
-                    error: 'Unauthorized: Missing X-Admin-Secret or X-Admin-Timestamp header',
-                    hint: 'Use X-Admin-Secret: SHA256(ADMIN_SECRET + timestamp) and X-Admin-Timestamp: <unix_timestamp>'
+                    error: 'Unauthorized: Missing X-Admin-Secret header',
+                    hint: 'Use X-Admin-Secret: <token>'
                 });
             }
-            // 验证时间戳（防重放攻击）
-            const timestamp = parseInt(timestampHeader, 10);
-            const now = Math.floor(Date.now() / 1000);
-            const timeDiff = Math.abs(now - timestamp);
-            if (timeDiff > 300) { // 5分钟有效期
-                return res.status(401).json({
-                    error: 'Unauthorized: Timestamp expired',
-                    hint: 'Request must be sent within 5 minutes'
-                });
+            let authenticated = false;
+            // 方式1：AES-256-CBC 认证（nonebot 插件使用）
+            if (authMode === 'aes-cbc' || authMode === 'both') {
+                if (verifyAesCbcToken(secretHeader, adminSecret)) {
+                    authenticated = true;
+                    if (enableLogging) {
+                        api.logger.info(`[NoneBotAuth] AES-CBC 密钥验证成功，IP: ${req.ip}`);
+                    }
+                }
             }
-            // 验证密钥
-            const expectedHash = crypto_1.default
-                .createHash(hashAlgorithm)
-                .update(adminSecret + timestamp)
-                .digest('hex');
-            if (secretHeader !== expectedHash) {
+            // 方式2：SHA-256 哈希认证（传统方式）
+            if (!authenticated && (authMode === 'sha256' || authMode === 'both')) {
+                const timestampHeader = req.headers['x-admin-timestamp'];
+                if (timestampHeader) {
+                    const timestamp = parseInt(timestampHeader, 10);
+                    const now = Math.floor(Date.now() / 1000);
+                    const timeDiff = Math.abs(now - timestamp);
+                    if (timeDiff <= 300) { // 5分钟有效期
+                        const expectedHash = crypto_1.default
+                            .createHash(hashAlgorithm)
+                            .update(adminSecret + timestamp)
+                            .digest('hex');
+                        if (secretHeader === expectedHash) {
+                            authenticated = true;
+                            if (enableLogging) {
+                                api.logger.info(`[NoneBotAuth] SHA-256 密钥验证成功，IP: ${req.ip}`);
+                            }
+                        }
+                    }
+                    else if (enableLogging) {
+                        api.logger.warn(`[NoneBotAuth] 时间戳过期，IP: ${req.ip}`);
+                    }
+                }
+            }
+            if (!authenticated) {
                 if (enableLogging) {
                     api.logger.warn(`[NoneBotAuth] 无效的密钥尝试，IP: ${req.ip}`);
                 }
                 return res.status(401).json({ error: 'Unauthorized: Invalid secret' });
             }
-            if (enableLogging) {
-                api.logger.info(`[NoneBotAuth] 密钥验证成功，IP: ${req.ip}`);
-            }
             // 验证成功，继续处理
             next();
         };
-        // 注册中间件到全局（可选，也可以只在特定路由使用）
-        // app.use('/api/admin/*', verifyAdminSecret);
-        // 示例：注册一个需要 Admin Secret 的测试路由
-        app.get('/api/nonebot/test', verifyAdminSecret, (req, res) => {
-            res.json({
-                success: true,
-                message: 'Admin Secret authentication successful',
-                timestamp: Math.floor(Date.now() / 1000)
-            });
-        });
-        // 示例：获取服务器状态（需要 Admin Secret）
-        app.get('/api/nonebot/status', verifyAdminSecret, (req, res) => {
-            const rooms = api.roomManager.listRooms();
-            const players = api.protocolHandler.getAllSessions();
-            res.json({
-                success: true,
-                data: {
-                    serverName: api.config.serverName,
-                    roomCount: rooms.length,
-                    playerCount: players.length,
-                    timestamp: Math.floor(Date.now() / 1000)
-                }
-            });
-        });
-        // 导出中间件供其他插件使用
+        // 导出中间件和认证函数供其他插件使用
         api.adminSecretAuthMiddleware = verifyAdminSecret;
+        api.verifyAesCbcToken = verifyAesCbcToken;
         api.logger.info('[NoneBotAuth] 插件已加载，Admin Secret 鉴权已启用');
         api.logger.info(`[NoneBotAuth] 哈希算法: ${hashAlgorithm.toUpperCase()}`);
-        api.logger.info('[NoneBotAuth] 可用端点: /api/nonebot/test, /api/nonebot/status');
+        api.logger.info(`[NoneBotAuth] 认证模式: ${authMode}`);
+        api.logger.info('[NoneBotAuth] 中间件已导出，其他插件可使用 api.adminSecretAuthMiddleware');
     },
     destroy() {
         // 清理资源（如果需要）
