@@ -25,7 +25,6 @@
   },
   "pkg": {
     "assets": [
-      "plugins/**/*",
       "data/**/*"
     ]
   },

@@ -6,13 +6,6 @@ import { Logger } from '../logging/logger';
 import { PluginApi, PluginContext, PluginEventBus, PluginEventHandler, PluginEventName, PluginModule, LoadedPlugin, PacketHandlerRegistration, PluginRouteMethod } from './types';
 import { ClientCommand, ServerCommand } from '../domain/protocol/Commands';
 
-// 需要预安装的插件列表（当 plugins 目录为空时自动安装）
-const BUILTIN_PLUGINS = [
-  'websocket',
-  'web-dashboard',
-  'nonebot-auth',
-];
-
 class SafePluginEventBus implements PluginEventBus {
   private readonly handlers = new Map<string, Set<PluginEventHandler>>();
 
@@ -75,34 +68,9 @@ export class PluginManager {
     const pluginsDir = path.join(process.cwd(), 'plugins');
     if (!fs.existsSync(pluginsDir)) {
       fs.mkdirSync(pluginsDir, { recursive: true });
-
-      // 首次运行：从内置包中复制预装插件
-      const builtinDir = path.join(__dirname, '../../plugins');
-      if (fs.existsSync(builtinDir)) {
-        this.context.logger.plugin('首次运行，正在复制预装插件...');
-        for (const pluginName of BUILTIN_PLUGINS) {
-          const src = path.join(builtinDir, pluginName);
-          const dest = path.join(pluginsDir, pluginName);
-          if (fs.existsSync(src)) {
-            this.copyPluginDirSync(src, dest);
-            this.context.logger.plugin(`  ✓ 已安装: ${pluginName}`);
-          }
-        }
-        this.context.logger.plugin('预装插件复制完成');
-
-        // 重新读取插件目录
-        const pluginNames = fs.readdirSync(pluginsDir, { withFileTypes: true })
-          .filter((entry) => entry.isDirectory())
-          .map((entry) => entry.name)
-          .sort();
-        if (pluginNames.length === 0) {
-          this.context.logger.plugin(`插件目录已创建: ${pluginsDir}`);
-          return;
-        }
-      } else {
-        this.context.logger.plugin(`已自动创建插件目录: ${pluginsDir}`);
-        return;
-      }
+      this.context.logger.plugin(`已自动创建插件目录: ${pluginsDir}`);
+      this.context.logger.plugin('提示: 将插件目录放入 plugins/ 后使用 /plugins install <name> 加载');
+      return;
     }
 
     this.context.logger.plugin('开始加载插件...');
@@ -670,23 +638,6 @@ export class PluginManager {
         enabled: !entry.name.startsWith('!')
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }
-
-  /** 递归复制插件目录 */
-  private copyPluginDirSync(src: string, dest: string): void {
-    if (!fs.existsSync(dest)) {
-      fs.mkdirSync(dest, { recursive: true });
-    }
-    const entries = fs.readdirSync(src, { withFileTypes: true });
-    for (const entry of entries) {
-      const srcPath = path.join(src, entry.name);
-      const destPath = path.join(dest, entry.name);
-      if (entry.isDirectory()) {
-        this.copyPluginDirSync(srcPath, destPath);
-      } else {
-        fs.copyFileSync(srcPath, destPath);
-      }
-    }
   }
 
   public async emitAsync<T = any>(event: PluginEventName, payload: T): Promise<void> {
