@@ -25,7 +25,7 @@
   },
   "pkg": {
     "assets": [
-      "plugins/web-dashboard/res/public/**/*",
+      "plugins/**/*",
       "data/**/*"
     ]
   },
