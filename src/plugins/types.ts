@@ -68,6 +68,9 @@ export interface PluginApi extends PluginContext {
   registerCommand(name: string, handler: (...args: string[]) => void | Promise<void>): void;
   registerPacketHandler(registration: PacketHandlerRegistration): void;
   broadcastToRoom(roomId: string, command: ServerCommand): boolean;
+  
+  /** 向指定用户发送协议命令（用于发送私信等） */
+  sendCommandToUser(userId: number, command: ServerCommand): boolean;
 
   // ========== 服务器数据访问 API ==========
 

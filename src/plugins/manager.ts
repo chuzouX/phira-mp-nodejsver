@@ -757,6 +757,7 @@ export class PluginManager {
         this.packetHandlers.set(registration.commandType, list);
       },
       broadcastToRoom: (roomId: string, command: ServerCommand) => this.context.protocolHandler.broadcastToRoomById(roomId, command),
+      sendCommandToUser: (userId: number, command: ServerCommand) => this.context.protocolHandler.sendCommandToUser(userId, command),
 
       // ========== 服务器数据访问 API ==========
 

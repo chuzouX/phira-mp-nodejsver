@@ -487,6 +487,8 @@ declare module 'phira-plugin-api' {
     registerPacketHandler(registration: PacketHandlerRegistration): void;
     /** 向指定房间广播协议命令 */
     broadcastToRoom(roomId: string, command: ServerCommand): boolean;
+    /** 向指定用户发送协议命令 */
+    sendCommandToUser(userId: number, command: ServerCommand): boolean;
 
     // ========== 服务器数据访问 API ==========
 
