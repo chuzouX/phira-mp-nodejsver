@@ -31,38 +31,15 @@ jobs:
           echo "复制 plugin-api.d.ts"
           cp plugin-api.d.ts plugin-sdk/
 
-          # 复制示例插件
+          # 复制示例插件（保持完全一致的目录结构）
           echo "复制示例插件到 example/"
+          rm -rf plugin-sdk/example
           mkdir -p plugin-sdk/example
+          cp -r plugins/example/* plugin-sdk/example/
 
-          # 复制 plugin.yaml（位于主目录）
-          if [ -f "plugins/example/plugin.yaml" ]; then
-            echo "  - plugin.yaml"
-            cp plugins/example/plugin.yaml plugin-sdk/example/
-          fi
-
-          # 复制默认配置文件
-          if [ -f "plugins/example/config.default.yaml" ]; then
-            echo "  - config.default.yaml"
-            cp plugins/example/config.default.yaml plugin-sdk/example/
-          fi
-
-          # 复制 res/ 目录下的文件
-          if [ -f "plugins/example/res/main.ts" ]; then
-            echo "  - index.ts (from res/main.ts)"
-            cp plugins/example/res/main.ts plugin-sdk/example/index.ts
-          fi
-
-          if [ -f "plugins/example/res/main.js" ]; then
-            echo "  - index.js (from res/main.js)"
-            cp plugins/example/res/main.js plugin-sdk/example/index.js
-          fi
-
-          # 如果 res/ 下有 index.js，也复制
-          if [ -f "plugins/example/res/index.js" ]; then
-            echo "  - index.js (from res/index.js)"
-            cp plugins/example/res/index.js plugin-sdk/example/index.js
-          fi
+          echo "  ✅ 已完成完整目录复制"
+          echo "  📂 plugin-sdk/example 内容:"
+          find plugin-sdk/example -type f | sort
 
           # 复制插件文档
           if [ -f "Plugins.md" ]; then
