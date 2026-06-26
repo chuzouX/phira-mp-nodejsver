@@ -19,7 +19,7 @@ jobs:
       - name: Checkout plugin SDK repo
         uses: actions/checkout@v4
         with:
-          repository: chuzouX/phira-mp-nodejsver-plugin
+          repository: chuzouX/phira-mp-nodejsver-example
           token: ${{ secrets.PLUGIN_SDK_TOKEN }}
           path: plugin-sdk
 
