@@ -21,6 +21,7 @@ import {
   Message,
   PlayerRanking,
 } from './Commands';
+import { PluginManager } from '../../plugins';
 
 interface UserSession {
   userId: number;
@@ -36,6 +37,7 @@ export class ProtocolHandler {
   private readonly connectionClosers = new Map<string, () => void>();
   private readonly connectionIps = new Map<string, string>();
   private federationManager: any = null;  // 联邦管理器（避免循环依赖用 any）
+  private pluginManager?: PluginManager;
 
   constructor(
     private readonly roomManager: RoomManager,
@@ -70,6 +72,10 @@ export class ProtocolHandler {
 
   public setFederationManager(fm: any): void {
     this.federationManager = fm;
+  }
+
+  public setPluginManager(pluginManager: PluginManager): void {
+    this.pluginManager = pluginManager;
   }
 
   /** 为联邦远程玩家创建虚拟会话（权威服务器侧） */
@@ -145,6 +151,16 @@ export class ProtocolHandler {
     if (session) {
       session.ip = ip;
     }
+  }
+
+  public broadcastToRoomById(roomId: string, command: ServerCommand): boolean {
+    const room = this.roomManager.getRoom(roomId);
+    if (!room) {
+      return false;
+    }
+
+    this.broadcastToRoom(room, command);
+    return true;
   }
 
   public kickIp(ip: string): void {
@@ -302,6 +318,12 @@ export class ProtocolHandler {
     this.broadcastToRoom(room, {
       type: ServerCommandType.ChangeState,
       state: { type: 'Playing' },
+    });
+
+    this.pluginManager?.emit('room:gameStart', {
+      room,
+      triggeredBy: -1,
+      mode: 'force',
     });
 
     return true;
@@ -639,6 +661,7 @@ export class ProtocolHandler {
       this.connectionClosers.set(connectionId, closeConnection);
     }
     this.connectionIps.set(connectionId, ip);
+    this.pluginManager?.emit('player:connect', { connectionId, ip });
   }
 
   handleDisconnection(connectionId: string): void {
@@ -694,6 +717,10 @@ export class ProtocolHandler {
         
         const updatedRoom = this.roomManager.getRoom(roomId);
 
+        if (updatedRoom) {
+          updatedRoom.live = Array.from(updatedRoom.players.values()).some((playerInfo) => playerInfo.user.monitor);
+        }
+
         // 处理房主转移广播
         if (updatedRoom && wasHost && updatedRoom.ownerId !== session.userId) {
           this.broadcastMessage(updatedRoom, {
@@ -748,7 +775,13 @@ export class ProtocolHandler {
       this.onSessionChange?.();
     }
     this.broadcastCallbacks.delete(connectionId);
-    this.logger.info(`[断线] 连接已断开: ${connectionId}${session ? ` (用户: ${session.userInfo.name} ID: ${session.userId})` : ''}`, { userId: session?.userId });
+    this.pluginManager?.emit('player:disconnect', {
+      connectionId,
+      userId: session?.userId,
+      user: session?.userInfo,
+      ip: session?.ip ?? this.connectionIps.get(connectionId),
+    });
+    this.logger.debug(`[断线] 连接已断开: ${connectionId}${session ? ` (用户: ${session.userInfo.name} ID: ${session.userId})` : ''}`, { userId: session?.userId });
   }
 
   handleMessage(
@@ -772,6 +805,9 @@ export class ProtocolHandler {
       }
     }
 
+    this.pluginManager?.emit('protocol:beforeHandle', { connectionId, command: message });
+    void this.pluginManager?.handlePacket(connectionId, message);
+
     switch (message.type) {
       case ClientCommandType.Authenticate:
         this.handleAuthenticate(connectionId, message.token, sendResponse);
@@ -779,6 +815,14 @@ export class ProtocolHandler {
 
       case ClientCommandType.Chat:
         this.handleChat(connectionId, message.message, sendResponse);
+        break;
+
+      case ClientCommandType.Touches:
+        this.handleTouches(connectionId, message.frames);
+        break;
+
+      case ClientCommandType.Judges:
+        this.handleJudges(connectionId, message.judges);
         break;
 
       case ClientCommandType.CreateRoom:
@@ -829,6 +873,8 @@ export class ProtocolHandler {
         this.logger.warn(`收到未知的指令类型: ${connectionId} (类型: ${ClientCommandType[message.type]})`, { userId: session?.userId });
         break;
     }
+
+    this.pluginManager?.emit('protocol:afterHandle', { connectionId, command: message });
   }
 
   private async fetchUserInfo(userId: number): Promise<{ rks?: number; bio?: string }> {
@@ -986,6 +1032,13 @@ export class ProtocolHandler {
           result: { ok: true, value: [userInfo, roomState] },
         });
 
+        this.logger.debug(`[ProtocolHandler] 触发 player:auth:success 事件: ${userInfo.name} (ID: ${userInfo.id})`);
+        this.pluginManager?.emit('player:auth:success', {
+          connectionId,
+          user: userInfo,
+          ip: this.connectionIps.get(connectionId) || 'unknown',
+        });
+        this.logger.debug(`[ProtocolHandler] player:auth:success 事件已触发`);
 
         const announcement = this.serverAnnouncement
           .replace(/{{name}}/g, userInfo.name)
@@ -1011,6 +1064,83 @@ export class ProtocolHandler {
     };
 
     void authenticate();
+  }
+
+  private handleTouches(connectionId: string, frames: import('./Commands').TouchFrame[]): void {
+    const session = this.sessions.get(connectionId);
+    if (!session) {
+      return;
+    }
+
+    const room = this.roomManager.getRoomByUserId(session.userId);
+    if (!room) {
+      return;
+    }
+
+    if (!room.live) {
+      this.logger.debug(`在非 live 模式下收到触摸事件: ${session.userId}`, { userId: session.userId });
+      return;
+    }
+
+    const player = room.players.get(session.userId);
+    if (!player) {
+      return;
+    }
+
+    const lastFrame = frames[frames.length - 1];
+    if (lastFrame) {
+      // Keep parity with Rust side effect semantics as closely as current TS model allows.
+    }
+
+    for (const playerInfo of room.players.values()) {
+      if (!playerInfo.user.monitor || playerInfo.connectionId === connectionId) {
+        continue;
+      }
+      const callback = this.broadcastCallbacks.get(playerInfo.connectionId);
+      if (callback) {
+        callback({
+          type: ServerCommandType.Touches,
+          player: session.userId,
+          frames,
+        });
+      }
+    }
+  }
+
+  private handleJudges(connectionId: string, judges: import('./Commands').JudgeEvent[]): void {
+    const session = this.sessions.get(connectionId);
+    if (!session) {
+      return;
+    }
+
+    const room = this.roomManager.getRoomByUserId(session.userId);
+    if (!room) {
+      return;
+    }
+
+    if (!room.live) {
+      this.logger.debug(`在非 live 模式下收到判定事件: ${session.userId}`, { userId: session.userId });
+      return;
+    }
+
+    const player = room.players.get(session.userId);
+    if (!player) {
+      return;
+    }
+
+    for (const playerInfo of room.players.values()) {
+      if (!playerInfo.user.monitor || playerInfo.connectionId === connectionId) {
+        continue;
+      }
+      const callback = this.broadcastCallbacks.get(playerInfo.connectionId);
+      if (callback) {
+        callback({
+          type: ServerCommandType.Judges,
+          player: session.userId,
+          judges,
+        });
+      }
+    }
   }
 
   private handleChat(
@@ -1040,6 +1170,13 @@ export class ProtocolHandler {
       type: 'Chat',
       user: session.userId,
       content: message,
+    });
+
+    this.pluginManager?.emit('chat:message', {
+      room,
+      userId: session.userId,
+      content: message,
+      connectionId,
     });
 
     this.logger.debug(`已在房间 “${room.id}” 广播来自玩家 “${session.userInfo.name}” 的聊天消息`, { userId: session.userId });
@@ -1082,6 +1219,12 @@ export class ProtocolHandler {
       return;
     }
 
+    this.pluginManager?.emit('room:beforeCreate', {
+      connectionId,
+      userId: session.userId,
+      roomId,
+    });
+
     try {
       const room = this.roomManager.createRoom({
         id: roomId,
@@ -1092,6 +1235,7 @@ export class ProtocolHandler {
       });
 
       this.logger.mark(`“${session.userInfo.name}” 创建房间 “${room.id}”`, { userId: session.userId });
+      this.pluginManager?.emit('room:create', { room, user: session.userInfo, connectionId });
 
       // 1. Broadcast joins first so client has user info before transitioning
       this.broadcastToRoom(room, {
@@ -1214,6 +1358,11 @@ export class ProtocolHandler {
     if (success) {
       this.logger.info(`玩家 “${session.userInfo.name}” (ID: ${session.userId}) 加入了房间 “${roomId}”`, { userId: session.userId });
 
+      if (monitor && !room.live) {
+        room.live = true;
+        this.logger.info(`房间 “${roomId}” 已进入 live 模式`, { userId: session.userId });
+      }
+
       this.broadcastToRoom(room, {
         type: ServerCommandType.OnJoinRoom,
         user: userInfo,
@@ -1223,6 +1372,12 @@ export class ProtocolHandler {
         type: 'JoinRoom',
         user: session.userId,
         name: session.userInfo.name,
+      });
+
+      this.pluginManager?.emit('room:join', {
+        room,
+        user: userInfo,
+        connectionId,
       });
 
       // Delay announcement slightly
@@ -1284,8 +1439,18 @@ export class ProtocolHandler {
     });
 
     this.roomManager.removePlayerFromRoom(room.id, session.userId);
+    this.pluginManager?.emit('room:leave', {
+      roomId: room.id,
+      userId: session.userId,
+      userName: session.userInfo.name,
+      connectionId,
+    });
 
     const updatedRoom = this.roomManager.getRoom(room.id);
+
+    if (updatedRoom) {
+      updatedRoom.live = Array.from(updatedRoom.players.values()).some((playerInfo) => playerInfo.user.monitor);
+    }
 
     // 联邦：广播房间变更
     if (this.federationManager?.getConfig?.()?.enabled) {
@@ -1592,6 +1757,11 @@ export class ProtocolHandler {
           type: ServerCommandType.ChangeState,
           state: { type: 'Playing' },
         });
+        this.pluginManager?.emit('room:gameStart', {
+          room,
+          triggeredBy: session.userId,
+          mode: 'solo-confirm',
+        });
       }
     }
 
@@ -1682,6 +1852,11 @@ export class ProtocolHandler {
       this.broadcastToRoom(room, {
         type: ServerCommandType.ChangeState,
         state: { type: 'Playing' },
+      });
+      this.pluginManager?.emit('room:gameStart', {
+        room,
+        triggeredBy: session.userId,
+        mode: 'ready',
       });
     }
 
@@ -1999,6 +2174,17 @@ export class ProtocolHandler {
         ...entry,
         rank: index + 1,
       }));
+
+    this.pluginManager?.emit('room:gameEnd', {
+      room,
+      rankings: rankings.map((entry) => ({
+        rank: entry.rank,
+        userId: entry.userId,
+        userName: entry.userName,
+        score: entry.score?.score ?? 0,
+        accuracy: entry.score?.accuracy ?? 0,
+      })),
+    });
 
     this.broadcastMessage(room, { type: 'GameEnd' });
 

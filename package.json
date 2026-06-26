@@ -1,11 +1,14 @@
 {
   "name": "phira-mp-server",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "TypeScript Node.js server with TCP socket support",
   "main": "dist/index.js",
   "bin": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run build:plugins",
+    "build:plugins": "tsc -p plugins/tsconfig.json",
+    "plugin:create": "node scripts/create-plugin.js",
+    "sync:plugin-sdk": "bash scripts/sync-plugin-sdk.sh",
     "dev": "nodemon",
     "start": "node dist/index.js",
     "test": "jest --verbose",
@@ -22,7 +25,6 @@
   },
   "pkg": {
     "assets": [
-      "public/**/*",
       "data/**/*"
     ]
   },
@@ -44,11 +46,14 @@
   },
   "homepage": "https://github.com/chuzouX/phira-mp-nodejsver#readme",
   "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.6",
     "@types/express-session": "^1.18.2",
     "@types/jest": "^30.0.0",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^24.9.2",
     "@types/supertest": "^6.0.3",
+    "@types/uuid": "^9.0.8",
     "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^8.46.2",
     "@typescript-eslint/parser": "^8.46.2",
@@ -66,9 +71,12 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "cookie-parser": "^1.4.7",
     "dotenv": "^16.0.3",
     "express": "^5.2.1",
     "express-session": "^1.19.0",
+    "js-yaml": "^4.1.0",
+    "uuid": "^9.0.1",
     "ws": "^8.19.0"
   }
 }

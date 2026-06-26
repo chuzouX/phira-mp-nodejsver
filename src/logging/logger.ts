@@ -20,6 +20,7 @@ export interface Logger {
   debug(message: string, metadata?: LogMetadata): void;
   ban(message: string, metadata?: LogMetadata): void;
   command(message: string, metadata?: LogMetadata): void;
+  plugin(message: string, metadata?: LogMetadata): void;  // 新增插件日志级别
   setSilentIds(ids: number[]): void;
   setLevel(level: LogLevel): void;
   setAllowedLevels(levels: LogLevel[]): void;
@@ -35,13 +36,14 @@ const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
 
 const COLOR_CODES: Record<string, string> = {
   RESET: '\x1b[0m',
-  DEBUG: '\x1b[90m', // 灰色
-  INFO: '\x1b[32m',  // 绿色
-  MARK: '\x1b[36m',  // 青色
-  BAN: '\x1b[35m',   // 紫色
-  WARN: '\x1b[33m',  // 黄色
-  ERROR: '\x1b[31m', // 红色
-  CMD: '\x1b[36m',   // 青色 (与 MARK 相同)
+  DEBUG: '\x1b[90m',   // 灰色
+  INFO: '\x1b[32m',    // 绿色
+  MARK: '\x1b[36m',    // 青色
+  BAN: '\x1b[35m',     // 紫色
+  WARN: '\x1b[33m',    // 黄色
+  ERROR: '\x1b[31m',   // 红色
+  CMD: '\x1b[36m',     // 青色 (与 MARK 相同)
+  PLUGIN: '\x1b[95m',  // 亮紫色 (Bright Magenta)
 };
 
 const normaliseLevel = (level: string | undefined): LogLevel => {
@@ -203,6 +205,13 @@ export class ConsoleLogger implements Logger {
     this.writeToCommandFile(formatted.file);
   }
 
+  plugin(message: string, metadata: LogMetadata = {}): void {
+    // 插件日志总是输出，不受日志等级限制
+    const formatted = this.formatMessage('PLUGIN', message, metadata);
+    this.emitToConsole(formatted.console);
+    this.writeToFile(formatted.file);
+  }
+
   private shouldLog(level: LogLevel): boolean {
     if (this.allowedLevels) {
         return this.allowedLevels.has(level);
@@ -245,7 +254,7 @@ export class ConsoleLogger implements Logger {
   private formatMessage(level: string, message: any, metadata: LogMetadata): { console: string; file: string } {
     const now = new Date();
     const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}.${String(now.getMilliseconds()).padStart(3, '0')}`;
-    
+
     let color = COLOR_CODES.RESET;
     if (level === 'DEBUG') color = COLOR_CODES.DEBUG;
     else if (level === 'INFO') color = COLOR_CODES.INFO;
@@ -254,6 +263,7 @@ export class ConsoleLogger implements Logger {
     else if (level === 'CMD') color = COLOR_CODES.CMD;
     else if (level === 'WARN') color = COLOR_CODES.WARN;
     else if (level === 'ERROR') color = COLOR_CODES.ERROR;
+    else if (level === 'PLUGIN') color = COLOR_CODES.PLUGIN;
 
     let msgStr = '';
     if (

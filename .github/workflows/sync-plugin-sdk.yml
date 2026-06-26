@@ -1,0 +1,88 @@
+name: Sync Plugin SDK
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  workflow_dispatch:  # 支持手动触发
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout plugin SDK repo
+        uses: actions/checkout@v4
+        with:
+          repository: chuzouX/phira-mp-nodejsver-example
+          token: ${{ secrets.PLUGIN_SDK_TOKEN }}
+          path: plugin-sdk
+
+      - name: Copy updated files
+        run: |
+          echo "📋 开始复制文件..."
+
+          # 复制类型定义
+          echo "复制 plugin-api.d.ts"
+          cp plugin-api.d.ts plugin-sdk/
+
+          # 复制示例插件（保持完全一致的目录结构）
+          echo "复制示例插件到 example/"
+          rm -rf plugin-sdk/example
+          mkdir -p plugin-sdk/example
+          cp -r plugins/example/* plugin-sdk/example/
+
+          echo "  ✅ 已完成完整目录复制"
+          echo "  📂 plugin-sdk/example 内容:"
+          find plugin-sdk/example -type f | sort
+
+          # 复制插件文档
+          if [ -f "Plugins.md" ]; then
+            echo "复制 Plugins.md"
+            cp Plugins.md plugin-sdk/
+          fi
+
+          echo "✅ 文件复制完成"
+          echo ""
+          echo "📂 plugin-sdk 目录内容:"
+          ls -la plugin-sdk/
+          echo ""
+          echo "📂 plugin-sdk/example 目录内容:"
+          ls -la plugin-sdk/example/ || echo "example 目录为空"
+
+      - name: Commit and push changes
+        run: |
+          cd plugin-sdk
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 显示更改
+          echo "📊 检查更改..."
+          git status
+
+          # 检查是否有更改
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "✅ 没有更改需要同步"
+            exit 0
+          fi
+
+          echo "💾 提交更改..."
+          git add .
+          git commit -m "chore: sync from main repo
+
+          Automated sync of:
+          - plugin-api.d.ts
+          - example plugin
+          - documentation
+
+          Source commit: ${{ github.sha }}"
+
+          echo "📤 推送到远程..."
+          git push
+
+          echo "✅ 同步完成！"

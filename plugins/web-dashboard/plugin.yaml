@@ -1,0 +1,19 @@
+# Web Dashboard Plugin Metadata
+id: web-dashboard
+uuid: b9e2f5a8-7c3d-4f1e-9a6b-2d8c4e5f7a1b
+name: Web Dashboard
+version: 1.2.0
+description: Web 管理面板，提供服务器状态监控、房间管理、玩家管理等功能
+author: Phira NodejsVer MP Server Team - chuzouX
+license: MIT
+homepage: https://github.com/chuzouX/phira-mp-nodejsver
+main: main.js
+dependencies:
+  - uuid: c8d4e5f6-9a2b-4c7d-8e1f-3a9b6c5d7e2a
+    name: WebSocket Support
+serverVersion: ">=0.4.0"
+tags:
+  - web
+  - dashboard
+  - admin
+  - ui
