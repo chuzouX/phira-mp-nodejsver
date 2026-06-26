@@ -11,7 +11,7 @@ main: main.js
 dependencies:
   - uuid: c8d4e5f6-9a2b-4c7d-8e1f-3a9b6c5d7e2a
     name: WebSocket Support
-serverVersion: ">=0.4.0"
+serverVersion: ">=0.5.0"
 tags:
   - web
   - dashboard

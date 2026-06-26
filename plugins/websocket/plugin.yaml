@@ -7,8 +7,8 @@ description: WebSocket 实时通信支持，为 Web 管理面板提供实时房�
 author: Phira NodejsVer MP Server Team - chuzouX
 license: MIT
 main: main.js
-dependencies: []  # 无依赖（作为独立的通信服务）
-serverVersion: ">=0.4.0"
+dependencies: []
+serverVersion: ">=0.5.0"
 tags:
   - websocket
   - realtime
