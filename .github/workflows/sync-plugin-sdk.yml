@@ -41,6 +41,12 @@ jobs:
             cp plugins/example/plugin.yaml plugin-sdk/example/
           fi
 
+          # 复制默认配置文件
+          if [ -f "plugins/example/config.default.yaml" ]; then
+            echo "  - config.default.yaml"
+            cp plugins/example/config.default.yaml plugin-sdk/example/
+          fi
+
           # 复制 res/ 目录下的文件
           if [ -f "plugins/example/res/main.ts" ]; then
             echo "  - index.ts (from res/main.ts)"
