@@ -25,7 +25,17 @@ jobs:
 
       - name: Copy updated files
         run: |
-          echo "📋 开始复制文件..."
+          echo "📋 开始同步..."
+
+          # 清理远程仓库中除 example 外的所有插件目录
+          echo "清理远程仓库中的旧插件目录..."
+          for dir in plugin-sdk/*/; do
+            dirname=$(basename "$dir")
+            if [ "$dirname" != "example" ]; then
+              echo "  删除: $dirname"
+              rm -rf "$dir"
+            fi
+          done
 
           # 复制类型定义
           echo "复制 plugin-api.d.ts"
@@ -37,23 +47,20 @@ jobs:
           mkdir -p plugin-sdk/example
           cp -r plugins/example/* plugin-sdk/example/
 
-          echo "  ✅ 已完成完整目录复制"
+          echo "  ✅ 示例插件复制完成"
           echo "  📂 plugin-sdk/example 内容:"
           find plugin-sdk/example -type f | sort
 
           # 复制插件文档
-          if [ -f "Plugins.md" ]; then
+          if [ -f "docs/Plugins.md" ]; then
             echo "复制 Plugins.md"
-            cp Plugins.md plugin-sdk/
+            cp docs/Plugins.md plugin-sdk/
           fi
 
-          echo "✅ 文件复制完成"
+          echo "✅ 同步完成"
           echo ""
           echo "📂 plugin-sdk 目录内容:"
           ls -la plugin-sdk/
-          echo ""
-          echo "📂 plugin-sdk/example 目录内容:"
-          ls -la plugin-sdk/example/ || echo "example 目录为空"
 
       - name: Commit and push changes
         run: |
@@ -77,7 +84,7 @@ jobs:
 
           Automated sync of:
           - plugin-api.d.ts
-          - example plugin
+          - example plugin (only)
           - documentation
 
           Source commit: ${{ github.sha }}"
