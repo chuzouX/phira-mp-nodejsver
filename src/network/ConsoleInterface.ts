@@ -701,13 +701,32 @@ export class ConsoleInterface {
   private restartServer(): void {
     this.logger.command('[控制台] 正在请求重启服务器...');
     try {
+        // 处理打包后的 exe 重启
+        if ((process as any).pkg) {
+            const exePath = process.execPath;
+            const args = process.argv.slice(1);
+            this.logger.command(`[控制台] 正在重启: ${exePath}`);
+            this.logger.command('[控制台] 即将关闭当前进程并启动新实例...');
+            
+            // 先启动新进程，再退出当前进程
+            const { spawn } = require('child_process');
+            spawn(exePath, args, {
+                stdio: 'inherit',
+                detached: false,
+            });
+            
+            // 延迟退出，确保新进程已启动
+            setTimeout(() => process.exit(0), 1000);
+            return;
+        }
+
         const indexPath = path.join(process.cwd(), 'src', 'index.ts');
         if (fs.existsSync(indexPath)) {
             const now = new Date();
             fs.utimesSync(indexPath, now, now);
             this.logger.command('[控制台] 已触发 nodemon 重启 (通过更新 src/index.ts 时间戳)');
         } else {
-            this.logger.warn('[控制台] 找不到 src/index.ts，无法通过 nodemon 自动重启。如果是生产环境，请手动重启。');
+            this.logger.warn('[控制台] 无法自动重启，请手动重启服务。');
         }
     } catch (err: any) {
         this.logger.error(`[控制台] 尝试重启失败: ${err.message}`);
