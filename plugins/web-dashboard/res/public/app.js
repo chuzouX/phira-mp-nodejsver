@@ -76,8 +76,12 @@ function updateTotalPlayers(count) {
 
 function handleRoomAnnouncement(payload) {
     // 检查是否是目标用户（如果有指定）
-    if (payload.targetUserId && payload.targetUserId !== currentUserId) {
-        return;
+    // 如果没有指定 targetUserId，则显示给所有用户
+    // 如果指定了 targetUserId，但 currentUserId 为 null（未登录），则不显示
+    if (payload.targetUserId) {
+        if (!currentUserId || payload.targetUserId !== currentUserId) {
+            return;
+        }
     }
 
     // 显示房间播报通知
