@@ -215,6 +215,10 @@ export class BinaryWriter {
     this.buffer.push(buf);
   }
 
+  bytes(value: Buffer): void {
+    this.buffer.push(value);
+  }
+
   array<T>(values: T[], writeElement: (value: T) => void): void {
     this.uleb(values.length);
     for (const value of values) {

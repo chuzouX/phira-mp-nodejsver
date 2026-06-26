@@ -1,0 +1,30 @@
+# Web Dashboard 插件默认配置
+
+# 显示的服务器 IP/域名（用于前端显示）
+displayIp: "your-server.com:666"
+
+# Session 密钥（强烈建议修改为随机字符串）
+sessionSecret: "change-this-to-a-random-secret"
+
+# 登录失败后 IP 黑名单持续时间（秒）
+loginBlacklistDuration: 600
+
+# 验证码提供商 (geetest / none)
+captchaProvider: none
+
+# 极验验证码配置（仅当 captchaProvider=geetest 时需要）
+# geetestId: "your-geetest-id"
+# geetestKey: "your-geetest-key"
+
+# 允许的跨域来源 (多个用数组格式)
+allowedOrigins:
+  - http://localhost:5173
+  - http://localhost:3000
+
+# 公开房间过滤（是否只显示带特定前缀的房间）
+enablePubWeb: false
+pubPrefix: "pub"
+
+# 私密房间过滤（是否隐藏带特定前缀的房间）
+enablePriWeb: false
+priPrefix: "sm"

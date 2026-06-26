@@ -627,3 +627,32 @@ footer { margin-top: 80px; padding: 60px 0; text-align: center; border-top: 1px 
     }
 }
 
+/* Room Announcement Styles */
+.room-announcement {
+    background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+    color: white;
+    padding: 16px 20px;
+    margin: 16px 0;
+    border-radius: var(--radius-md);
+    white-space: pre-line;
+    font-size: 14px;
+    line-height: 1.6;
+    box-shadow: var(--card-shadow);
+    animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.dark-mode .room-announcement {
+    background: linear-gradient(135deg, #1e40af, #92400e);
+}
+

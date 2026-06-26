@@ -15,10 +15,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { version } from '../../package.json';
 import { ConsoleLogger } from '../logging/logger';
+import { PluginManager } from '../plugins/manager';
 
 export class ConsoleInterface {
   private rl: readline.Interface;
   private readonly adminName: string = 'ConsoleAdmin';
+  private pluginManager?: PluginManager;
 
   constructor(
     private readonly config: ServerConfig,
@@ -37,20 +39,21 @@ export class ConsoleInterface {
         '/help', '/room', '/status', '/ping', '/list', '/broadcast',
         '/kick', '/fstart', '/lock', '/maxp', '/close', '/tmode', '/smsg', '/bulk',
         '/bans', '/ban', '/unban', '/blist', '/blip', '/ublip', '/stop', '/restart',
-        '/reload', '/op', '/deop', '/info', '/set', '/log'
+        '/reload', '/op', '/deop', '/info', '/set', '/log', '/plugins'
     ];
 
     const logLevels = ['debug', 'info', 'mark', 'warn', 'error'];
 
     const envKeys = [
         'PORT', 'HOST', 'TCP_ENABLED', 'USE_PROXY_PROTOCOL', 'TRUST_PROXY_HOPS',
-        'ALLOWED_ORIGINS', 'LOG_LEVEL', 'PHIRA_API_URL', 'SERVER_NAME', 'ROOM_SIZE',
-        'SERVER_ANNOUNCEMENT', 'WEB_PORT', 'ENABLE_WEB_SERVER', 'DISPLAY_IP',
-        'DEFAULT_AVATAR', 'SESSION_SECRET', 'LOGIN_BLACKLIST_DURATION', 'ENABLE_UPDATE_CHECK',
-        'ADMIN_NAME', 'ADMIN_PASSWORD', 'ADMIN_SECRET', 'ADMIN_PHIRA_ID', 'OWNER_PHIRA_ID',
-        'BAN_ID_WHITELIST', 'BAN_IP_WHITELIST', 'SILENT_PHIRA_IDS', 'ENABLE_PUB_WEB',
-        'PUB_PREFIX', 'ENABLE_PRI_WEB', 'PRI_PREFIX', 'CAPTCHA_PROVIDER', 'GEETEST_ID',
-        'GEETEST_KEY', 'FEDERATION_ENABLED', 'FEDERATION_SEED_NODES', 'FEDERATION_SECRET',
+        'LOG_LEVEL', 'PHIRA_API_URL', 'SERVER_NAME', 'ROOM_SIZE',
+        'SERVER_ANNOUNCEMENT', 'WEB_PORT', 'ENABLE_WEB_SERVER',
+        'DEFAULT_AVATAR', 'ENABLE_UPDATE_CHECK',
+        'ADMIN_PHIRA_ID', 'OWNER_PHIRA_ID',
+        'BAN_ID_WHITELIST', 'BAN_IP_WHITELIST', 'SILENT_PHIRA_IDS',
+        'ENABLE_PUB_WEB', 'PUB_PREFIX', 'ENABLE_PRI_WEB', 'PRI_PREFIX',
+        'PLUGINS_ENABLED',
+        'FEDERATION_ENABLED', 'FEDERATION_SEED_NODES', 'FEDERATION_SECRET',
         'FEDERATION_NODE_URL', 'FEDERATION_NODE_ID', 'FEDERATION_ALLOW_LOCAL',
         'FEDERATION_HEALTH_INTERVAL', 'FEDERATION_SYNC_INTERVAL'
     ];
@@ -115,6 +118,10 @@ export class ConsoleInterface {
 
     // Bind readline to ConsoleLogger to coordinate log output
     ConsoleLogger.setReadline(this.rl);
+  }
+
+  public setPluginManager(pluginManager: PluginManager): void {
+    this.pluginManager = pluginManager;
   }
 
   public start(): void {
@@ -247,7 +254,18 @@ export class ConsoleInterface {
       case '/log':
         this.handleLog(args);
         break;
+      case '/plugins':
+        this.handlePlugins(args);
+        break;
       default:
+        // 尝试执行插件注册的命令
+        if (this.pluginManager) {
+          const pluginCommand = command.substring(1); // 移除开头的 /
+          const handled = await this.pluginManager.executeCommand(pluginCommand, args.slice(1));
+          if (handled) {
+            break;
+          }
+        }
         this.logger.info(`[控制台] 未知命令: ${command}。输入 /help 查看命令列表。`);
     }
   }
@@ -293,6 +311,7 @@ export class ConsoleInterface {
 /info - 展示服务器状态以及各种信息
 /set "{env变量}" "{值}" - 设置 env 变量的值
 /log debug|info|mark|warn|error - 调整日志等级 (可多选，例如: /log warn|error)
+/plugins [list|info <name>|reload [name]] - 插件管理 (查看、详情、重载)
 ==============================
 `;
     console.log(help);
@@ -636,7 +655,7 @@ export class ConsoleInterface {
       return;
     }
     const ip = args[1];
-    const duration = args[2] ? Number(args[2]) : this.config.loginBlacklistDuration;
+    const duration = args[2] ? Number(args[2]) : (this.config.loginBlacklistDuration ?? 600);
     if (isNaN(duration)) {
         this.logger.warn('[控制台] 非法的时长数值');
         return;
@@ -666,6 +685,15 @@ export class ConsoleInterface {
   private stopServer(): void {
     this.logger.command('[控制台] 正在关闭服务器...');
     setTimeout(() => {
+        const isNodemon = process.env.NODEMON === 'true';
+        if (isNodemon && process.ppid) {
+            try {
+                // /stop should fully terminate in dev mode too, not leave nodemon waiting.
+                process.kill(process.ppid, 'SIGTERM');
+            } catch (e: any) {
+                this.logger.warn(`[控制台] 终止 nodemon 进程失败: ${e?.message || e}`);
+            }
+        }
         process.exit(0);
     }, 500);
   }
@@ -673,13 +701,32 @@ export class ConsoleInterface {
   private restartServer(): void {
     this.logger.command('[控制台] 正在请求重启服务器...');
     try {
+        // 处理打包后的 exe 重启
+        if ((process as any).pkg) {
+            const exePath = process.execPath;
+            const args = process.argv.slice(1);
+            this.logger.command(`[控制台] 正在重启: ${exePath}`);
+            this.logger.command('[控制台] 即将关闭当前进程并启动新实例...');
+            
+            // 先启动新进程，再退出当前进程
+            const { spawn } = require('child_process');
+            spawn(exePath, args, {
+                stdio: 'inherit',
+                detached: false,
+            });
+            
+            // 延迟退出，确保新进程已启动
+            setTimeout(() => process.exit(0), 1000);
+            return;
+        }
+
         const indexPath = path.join(process.cwd(), 'src', 'index.ts');
         if (fs.existsSync(indexPath)) {
             const now = new Date();
             fs.utimesSync(indexPath, now, now);
             this.logger.command('[控制台] 已触发 nodemon 重启 (通过更新 src/index.ts 时间戳)');
         } else {
-            this.logger.warn('[控制台] 找不到 src/index.ts，无法通过 nodemon 自动重启。如果是生产环境，请手动重启。');
+            this.logger.warn('[控制台] 无法自动重启，请手动重启服务。');
         }
     } catch (err: any) {
         this.logger.error(`[控制台] 尝试重启失败: ${err.message}`);
@@ -691,6 +738,297 @@ export class ConsoleInterface {
         this.onReload();
     } else {
         this.logger.warn('[控制台] 此环境不支持动态重新加载配置。');
+    }
+  }
+
+  private handlePlugins(args: string[]): void {
+    if (!this.pluginManager) {
+      this.logger.warn('[控制台] 插件系统未启用');
+      return;
+    }
+
+    const subCommand = args[1]?.toLowerCase();
+
+    switch (subCommand) {
+      case 'help':
+        this.showPluginsHelp();
+        break;
+
+      case 'list':
+      case undefined:
+        this.listPlugins();
+        break;
+
+      case 'info':
+        if (!args[2]) {
+          this.logger.warn('[控制台] 用法: /plugins info <plugin-name>');
+          return;
+        }
+        this.showPluginInfo(args[2]);
+        break;
+
+      case 'reload':
+        if (args[2]) {
+          this.reloadPlugin(args[2]);
+        } else {
+          this.reloadAllPlugins();
+        }
+        break;
+
+      case 'disable':
+        if (!args[2]) {
+          this.logger.warn('[控制台] 用法: /plugins disable <plugin-name>');
+          return;
+        }
+        this.disablePlugin(args[2]);
+        break;
+
+      case 'enable':
+        if (!args[2]) {
+          this.logger.warn('[控制台] 用法: /plugins enable <plugin-name>');
+          return;
+        }
+        this.enablePlugin(args[2]);
+        break;
+
+      case 'install':
+        if (!args[2]) {
+          this.logger.warn('[控制台] 用法: /plugins install <plugin-name>');
+          return;
+        }
+        this.installPlugin(args[2]);
+        break;
+
+      case 'uninstall':
+        if (!args[2]) {
+          this.logger.warn('[控制台] 用法: /plugins uninstall <plugin-name>');
+          return;
+        }
+        this.uninstallPlugin(args[2]);
+        break;
+
+      default:
+        this.logger.warn('[控制台] 未知子命令。使用 /plugins help 查看帮助');
+        break;
+    }
+  }
+
+  private listPlugins(): void {
+    const allPlugins = this.pluginManager!.getAllPlugins();
+
+    if (allPlugins.length === 0) {
+      this.logger.command('[插件列表] 当前没有任何插件');
+      return;
+    }
+
+    const enabledPlugins = allPlugins.filter(p => p.enabled);
+    const disabledPlugins = allPlugins.filter(p => !p.enabled);
+
+    this.logger.command(`[插件列表] 共 ${allPlugins.length} 个插件 (已启用: ${enabledPlugins.length}, 已禁用: ${disabledPlugins.length})`);
+    this.logger.command('═════════════════════════════════════════════════════════');
+
+    // 显示已启用的插件
+    if (enabledPlugins.length > 0) {
+      this.logger.command('✓ 已启用的插件:');
+      enabledPlugins.forEach((item, index) => {
+        const plugin = this.pluginManager!.getPluginByName(item.name);
+        if (plugin) {
+          const { metadata } = plugin;
+          const deps = metadata.dependencies && metadata.dependencies.length > 0
+            ? ` (${metadata.dependencies.length} 个依赖)`
+            : '';
+          this.logger.command(`  ${index + 1}. ${metadata.name} v${metadata.version}${deps}`);
+          this.logger.command(`     ID: ${metadata.id} | UUID: ${metadata.uuid}`);
+          if (metadata.description) {
+            this.logger.command(`     描述: ${metadata.description}`);
+          }
+        } else {
+          this.logger.command(`  ${index + 1}. ${item.name} (未加载)`);
+        }
+        if (index < enabledPlugins.length - 1) {
+          this.logger.command('     ─────────────────────────────────────────────────────');
+        }
+      });
+    }
+
+    // 显示已禁用的插件
+    if (disabledPlugins.length > 0) {
+      this.logger.command('');
+      this.logger.command('✗ 已禁用的插件:');
+      disabledPlugins.forEach((item, index) => {
+        this.logger.command(`  ${index + 1}. !${item.name} (已禁用)`);
+      });
+    }
+
+    this.logger.command('═════════════════════════════════════════════════════════');
+    this.logger.command(`提示: 使用 /plugins info <name> 查看插件详细信息`);
+    this.logger.command(`      使用 /plugins help 查看所有命令`);
+  }
+
+  private async reloadPlugin(pluginName: string): Promise<void> {
+    this.logger.command(`[插件重载] 正在重载插件: ${pluginName}`);
+    const success = await this.pluginManager!.reloadPlugin(pluginName);
+    if (success) {
+      this.logger.command(`[插件重载] ✓ ${pluginName} 重载成功`);
+    } else {
+      this.logger.warn(`[插件重载] ✗ ${pluginName} 重载失败`);
+    }
+  }
+
+  private async reloadAllPlugins(): Promise<void> {
+    this.logger.command('[插件重载] 正在重载所有插件...');
+    await this.pluginManager!.reloadAllPlugins();
+    this.logger.command('[插件重载] 重载完成');
+  }
+
+  private showPluginInfo(pluginName: string): void {
+    const plugin = this.pluginManager!.getPluginByName(pluginName);
+
+    if (!plugin) {
+      this.logger.warn(`[插件信息] 未找到插件: ${pluginName}`);
+      this.logger.warn('提示: 使用 /plugins list 查看所有已加载的插件');
+      return;
+    }
+
+    const { metadata } = plugin;
+
+    this.logger.command(`[插件信息] ${metadata.name}`);
+    this.logger.command('═════════════════════════════════════════════════════════');
+    this.logger.command(`名称: ${metadata.name}`);
+    this.logger.command(`版本: ${metadata.version}`);
+    this.logger.command(`ID: ${metadata.id}`);
+    this.logger.command(`UUID: ${metadata.uuid}`);
+
+    if (metadata.description) {
+      this.logger.command(`描述: ${metadata.description}`);
+    }
+
+    if (metadata.author) {
+      this.logger.command(`作者: ${metadata.author}`);
+    }
+
+    if (metadata.license) {
+      this.logger.command(`许可证: ${metadata.license}`);
+    }
+
+    if (metadata.homepage) {
+      this.logger.command(`主页: ${metadata.homepage}`);
+    }
+
+    if (metadata.repository) {
+      this.logger.command(`仓库: ${metadata.repository}`);
+    }
+
+    if (metadata.dependencies && metadata.dependencies.length > 0) {
+      this.logger.command(`依赖 (${metadata.dependencies.length}):`);
+      metadata.dependencies.forEach(depUuid => {
+        const depPlugin = this.pluginManager!.getPluginByUuid(depUuid);
+        if (depPlugin) {
+          this.logger.command(`  - ${depPlugin.metadata.name} (${depUuid})`);
+        } else {
+          this.logger.command(`  - ${depUuid}`);
+        }
+      });
+    } else {
+      this.logger.command('依赖: 无');
+    }
+
+    if (metadata.tags && metadata.tags.length > 0) {
+      this.logger.command(`标签: ${metadata.tags.join(', ')}`);
+    }
+
+    if (metadata.serverVersion) {
+      this.logger.command(`要求服务器版本: ${metadata.serverVersion}`);
+    }
+
+    this.logger.command(`主文件: ${plugin.modulePath}`);
+    this.logger.command('═════════════════════════════════════════════════════════');
+  }
+
+  private showPluginsHelp(): void {
+    const help = `
+[插件管理帮助]
+═════════════════════════════════════════════════════════
+命令列表：
+
+  /plugins [list]              列出所有插件（包括已禁用）
+  /plugins info <name>         查看插件详细信息
+  /plugins help                显示此帮助信息
+
+插件控制：
+  /plugins reload [name]       重载插件（不指定则重载全部）
+  /plugins enable <name>       启用已禁用的插件
+  /plugins disable <name>      禁用插件（添加前缀 !）
+
+插件管理：
+  /plugins install <name>      安装并加载 plugins 目录下的插件
+  /plugins uninstall <name>    卸载并删除插件目录
+
+说明：
+  • install - 加载 plugins 目录下未加载的插件（支持已禁用的插件）
+  • enable/disable - 启用/禁用，重启后保持
+  • 禁用的插件目录名会添加 ! 前缀
+  • 默认情况下，以 ! 开头的目录不会被加载
+
+═════════════════════════════════════════════════════════
+`;
+    this.logger.command(help);
+  }
+
+  private async disablePlugin(pluginName: string): Promise<void> {
+    this.logger.command(`[插件管理] 正在禁用插件: ${pluginName}`);
+    const success = await this.pluginManager!.disablePlugin(pluginName);
+    if (success) {
+      this.logger.command(`[插件管理] ✓ ${pluginName} 已禁用（目录已重命名为 !${pluginName}）`);
+    } else {
+      this.logger.warn(`[插件管理] ✗ ${pluginName} 禁用失败`);
+    }
+  }
+
+  private async enablePlugin(pluginName: string): Promise<void> {
+    this.logger.command(`[插件管理] 正在启用插件: ${pluginName}`);
+    const success = await this.pluginManager!.enablePlugin(pluginName);
+    if (success) {
+      this.logger.command(`[插件管理] ✓ ${pluginName} 已启用并加载`);
+    } else {
+      this.logger.warn(`[插件管理] ✗ ${pluginName} 启用失败`);
+    }
+  }
+
+  private async installPlugin(pluginName: string): Promise<void> {
+    this.logger.command(`[插件安装] 正在安装插件: ${pluginName}`);
+
+    const result = await this.pluginManager!.installPlugin(pluginName);
+
+    if (result.success) {
+      this.logger.command(`[插件安装] ✓ ${result.message}`);
+    } else {
+      this.logger.warn(`[插件安装] ✗ ${result.message}`);
+    }
+  }
+
+  private async uninstallPlugin(pluginName: string): Promise<void> {
+    this.logger.command(`[插件管理] 正在卸载插件: ${pluginName}`);
+
+    if (this.pluginManager!.getPluginByName(pluginName)) {
+      await this.pluginManager!.unloadPlugin(pluginName);
+    }
+
+    const pluginsDir = path.join(process.cwd(), 'plugins');
+    const pluginPath = path.join(pluginsDir, pluginName);
+    const disabledPath = path.join(pluginsDir, `!${pluginName}`);
+
+    try {
+      const targetPath = fs.existsSync(pluginPath) ? pluginPath : disabledPath;
+
+      if (fs.existsSync(targetPath)) {
+        fs.rmSync(targetPath, { recursive: true, force: true });
+        this.logger.command(`[插件管理] ✓ ${pluginName} 已卸载并删除`);
+      } else {
+        this.logger.warn(`[插件管理] ✗ 插件目录不存在: ${pluginName}`);
+      }
+    } catch (error: any) {
+      this.logger.warn(`[插件管理] ✗ 删除失败: ${error.message}`);
     }
   }
 

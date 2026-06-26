@@ -297,7 +297,7 @@ export class TcpServer {
 
     if (realIp) {
       state.realIp = realIp;
-      this.logger.info(`Proxy Protocol v2 识别到真实 IP: ${connectionId} -> ${realIp}`);
+      this.logger.debug(`Proxy Protocol v2 识别到真实 IP: ${connectionId} -> ${realIp}`);
       
       // Update real IP in ProtocolHandler
       this.protocolHandler.updateConnectionIp(connectionId, realIp);
@@ -376,13 +376,6 @@ export class TcpServer {
             },
           );
         } else {
-          // Source: phira-mp-common/src/command.rs:157-178
-          // Touches (3) and Judges (4) are monitor-only features, silently ignore
-          if (parsed.rawType === ClientCommandType.Touches || parsed.rawType === ClientCommandType.Judges) {
-            // 静默忽略观战功能消息（Touches/Judges）
-            continue;
-          }
-          
           this.logger.debug(`未处理的命令类型: ${connectionId} (原始类型: ${parsed.rawType})`);
         }
       } catch (error) {

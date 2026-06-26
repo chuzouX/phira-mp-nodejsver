@@ -1,0 +1,278 @@
+# Phira Multiplayer Server
+
+[中文说明](README-CN.md) | English
+
+TypeScript-based Node.js server with TCP support for multiplayer gaming.
+
+> **Note**: Some parts of the code in this project were completed with the assistance of AI.
+
+## Features
+
+- ✅ TypeScript support with strict type checking
+- ✅ TCP socket server for real-time communication
+- ✅ Configuration management via environment variables
+- ✅ Structured logging with Flood Protection
+- ✅ Dependency injection-friendly architecture
+- ✅ Room management system
+- ✅ Protocol handling layer
+- ✅ Unit testing with Jest
+- ✅ Code quality with ESLint and Prettier
+
+### Enhanced Features (by chuzouX)
+
+- 🖥️ **Web Dashboard & Admin System**: A standalone `/panel` for server management and real-time monitoring.
+- 🎨 **Enhanced UI/UX**: Support for Dark Mode and multi-language internationalization (i18n).
+- 🔐 **Hidden Management Portal**: Secure hidden access for super administrators via Easter Egg.
+- ⚙️ **Optimized Room Logic**: Improved handling for solo rooms and server-side announcements.
+- 🛡️ **Advanced Security**: 
+    - Support for **Proxy Protocol v2** (TCP) and **HTTP Forwarded Headers** (X-Forwarded-For, X-Real-IP) for reliable real IP detection behind all types of proxies.
+    - **Global Web Interception**: Banned IPs are instantly blocked from accessing any web resources (Dashboard, APIs, WebSocket) with a 403 error.
+    - **Anti-Brute Force**: Automatic login blacklist for the admin panel after repeated failures to mitigate brute-force and credential stuffing attacks.
+    - Differentiated **Admin vs System bans** (System bans drop connections instantly; Admin bans show detailed reasons).
+    - **Customizable Display IP**: Show your own domain or IP on the web UI via `DISPLAY_IP` config.
+    - Automatic **IP kicking** when an IP is banned.
+    - **Audit Log**: Dedicated `logs/ban.log` for tracking all ban/unban actions and suspicious activities.
+
+## Project Structure
+
+```
+.
+├── data/           # Persistent data (Bans, Blacklists)
+├── public/         # Web dashboard assets (HTML, JS, CSS, Locales)
+└── src/
+    ├── config/     # Configuration management
+    ├── logging/    # Logging utilities
+    ├── network/    # TCP, HTTP, and WebSocket server implementations
+    ├── domain/
+    │   ├── auth/     # Player authentication & Ban management
+    │   ├── rooms/    # Room management logic
+    │   └── protocol/ # Binary protocol handling & commands
+    ├── app.ts      # Application factory (wiring components)
+    └── index.ts    # Main entry point
+```
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+ 
+- npm or pnpm
+
+### Installation
+
+```bash
+npm install
+```
+
+## Configuration (.env)
+
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| **Basic Configuration** | | |
+| `PORT` | Game TCP server port | `12346` |
+| `HOST` | Server binding address (usually `0.0.0.0`) | `0.0.0.0` |
+| `TCP_ENABLED` | Enable/Disable TCP server | `true` |
+| `SERVER_NAME` | Server broadcast name | `Server` |
+| `PHIRA_API_URL` | Base URL for Phira API | `https://phira.5wyxi.com` |
+| `ROOM_SIZE` | Default maximum players per room | `8` |
+| `LOG_LEVEL` | Logging level (`debug`, `info`, `mark`, `warn`, `error`) | `info` |
+| `ENABLE_UPDATE_CHECK` | Enable automatic update checking on startup | `true` |
+| **Web Server Configuration** | | |
+| `WEB_PORT` | HTTP/WS management server port | `8080` |
+| `ENABLE_WEB_SERVER` | Enable/Disable HTTP server | `true` |
+| `DISPLAY_IP` | Server address displayed at the bottom of the web pages | `phira.funxlink.fun:19723` |
+| `DEFAULT_AVATAR` | Default avatar URL for users/bots without one | (Internal Default) |
+| `SESSION_SECRET` | Secret for web session encryption | (Insecure Default) |
+| `ALLOWED_ORIGINS` | Whitelist of allowed cross-origin sources (comma separated) | (Empty) |
+| **Security & Proxy** | | |
+| `USE_PROXY_PROTOCOL` | Enable Proxy Protocol v2 for real IP | `false` |
+| `TRUST_PROXY_HOPS` | Proxy trust hops (1 for Nginx, 2 for CDN+Nginx) | `1` |
+| `LOGIN_BLACKLIST_DURATION` | Seconds to blacklist IP after login failures | `600` |
+| `CAPTCHA_PROVIDER` | Captcha system (`geetest` or `none`) | `none` |
+| `GEETEST_ID` | Geetest ID (if using geetest) | (Empty) |
+| `GEETEST_KEY` | Geetest Key (if using geetest) | (Empty) |
+| **Admin & Permissions** | | |
+| `ADMIN_NAME` | Admin dashboard username | `admin` |
+| `ADMIN_PASSWORD` | Admin dashboard password | `password` |
+| `ADMIN_SECRET` | Secret key for encrypted admin API access | (Empty) |
+| `ADMIN_PHIRA_ID` | List of Admin Phira IDs (comma separated) | (Empty) |
+| `OWNER_PHIRA_ID` | List of Owner Phira IDs (comma separated) | (Empty) |
+| `BAN_ID_WHITELIST` | IDs that cannot be banned | (Empty) |
+| `BAN_IP_WHITELIST` | IPs that cannot be banned | (Empty) |
+| `SILENT_PHIRA_IDS` | IDs of users whose actions won't be logged | (Empty) |
+| `SERVER_ANNOUNCEMENT` | Welcome message shown to players upon joining | (Internal Default) |
+| **Room Discovery (Web)** | | |
+| `ENABLE_PUB_WEB` | Only show public rooms with specific prefix on web | `false` |
+| `PUB_PREFIX` | Public room prefix | `pub` |
+| `ENABLE_PRI_WEB` | Hide private rooms with specific prefix on web | `false` |
+| `PRI_PREFIX` | Private room prefix | `sm` |
+| **Federation (Multi-server Network)** | | |
+| `FEDERATION_ENABLED` | Enable Federation server mode | `false` |
+| `FEDERATION_SEED_NODES` | Comma separated list of initial seed nodes | (Empty) |
+| `FEDERATION_SECRET` | Shared secret for federation communication | (Empty) |
+| `FEDERATION_NODE_URL` | Publicly accessible URL of this node (for Federation) | (Empty) |
+| `FEDERATION_NODE_ID` | Unique ID for this node (auto-generated if empty) | (Empty) |
+| `FEDERATION_ALLOW_LOCAL` | Allow federation to connect local/private IPs | `false` |
+| `FEDERATION_HEALTH_INTERVAL` | Health check interval (ms) | `300` |
+| `FEDERATION_SYNC_INTERVAL` | State sync interval (ms) | `150` |
+## 🌟 Federation Server
+
+### 1. Purpose & Benefits
+Federation mode is designed to break "server islands". By enabling this feature, your server can connect with other Phira multiplayer servers:
+*   **Global Lobby**: Players can see public rooms from all servers in the federation network directly on your web dashboard.
+*   **Interconnectivity**: Increase visibility for smaller servers and help players find active matches more easily.
+*   **Decentralized**: No central authority; any server can join or leave the network at any time.
+
+### 2. How it Works
+*   **Node Discovery**: Upon startup, the server connects to the "Seed Nodes" defined in `FEDERATION_SEED_NODES` to fetch the list of all active nodes.
+*   **Health Checks**: Nodes exchange heartbeat packets regularly. If a server goes offline, it will be removed from the network list by other nodes.
+*   **State Sync**: Servers periodically broadcast their public room lists and online player counts to the network.
+*   **Security**: All peer-to-peer communication requires a matching `FEDERATION_SECRET`. Only servers with the same secret can exchange data.
+
+### 3. How to Configure
+Set the following variables in your `.env` file:
+
+1.  **Enable Feature**: Set `FEDERATION_ENABLED` to `true`.
+2.  **Identify Your Node**:
+    *   `FEDERATION_NODE_ID`: A unique identifier for your node (e.g., `EU-Phira-Node-1`). Auto-generated if left empty.
+    *   `FEDERATION_NODE_URL`: **Critical**. The publicly accessible URL of your Web port (e.g., `http://your-domain.com:8080`).
+3.  **Join the Network**:
+    *   `FEDERATION_SEED_NODES`: Addresses of known active nodes (comma separated).
+    *   `FEDERATION_SECRET`: A shared secret key. Ensure all servers you wish to connect with use the exact same key.
+4.  **Adjust Intervals** (Optional):
+    *   `FEDERATION_HEALTH_INTERVAL`: Heartbeat frequency (default 30000ms).
+    *   `FEDERATION_SYNC_INTERVAL`: State sync frequency (default 15000ms).
+
+## Deployment & Running
+
+The project can be built into a standalone executable for multiple platforms.
+
+### 1. Download/Build Executable
+Build the versions using `npm run package:all` (files will be in `outputs/`).
+
+### 2. Platform Specifics
+
+#### **Windows**
+- Simply double-click `phira-mp-nodejsver.exe`.
+- A default `.env` file will be generated automatically on first run.
+
+#### **Linux**
+- Grant executable permission: `chmod +x phira-mp-nodejsver-linux`
+- Run: `./phira-mp-nodejsver-linux`
+
+#### **macOS**
+- Grant executable permission: `chmod +x phira-mp-nodejsver-macos-arm64` (or `x64`)
+- **Signature Fix**: If the app fails to start, run this in terminal:
+  ```bash
+  codesign --sign - phira-mp-nodejsver-macos-arm64
+  ```
+- Open via Right Click -> Open if blocked by Gatekeeper.
+
+### Production (Source Mode)
+
+Start the built application:
+
+```bash
+npm start
+```
+
+### Nginx Reverse Proxy Configuration
+
+If you want to use Nginx as a reverse proxy for the web management interface and WebSocket, use the following configuration:
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:8080; # Replace with your WEB_PORT
+    
+    proxy_set_header Host $proxy_host;
+    proxy_set_header Origin $scheme://$host;
+    
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    
+    # Critical for real IP detection
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+}
+```
+
+## Web API
+
+### Authentication
+
+Administrative endpoints require authentication via one of three methods:
+
+1.  **Session (Browser)**: Log in via the `/admin` portal. Subsequent requests will be authenticated via cookies.
+2.  **Local Access**: Requests originating from `127.0.0.1` or `::1` are automatically authorized as administrator.
+3.  **Dynamic Admin Secret**: For external scripts/bots. Send an encrypted string using the `ADMIN_SECRET` configured in `.env`.
+    *   **Header**: `X-Admin-Secret: <ENCRYPTED_HEX>`
+    *   **Query**: `?admin_secret=<ENCRYPTED_HEX>`
+
+### Public Endpoints
+
+| Method | URL | Description | Parameters |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/status` | Returns server info and room list | None |
+| `GET` | `/check-auth` | Returns admin status | None |
+
+### Administrative Endpoints (Requires Auth)
+
+| Method | URL | Description | Parameters (JSON) |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/all-players` | List all connected players | None |
+| `POST` | `/api/admin/server-message` | Send message to room | `roomId`, `content` |
+| `POST` | `/api/admin/broadcast` | Global broadcast | `content`, `target?` |
+| `POST` | `/api/admin/bulk-action` | Batch control rooms | `action`, `target`, `value?` |
+| `POST` | `/api/admin/kick-player` | Force disconnect player | `userId` |
+| `POST` | `/api/admin/force-start` | Force start room game | `roomId` |
+| `POST` | `/api/admin/toggle-lock` | Toggle room lock | `roomId` |
+| `POST` | `/api/admin/set-max-players` | Update room size | `roomId`, `maxPlayers` |
+| `POST` | `/api/admin/close-room` | Close a specific room | `roomId` |
+| `POST` | `/api/admin/toggle-mode` | Toggle Cycle mode | `roomId` |
+| `GET` | `/api/admin/bans` | List current bans | None |
+| `POST` | `/api/admin/ban` | Issue a new ban | `type`, `target`, `duration?`, `reason?` |
+| `POST` | `/api/admin/unban` | Remove a ban | `type`, `target` |
+| `GET` | `/api/admin/login-blacklist` | List panel login blacklist | None |
+| `POST` | `/api/admin/blacklist-ip` | Manually blacklist IP for login | `ip`, `duration?` |
+| `POST` | `/api/admin/unblacklist-ip` | Remove IP from login blacklist | `ip` |
+
+### API Examples
+
+#### **Get Server Status**
+```bash
+curl http://localhost:8080/api/status
+```
+
+#### **Send Global Broadcast (via Admin Secret)**
+```bash
+curl -X POST http://localhost:8080/api/admin/broadcast \
+     -H "Content-Type: application/json" \
+     -H "X-Admin-Secret: YOUR_ENCRYPTED_SECRET" \
+     -d '{"content": "Hello Players!", "target": "all"}'
+```
+
+#### **Kick Player (via Fetch)**
+```javascript
+fetch('/api/admin/kick-player', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId: 12345 })
+});
+```
+
+## TCP Protocol
+
+The server uses TCP sockets for communication. Clients can connect to the server using a TCP socket and send binary-formatted messages (compatible with the Phira protocol).
+
+## Related Projects
+
+- [nonebot_plugin_nodejsphira](https://github.com/chuzouX/nonebot_plugin_nodejsphira): A bot plugin for NoneBot2 that manages and monitors this server.
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file for details.
