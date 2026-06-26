@@ -4,7 +4,7 @@
 set -e
 
 # 配置
-PLUGIN_SDK_REPO="git@github.com:chuzouX/phira-mp-nodejsver-plugin.git"
+PLUGIN_SDK_REPO="git@github.com:chuzouX/phira-mp-nodejsver-example.git"
 PLUGIN_SDK_DIR="/tmp/phira-plugin-sdk-sync"
 
 echo "🔄 开始同步插件 SDK..."
