@@ -7,6 +7,7 @@
 ## 目录
 
 - [概览](#概览)
+- [插件管理](#插件管理)
 - [社区插件开发](#社区插件开发)
   - [JavaScript 插件（推荐入门）](#javascript-插件推荐入门)
   - [TypeScript 插件](#typescript-插件)
@@ -34,15 +35,17 @@
 ```
 plugins/
 ├── my-plugin/
-│   ├── plugin.yaml       # 插件元数据（必需）
-│   └── res/              # 资源目录
-│       ├── main.js       # 插件入口（必需）
-│       ├── main.ts       # TypeScript 源文件
-│       ├── lib/          # 其他代码文件
-│       ├── public/       # 静态资源（Web UI）
-│       └── config/       # 插件自己的配置模板
+│   ├── plugin.yaml           # 插件元数据（必需）
+│   ├── config.default.yaml   # 默认配置模板（可选，用于自动创建配置）
+│   ├── README.md             # 插件文档（可选）
+│   └── res/                  # 资源目录
+│       ├── main.js           # 插件入口（必需）
+│       ├── main.ts           # TypeScript 源文件
+│       ├── lib/              # 其他代码文件
+│       └── public/           # 静态资源（Web UI）
 ├── web-dashboard/
 │   ├── plugin.yaml
+│   ├── config.default.yaml
 │   └── res/
 │       ├── main.js
 │       └── public/
@@ -113,6 +116,42 @@ config/
 ```
 
 启用条件：`.env` 中设置 `PLUGINS_ENABLED=true`（默认启用）。
+
+---
+
+## 插件管理
+
+服务器提供控制台命令来管理插件：
+
+### 控制台命令
+
+| 命令 | 说明 |
+|------|------|
+| `/plugins [list]` | 列出所有插件（包括已禁用） |
+| `/plugins info <name>` | 查看插件详细信息 |
+| `/plugins help` | 显示帮助信息 |
+| `/plugins reload [name]` | 重载插件（不指定则重载全部） |
+| `/plugins enable <name>` | 启用已禁用的插件 |
+| `/plugins disable <name>` | 禁用插件（添加前缀 !） |
+| `/plugins install <name>` | 安装并加载 plugins 目录下的插件 |
+| `/plugins uninstall <name>` | 卸载并删除插件目录 |
+
+### 插件状态
+
+- **已启用**: 插件目录正常，已加载运行
+- **已禁用**: 插件目录以 `!` 开头，不会被加载
+
+### 自动配置创建
+
+插件加载时会自动检查配置文件：
+
+1. 检查 `config/{pluginName}/config.yaml` 是否存在
+2. 如果不存在，查找默认配置模板：
+   - `plugins/{pluginName}/config.default.yaml`
+   - `plugins/{pluginName}/res/config.default.yaml`
+3. 如果找到模板，自动创建配置文件
+
+这使得插件首次加载时无需手动创建配置文件。
 
 ---
 
@@ -372,6 +411,83 @@ api.broadcastWs('my-event', { message: 'hello' });
 api.broadcastToRoom(roomId, serverCommand);
 ```
 
+### 服务器数据访问 API
+
+插件可以通过以下 API 获取服务器数据：
+
+#### 获取在线玩家
+
+```js
+const players = api.getOnlinePlayers();
+// 返回: [{ id, name, connectionId, roomId, roomName, ip, isAdmin, isOwner }, ...]
+```
+
+#### 获取房间列表
+
+```js
+const rooms = api.getRooms();
+// 返回: [{ id, name, playerCount, maxPlayers, state, locked, cycle, ownerId, players }, ...]
+```
+
+#### 获取房间详情
+
+```js
+const room = api.getRoom('room-id');
+// 返回: { id, name, playerCount, maxPlayers, state, locked, cycle, ownerId, players } 或 undefined
+```
+
+#### 获取服务器统计
+
+```js
+const stats = api.getServerStats();
+// 返回: { serverName, onlinePlayers, roomCount, uptime, memoryUsage }
+```
+
+#### 获取封禁列表
+
+```js
+const bans = api.getBanList();
+// 返回: { idBans: [...], ipBans: [...] }
+```
+
+#### 权限检查
+
+```js
+const isAdmin = api.isUserAdmin(userId);
+const isOwner = api.isUserOwner(userId);
+```
+
+#### 获取玩家信息
+
+```js
+const player = api.getPlayer(userId);
+// 返回: { id, name, connectionId, roomId, roomName, ip, isAdmin, isOwner } 或 undefined
+```
+
+#### 管理操作
+
+```js
+// 发送系统消息
+api.sendServerMessage(roomId, 'Hello!');
+
+// 踢出玩家
+api.kickPlayer(userId);
+
+// 封禁/解封玩家
+api.banPlayer(userId, 3600, '违规', 'Admin');
+api.unbanPlayer(userId, 'Admin');
+
+// 封禁/解封 IP
+api.banIp('192.168.1.1', 3600, '违规', 'Admin');
+api.unbanIp('192.168.1.1', 'Admin');
+
+// 房间管理
+api.forceStartGame(roomId);
+api.toggleRoomLock(roomId);
+api.setRoomMaxPlayers(roomId, 4);
+api.closeRoom(roomId);
+```
+
 ### 插件配置
 
 插件配置以 YAML 格式存储在 `config/<plugin-name>/config.yaml`。
@@ -391,6 +507,29 @@ const dir = api.getPluginConfigDir();
 配置文件示例 (`config/example/config.yaml`)：
 
 ```yaml
+greeting: "你好"
+maxRetries: 3
+```
+
+### 默认配置模板
+
+插件可以在目录中提供 `config.default.yaml` 文件作为默认配置模板：
+
+```
+plugins/my-plugin/
+├── plugin.yaml
+├── config.default.yaml   ← 默认配置模板
+└── res/
+    └── main.ts
+```
+
+当插件首次加载时，如果 `config/{pluginName}/config.yaml` 不存在，系统会自动使用模板创建配置文件。
+
+示例 `config.default.yaml`：
+
+```yaml
+# 插件配置
+enabled: true
 greeting: "你好"
 maxRetries: 3
 ```
@@ -485,8 +624,76 @@ allowedOrigins:
 greeting: "你好"
 ```
 
+### 4. **nonebot-auth** — NoneBot 鉴权插件
+
+为 NoneBot 机器人和外部脚本提供 API 访问鉴权。支持 SHA-256 和 AES-256-CBC 两种认证方式。
+
+**配置文件**: `config/nonebot-auth/config.yaml`
+
+```yaml
+# 管理员密钥
+adminSecret: "your-admin-secret"
+
+# 哈希算法 (sha256 或 sha512)
+secretHashAlgorithm: sha256
+
+# 认证模式 (sha256 / aes-cbc / both)
+authMode: both
+
+# 是否启用日志
+enableLogging: true
+```
+
+**API 端点**:
+- `GET /api/nonebot/test` - 测试鉴权
+- `GET /api/nonebot/status` - 服务器状态
+
+### 5. **room-announcer** — 房间播报插件
+
+实时监测公开房间列表，当房间列表变化时自动向未在房间中的玩家播报。
+
+**配置文件**: `config/room-announcer/config.yaml`
+
+```yaml
+# 是否启用插件
+enabled: true
+
+# 检测间隔（毫秒）
+checkInterval: 5000
+
+# 玩家登录时是否播报
+announceOnJoin: true
+
+# 登录播报延迟（毫秒）
+announceDelay: 1500
+
+# 是否显示房间人数
+showPlayerCount: true
+
+# 是否显示房间状态
+showRoomState: true
+
+# 是否只播报公开房间
+publicOnly: true
+
+# 公开房间前缀
+publicPrefix: "pub"
+
+# 播报消息前缀
+messagePrefix: "【房间播报】"
+```
+
+**控制台命令**:
+- `/roomlist` - 查看当前房间列表
+- `/roomannouncer status` - 查看插件状态
+- `/roomannouncer announce` - 手动触发播报
+
+---
+
 | 插件 | 目录 | 说明 |
 |------|------|------|
 | **web-dashboard** | `plugins/web-dashboard/` | Web 管理面板，提供登录、房间管理、封禁管理、联邦路由等完整后台 |
 | **websocket** | `plugins/websocket/` | WebSocket 服务，为前端提供实时房间状态推送 |
 | **example** | `plugins/example/` | 示例插件，展示事件监听、路由注册、控制台命令、配置读写等核心用法 |
+| **nonebot-auth** | `plugins/nonebot-auth/` | NoneBot 鉴权插件，支持 SHA-256 和 AES-256-CBC 认证 |
+| **room-announcer** | `plugins/room-announcer/` | 房间播报插件，自动向玩家播报公开房间列表 |

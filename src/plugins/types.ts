@@ -68,6 +68,135 @@ export interface PluginApi extends PluginContext {
   registerCommand(name: string, handler: (...args: string[]) => void | Promise<void>): void;
   registerPacketHandler(registration: PacketHandlerRegistration): void;
   broadcastToRoom(roomId: string, command: ServerCommand): boolean;
+
+  // ========== 服务器数据访问 API ==========
+
+  /** 获取所有在线玩家列表 */
+  getOnlinePlayers(): Array<{
+    id: number;
+    name: string;
+    connectionId: string;
+    roomId?: string;
+    roomName?: string;
+    ip: string;
+    isAdmin: boolean;
+    isOwner: boolean;
+  }>;
+
+  /** 获取所有房间列表 */
+  getRooms(): Array<{
+    id: string;
+    name: string;
+    playerCount: number;
+    maxPlayers: number;
+    state: string;
+    locked: boolean;
+    cycle: boolean;
+    ownerId: number;
+    players: Array<{
+      id: number;
+      name: string;
+      isReady: boolean;
+      isFinished: boolean;
+    }>;
+  }>;
+
+  /** 获取房间详情 */
+  getRoom(roomId: string): {
+    id: string;
+    name: string;
+    playerCount: number;
+    maxPlayers: number;
+    state: string;
+    locked: boolean;
+    cycle: boolean;
+    ownerId: number;
+    players: Array<{
+      id: number;
+      name: string;
+      isReady: boolean;
+      isFinished: boolean;
+    }>;
+  } | undefined;
+
+  /** 获取服务器统计信息 */
+  getServerStats(): {
+    serverName: string;
+    onlinePlayers: number;
+    roomCount: number;
+    uptime: number;
+    memoryUsage: {
+      rss: number;
+      heapTotal: number;
+      heapUsed: number;
+    };
+  };
+
+  /** 获取封禁列表 */
+  getBanList(): {
+    idBans: Array<{
+      target: number;
+      reason: string;
+      createdAt: number;
+      expiresAt: number | null;
+      adminName?: string;
+    }>;
+    ipBans: Array<{
+      target: string;
+      reason: string;
+      createdAt: number;
+      expiresAt: number | null;
+      adminName?: string;
+    }>;
+  };
+
+  /** 检查用户是否是管理员 */
+  isUserAdmin(userId: number): boolean;
+
+  /** 检查用户是否是服主 */
+  isUserOwner(userId: number): boolean;
+
+  /** 获取玩家信息 */
+  getPlayer(userId: number): {
+    id: number;
+    name: string;
+    connectionId: string;
+    roomId?: string;
+    roomName?: string;
+    ip: string;
+    isAdmin: boolean;
+    isOwner: boolean;
+  } | undefined;
+
+  /** 向指定玩家发送消息 */
+  sendServerMessage(roomId: string, content: string): void;
+
+  /** 踢出玩家 */
+  kickPlayer(userId: number): boolean;
+
+  /** 封禁玩家 */
+  banPlayer(userId: number, duration: number | null, reason: string, adminName?: string): void;
+
+  /** 解封玩家 */
+  unbanPlayer(userId: number, adminName?: string): boolean;
+
+  /** 封禁 IP */
+  banIp(ip: string, duration: number | null, reason: string, adminName?: string): void;
+
+  /** 解封 IP */
+  unbanIp(ip: string, adminName?: string): boolean;
+
+  /** 强制开始游戏 */
+  forceStartGame(roomId: string): boolean;
+
+  /** 切换房间锁定 */
+  toggleRoomLock(roomId: string): boolean;
+
+  /** 设置房间最大人数 */
+  setRoomMaxPlayers(roomId: string, maxPlayers: number): boolean;
+
+  /** 关闭房间 */
+  closeRoom(roomId: string): boolean;
 }
 
 export interface PluginMetadata {

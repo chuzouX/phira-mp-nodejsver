@@ -233,6 +233,33 @@ export class PluginManager {
         throw new Error(`找不到插件主文件: res/${mainFile}`);
       }
 
+      // 检查并创建插件配置文件
+      const pluginConfigDir = path.join(process.cwd(), 'config', pluginName);
+      const pluginConfigPath = path.join(pluginConfigDir, 'config.yaml');
+
+      if (!fs.existsSync(pluginConfigPath)) {
+        // 检查插件目录中是否有默认配置模板
+        const defaultConfigPath = path.join(pluginDir, 'config.default.yaml');
+        const defaultConfigInResPath = path.join(resDir, 'config.default.yaml');
+
+        let defaultConfig: string | null = null;
+
+        if (fs.existsSync(defaultConfigPath)) {
+          defaultConfig = fs.readFileSync(defaultConfigPath, 'utf8');
+          this.context.logger.plugin(`从 plugins/${pluginName}/config.default.yaml 读取默认配置`);
+        } else if (fs.existsSync(defaultConfigInResPath)) {
+          defaultConfig = fs.readFileSync(defaultConfigInResPath, 'utf8');
+          this.context.logger.plugin(`从 plugins/${pluginName}/res/config.default.yaml 读取默认配置`);
+        }
+
+        if (defaultConfig) {
+          // 创建配置目录
+          fs.mkdirSync(pluginConfigDir, { recursive: true });
+          fs.writeFileSync(pluginConfigPath, defaultConfig, 'utf8');
+          this.context.logger.plugin(`已为插件 ${pluginName} 创建默认配置: config/${pluginName}/config.yaml`);
+        }
+      }
+
       // require() 走 ts-node 的 hook，能正确编译 .ts 文件；
       // await import() 不经过 CJS require hook，会导致 "Cannot use import statement" 错误
       const imported = require(resolvedPath);
@@ -489,6 +516,114 @@ export class PluginManager {
     }
   }
 
+  /**
+   * 安装并加载 plugins 目录下未加载的插件
+   * @param pluginName 插件目录名
+   * @returns 是否成功安装
+   */
+  public async installPlugin(pluginName: string): Promise<{ success: boolean; message: string }> {
+    // 1. 检查插件是否已加载
+    if (this.plugins.has(pluginName)) {
+      return { success: false, message: `插件 ${pluginName} 已经在运行` };
+    }
+
+    const pluginsDir = path.join(process.cwd(), 'plugins');
+    const pluginPath = path.join(pluginsDir, pluginName);
+    const disabledPath = path.join(pluginsDir, `!${pluginName}`);
+
+    // 2. 检查插件目录是否存在
+    let actualPath = pluginPath;
+    let isDisabled = false;
+
+    if (fs.existsSync(pluginPath)) {
+      actualPath = pluginPath;
+      isDisabled = false;
+    } else if (fs.existsSync(disabledPath)) {
+      actualPath = disabledPath;
+      isDisabled = true;
+    } else {
+      return { success: false, message: `插件目录不存在: plugins/${pluginName}/` };
+    }
+
+    // 3. 检查 plugin.yaml 是否存在
+    const metadataPath = path.join(actualPath, 'plugin.yaml');
+    if (!fs.existsSync(metadataPath)) {
+      return { success: false, message: `插件 ${pluginName} 缺少 plugin.yaml 元数据文件` };
+    }
+
+    try {
+      // 4. 读取并验证插件元数据
+      const metadataRaw = fs.readFileSync(metadataPath, 'utf8');
+      const metadata = yaml.load(metadataRaw) as any;
+
+      if (!metadata || typeof metadata !== 'object') {
+        return { success: false, message: `插件 ${pluginName} 的 plugin.yaml 格式无效` };
+      }
+
+      if (!metadata.id || !metadata.name || !metadata.version) {
+        return { success: false, message: `插件 ${pluginName} 缺少必需字段 (id, name, version)` };
+      }
+
+      if (!metadata.uuid) {
+        return { success: false, message: `插件 ${pluginName} 缺少 uuid 字段` };
+      }
+
+      // 5. 检查 UUID 是否与其他已加载插件冲突
+      if (this.pluginsByUuid.has(metadata.uuid)) {
+        const existing = this.pluginsByUuid.get(metadata.uuid);
+        return { success: false, message: `UUID 冲突: ${metadata.uuid} 已被插件 ${existing?.name} 使用` };
+      }
+
+      // 6. 检查依赖
+      if (metadata.dependencies && Array.isArray(metadata.dependencies) && metadata.dependencies.length > 0) {
+        const missingDeps: string[] = [];
+
+        for (const dep of metadata.dependencies) {
+          const depUuid = typeof dep === 'string' ? dep : dep.uuid;
+          const depName = typeof dep === 'object' && dep.name ? dep.name : depUuid;
+
+          // 检查依赖是否已加载
+          if (!this.pluginsByUuid.has(depUuid)) {
+            missingDeps.push(depName);
+          }
+        }
+
+        if (missingDeps.length > 0) {
+          return {
+            success: false,
+            message: `插件 ${pluginName} 缺少依赖: ${missingDeps.join(', ')}。请先安装依赖插件`
+          };
+        }
+      }
+
+      // 7. 如果是禁用状态，先启用
+      if (isDisabled) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        fs.renameSync(disabledPath, pluginPath);
+        this.context.logger.plugin(`已将 !${pluginName} 重命名为 ${pluginName}`);
+      }
+
+      // 8. 加载插件
+      await this.loadPlugin(pluginName);
+
+      // 9. 检查是否加载成功
+      if (this.plugins.has(pluginName)) {
+        const loadedPlugin = this.plugins.get(pluginName)!;
+        return {
+          success: true,
+          message: `已安装并加载插件: ${loadedPlugin.metadata.name} v${loadedPlugin.metadata.version}`
+        };
+      } else {
+        return { success: false, message: `插件 ${pluginName} 加载失败，请查看日志` };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        message: `安装插件 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`
+      };
+    }
+  }
+
   public getAllPlugins(): { name: string; enabled: boolean }[] {
     const pluginsDir = path.join(process.cwd(), 'plugins');
     if (!fs.existsSync(pluginsDir)) {
@@ -622,6 +757,155 @@ export class PluginManager {
         this.packetHandlers.set(registration.commandType, list);
       },
       broadcastToRoom: (roomId: string, command: ServerCommand) => this.context.protocolHandler.broadcastToRoomById(roomId, command),
+
+      // ========== 服务器数据访问 API ==========
+
+      getOnlinePlayers: () => {
+        const sessions = this.context.protocolHandler.getAllSessions();
+        return sessions.map(session => ({
+          ...session,
+          connectionId: '', // 无法直接获取 connectionId
+          isAdmin: this.context.config.adminPhiraId.includes(session.id),
+          isOwner: this.context.config.ownerPhiraId.includes(session.id),
+        }));
+      },
+
+      getRooms: () => {
+        return this.context.roomManager.listRooms().map(room => ({
+          id: room.id,
+          name: room.name,
+          playerCount: room.players.size,
+          maxPlayers: room.maxPlayers,
+          state: room.state.type,
+          locked: room.locked,
+          cycle: room.cycle,
+          ownerId: room.ownerId,
+          players: Array.from(room.players.values()).map(p => ({
+            id: p.user.id,
+            name: p.user.name,
+            isReady: p.isReady,
+            isFinished: p.isFinished,
+          })),
+        }));
+      },
+
+      getRoom: (roomId: string) => {
+        const room = this.context.roomManager.getRoom(roomId);
+        if (!room) return undefined;
+
+        return {
+          id: room.id,
+          name: room.name,
+          playerCount: room.players.size,
+          maxPlayers: room.maxPlayers,
+          state: room.state.type,
+          locked: room.locked,
+          cycle: room.cycle,
+          ownerId: room.ownerId,
+          players: Array.from(room.players.values()).map(p => ({
+            id: p.user.id,
+            name: p.user.name,
+            isReady: p.isReady,
+            isFinished: p.isFinished,
+          })),
+        };
+      },
+
+      getServerStats: () => {
+        const used = process.memoryUsage();
+        return {
+          serverName: this.context.config.serverName,
+          onlinePlayers: this.context.protocolHandler.getSessionCount(),
+          roomCount: this.context.roomManager.count(),
+          uptime: process.uptime(),
+          memoryUsage: {
+            rss: Math.round(used.rss / 1024 / 1024 * 100) / 100,
+            heapTotal: Math.round(used.heapTotal / 1024 / 1024 * 100) / 100,
+            heapUsed: Math.round(used.heapUsed / 1024 / 1024 * 100) / 100,
+          },
+        };
+      },
+
+      getBanList: () => {
+        const bans = this.context.banManager.getAllBans();
+        return {
+          idBans: bans.idBans.map(ban => ({
+            ...ban,
+            target: ban.target as number,
+          })),
+          ipBans: bans.ipBans.map(ban => ({
+            ...ban,
+            target: ban.target as string,
+          })),
+        };
+      },
+
+      isUserAdmin: (userId: number) => {
+        return this.context.config.adminPhiraId.includes(userId);
+      },
+
+      isUserOwner: (userId: number) => {
+        return this.context.config.ownerPhiraId.includes(userId);
+      },
+
+      getPlayer: (userId: number) => {
+        const sessions = this.context.protocolHandler.getAllSessions();
+        const session = sessions.find(s => s.id === userId);
+        if (!session) return undefined;
+
+        const room = this.context.roomManager.getRoomByUserId(userId);
+
+        return {
+          ...session,
+          connectionId: '', // 无法直接获取 connectionId
+          roomId: room?.id,
+          roomName: room?.name,
+          isAdmin: this.context.config.adminPhiraId.includes(userId),
+          isOwner: this.context.config.ownerPhiraId.includes(userId),
+        };
+      },
+
+      sendServerMessage: (roomId: string, content: string) => {
+        this.context.protocolHandler.sendServerMessage(roomId, content);
+      },
+
+      kickPlayer: (userId: number) => {
+        return this.context.protocolHandler.kickPlayer(userId);
+      },
+
+      banPlayer: (userId: number, duration: number | null, reason: string, adminName?: string) => {
+        this.context.banManager.banId(userId, duration, reason, adminName);
+        this.context.protocolHandler.kickPlayer(userId);
+      },
+
+      unbanPlayer: (userId: number, adminName?: string) => {
+        return this.context.banManager.unbanId(userId, adminName);
+      },
+
+      banIp: (ip: string, duration: number | null, reason: string, adminName?: string) => {
+        this.context.banManager.banIp(ip, duration, reason, adminName);
+        this.context.protocolHandler.kickIp(ip);
+      },
+
+      unbanIp: (ip: string, adminName?: string) => {
+        return this.context.banManager.unbanIp(ip, adminName);
+      },
+
+      forceStartGame: (roomId: string) => {
+        return this.context.protocolHandler.forceStartGame(roomId);
+      },
+
+      toggleRoomLock: (roomId: string) => {
+        return this.context.protocolHandler.toggleRoomLock(roomId);
+      },
+
+      setRoomMaxPlayers: (roomId: string, maxPlayers: number) => {
+        return this.context.protocolHandler.setRoomMaxPlayers(roomId, maxPlayers);
+      },
+
+      closeRoom: (roomId: string) => {
+        return this.context.protocolHandler.closeRoomByAdmin(roomId);
+      },
     };
   }
 }

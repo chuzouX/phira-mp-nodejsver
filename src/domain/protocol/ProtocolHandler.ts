@@ -1032,11 +1032,13 @@ export class ProtocolHandler {
           result: { ok: true, value: [userInfo, roomState] },
         });
 
+        this.logger.debug(`[ProtocolHandler] 触发 player:auth:success 事件: ${userInfo.name} (ID: ${userInfo.id})`);
         this.pluginManager?.emit('player:auth:success', {
           connectionId,
           user: userInfo,
           ip: this.connectionIps.get(connectionId) || 'unknown',
         });
+        this.logger.debug(`[ProtocolHandler] player:auth:success 事件已触发`);
 
         const announcement = this.serverAnnouncement
           .replace(/{{name}}/g, userInfo.name)

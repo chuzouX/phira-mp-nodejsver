@@ -40,7 +40,22 @@ secretHashAlgorithm: sha256
 enableLogging: true
 ```
 
-### 2. 生成安全密钥
+### 2. 认证模式说明
+
+本插件支持两种认证方式：
+
+| 模式 | 说明 | 适用场景 |
+|------|------|---------|
+| `sha256` | SHA-256 哈希认证 | 传统 API 调用 |
+| `aes-cbc` | AES-256-CBC 加密认证 | nonebot 插件 |
+| `both` | 同时支持两种方式 | **推荐**** |
+
+在 `config/nonebot-auth/config.yaml` 中设置：
+```yaml
+authMode: both
+```
+
+### 3. 生成安全密钥
 
 ```bash
 # Linux/Mac
@@ -55,7 +70,17 @@ python3 scripts/generate_secret.py
 
 ## 使用方法
 
-### Bash/curl 示例
+### NoneBot 插件使用（推荐）
+
+如果你使用 [nonebot_plugin_nodejsphira](https://github.com/chuzouX/nonebot_plugin_nodejsphira)，只需：
+
+1. 在 phira-mp-server 的 `.env` 中设置 `ADMIN_SECRET`
+2. 在 NoneBot 的 `.env` 中设置相同的 `PHIRA_ADMIN_SECRET`
+3. 确保 `config/nonebot-auth/config.yaml` 中 `authMode` 设置为 `both` 或 `aes-cbc`
+
+NoneBot 插件会自动使用 AES-256-CBC 加密认证访问 web-dashboard 的管理 API。
+
+### Bash/curl 示例（SHA-256 模式）
 
 ```bash
 #!/bin/bash
@@ -136,38 +161,42 @@ makeAdminRequest('/api/nonebot/status')
   .catch(err => console.error(err));
 ```
 
-## API 端点
+## 功能说明
 
-本插件提供以下端点（需要 Admin Secret 鉴权）：
+本插件提供基于密钥的管理员鉴权中间件，供其他插件使用。
 
-### GET /api/nonebot/test
+### 导出的中间件
 
-测试 Admin Secret 鉴权是否正常工作。
+插件加载后会导出以下内容供其他插件使用：
 
-**响应示例：**
-```json
-{
-  "success": true,
-  "message": "Admin Secret authentication successful",
-  "timestamp": 1719187200
-}
-```
+- `api.adminSecretAuthMiddleware` - Express 中间件，用于验证 Admin Secret
+- `api.verifyAesCbcToken` - 验证 AES-256-CBC token 的函数
 
-### GET /api/nonebot/status
+### 其他插件使用示例
 
-获取服务器状态信息。
+```typescript
+import type { PluginModule, PluginApi } from 'phira-plugin-api';
 
-**响应示例：**
-```json
-{
-  "success": true,
-  "data": {
-    "serverName": "My Phira Server",
-    "roomCount": 5,
-    "playerCount": 12,
-    "timestamp": 1719187200
-  }
-}
+const pluginModule: PluginModule = {
+  init(api: PluginApi) {
+    const app = api.getExpressApp();
+    if (!app) return;
+
+    // 获取 nonebot-auth 导出的中间件
+    const adminAuth = (api as any).adminSecretAuthMiddleware;
+    if (!adminAuth) {
+      api.logger.warn('nonebot-auth 插件未加载');
+      return;
+    }
+
+    // 使用中间件保护路由
+    app.get('/api/my-plugin/admin-data', adminAuth, (req, res) => {
+      res.json({ success: true, data: 'secret data' });
+    });
+  },
+};
+
+export default pluginModule;
 ```
 
 ## 安全建议
@@ -239,6 +268,44 @@ makeAdminRequest('/api/nonebot/status')
 **原因：** 客户端与服务器时间差超过 5 分钟
 
 **解决：** 同步系统时间（使用 NTP）
+
+### NoneBot 插件报错 "Unauthorized: Missing token"
+
+**原因：** ADMIN_SECRET 配置不正确或未配置
+
+**解决：**
+1. 确保 phira-mp-server 的 `.env` 中设置了 `ADMIN_SECRET`
+2. 确保 NoneBot 的 `.env` 中设置了相同的 `PHIRA_ADMIN_SECRET`
+3. 重启两个服务使配置生效
+
+## 与 NoneBot 插件集成
+
+本插件支持 [nonebot_plugin_nodejsphira](https://github.com/chuzouX/nonebot_plugin_nodejsphira) 的 AES-256-CBC 加密认证。
+
+### 工作原理
+
+1. NoneBot 插件使用 `PHIRA_ADMIN_SECRET` 生成 AES-256-CBC 加密 token
+2. 发送请求时携带 `X-Admin-Secret` 头
+3. Web Dashboard 插件验证 token 并授权访问管理 API
+
+### 配置步骤
+
+1. 在 phira-mp-server 的 `.env` 中设置 `ADMIN_SECRET`
+2. 在 NoneBot 的 `.env` 中设置相同的 `PHIRA_ADMIN_SECRET`
+3. 确保 `config/nonebot-auth/config.yaml` 中 `authMode` 设置为 `both` 或 `aes-cbc`
+4. 重启两个服务
+
+### NoneBot 指令对照
+
+| NoneBot 指令 | API 端点 | 说明 |
+|-------------|---------|------|
+| `/players` | `GET /api/all-players` | 列出所有在线玩家 |
+| `/broadcast "内容"` | `POST /api/admin/broadcast` | 全服广播 |
+| `/kick {UID}` | `POST /api/admin/kick-player` | 踢出玩家 |
+| `/fstart {RID}` | `POST /api/admin/force-start` | 强制开始游戏 |
+| `/lock {RID}` | `POST /api/admin/toggle-lock` | 切换房间锁定 |
+| `/maxp {RID} {N}` | `POST /api/admin/set-max-players` | 修改房间人数上限 |
+| `/close {RID}` | `POST /api/admin/close-room` | 关闭房间 |
 
 ## 开发者信息
 
