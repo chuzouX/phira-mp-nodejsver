@@ -3,25 +3,70 @@ import path from 'path';
 import fs from 'fs';
 import yaml from 'js-yaml';
 import { Logger } from '../logging/logger';
-import { PluginApi, PluginContext, PluginEventBus, PluginEventHandler, PluginEventName, PluginModule, LoadedPlugin, PacketHandlerRegistration, PluginRouteMethod } from './types';
+import {
+  PluginApi,
+  PluginContext,
+  PluginEventBus,
+  PluginEventHandler,
+  PluginEventName,
+  PluginEventPayload,
+  PluginModule,
+  LoadedPlugin,
+  PacketHandlerRegistration,
+  PluginRouteMethod,
+} from './types';
 import { ClientCommand, ServerCommand } from '../domain/protocol/Commands';
 
+interface RegisteredPluginEventHandler {
+  handler: PluginEventHandler;
+  once: boolean;
+}
+
 class SafePluginEventBus implements PluginEventBus {
-  private readonly handlers = new Map<string, Set<PluginEventHandler>>();
+  private readonly handlers = new Map<string, Set<RegisteredPluginEventHandler>>();
 
   constructor(private readonly logger: Logger) {}
 
-  on<T = any>(event: PluginEventName, handler: PluginEventHandler<T>): () => void {
-    const key = String(event);
-    const current = this.handlers.get(key) ?? new Set<PluginEventHandler>();
-    current.add(handler as PluginEventHandler);
-    this.handlers.set(key, current);
-    return () => current.delete(handler as PluginEventHandler);
+  on<E extends PluginEventName>(
+    event: E,
+    handler: PluginEventHandler<PluginEventPayload<E>>,
+  ): () => void {
+    return this.add(event, handler, false);
   }
 
-  emit<T = any>(event: PluginEventName, payload: T): void {
-    const handlers = Array.from(this.handlers.get(String(event)) ?? []);
-    for (const handler of handlers) {
+  once<E extends PluginEventName>(
+    event: E,
+    handler: PluginEventHandler<PluginEventPayload<E>>,
+  ): () => void {
+    return this.add(event, handler, true);
+  }
+
+  off<E extends PluginEventName>(
+    event: E,
+    handler: PluginEventHandler<PluginEventPayload<E>>,
+  ): boolean {
+    const key = String(event);
+    const current = this.handlers.get(key);
+    if (!current) return false;
+
+    let removed = false;
+    for (const registration of current) {
+      if (registration.handler === handler) {
+        current.delete(registration);
+        removed = true;
+      }
+    }
+    if (current.size === 0) this.handlers.delete(key);
+    return removed;
+  }
+
+  listenerCount(event: PluginEventName): number {
+    return this.handlers.get(String(event))?.size ?? 0;
+  }
+
+  emit<E extends PluginEventName>(event: E, payload: PluginEventPayload<E>): void {
+    const registrations = this.getRegistrations(event);
+    for (const { handler } of registrations) {
       try {
         const result = handler(payload);
         if (result && typeof (result as Promise<void>).catch === 'function') {
@@ -35,15 +80,51 @@ class SafePluginEventBus implements PluginEventBus {
     }
   }
 
-  async emitAsync<T = any>(event: PluginEventName, payload: T): Promise<void> {
-    const handlers = Array.from(this.handlers.get(String(event)) ?? []);
-    for (const handler of handlers) {
+  async emitAsync<E extends PluginEventName>(
+    event: E,
+    payload: PluginEventPayload<E>,
+  ): Promise<void> {
+    const registrations = this.getRegistrations(event);
+    for (const { handler } of registrations) {
       try {
         await handler(payload);
       } catch (error) {
         this.logger.error(`[插件事件] ${String(event)} 异步执行失败: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
+  }
+
+  private add<E extends PluginEventName>(
+    event: E,
+    handler: PluginEventHandler<PluginEventPayload<E>>,
+    once: boolean,
+  ): () => void {
+    const key = String(event);
+    const current = this.handlers.get(key) ?? new Set<RegisteredPluginEventHandler>();
+    const registration: RegisteredPluginEventHandler = {
+      handler: handler as PluginEventHandler,
+      once,
+    };
+    current.add(registration);
+    this.handlers.set(key, current);
+
+    return () => {
+      current.delete(registration);
+      if (current.size === 0) this.handlers.delete(key);
+    };
+  }
+
+  private getRegistrations(event: PluginEventName): RegisteredPluginEventHandler[] {
+    const key = String(event);
+    const current = this.handlers.get(key);
+    if (!current) return [];
+
+    const registrations = Array.from(current);
+    for (const registration of registrations) {
+      if (registration.once) current.delete(registration);
+    }
+    if (current.size === 0) this.handlers.delete(key);
+    return registrations;
   }
 }
 
@@ -640,11 +721,14 @@ export class PluginManager {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  public async emitAsync<T = any>(event: PluginEventName, payload: T): Promise<void> {
+  public async emitAsync<E extends PluginEventName>(
+    event: E,
+    payload: PluginEventPayload<E>,
+  ): Promise<void> {
     await this.eventsBus.emitAsync(event, payload);
   }
 
-  public emit<T = any>(event: PluginEventName, payload: T): void {
+  public emit<E extends PluginEventName>(event: E, payload: PluginEventPayload<E>): void {
     this.eventsBus.emit(event, payload);
   }
 

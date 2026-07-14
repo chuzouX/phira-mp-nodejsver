@@ -347,6 +347,19 @@ const unsub = api.events.on('player:auth:success', ({ user }) => {
 // 取消监听
 unsub();
 
+// 只监听一次；首次调用前会自动注销，递归触发也不会重复执行
+api.events.once('room:gameStart', ({ room }) => {
+  api.logger.info(`房间 ${room.name} 首次开始游戏`);
+});
+
+// 也可以按原处理函数注销；返回是否成功移除了监听器
+const onChat = ({ content }) => api.logger.info(content);
+api.events.on('chat:message', onChat);
+api.events.off('chat:message', onChat);
+
+// 查询当前监听器数量
+api.logger.debug(`聊天监听器数量: ${api.events.listenerCount('chat:message')}`);
+
 // 触发自定义事件（同步）
 api.events.emit('custom:my-event', { data: 123 });
 
