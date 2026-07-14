@@ -37,7 +37,7 @@ mkdirSync(outputDirectory, { recursive: true });
 const result = spawnSync(
   process.execPath,
   [
-    require.resolve('pkg/lib-es5/bin.js'),
+    require.resolve('@yao-pkg/pkg/lib-es5/bin.js'),
     '.',
     '--targets',
     config.target,
