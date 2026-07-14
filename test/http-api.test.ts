@@ -46,10 +46,9 @@ describe('HTTP API 测试 (HttpServer)', () => {
     expect(response.body).toHaveProperty('version');
   });
 
-  test('GET /check-auth 应当公开访问', async () => {
+  test('GET /check-auth 未加载仪表盘插件时应当不可用', async () => {
     const response = await request(httpServer.getInternalServer()).get('/check-auth');
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({ isAdmin: false, isOwner: false });
+    expect(response.status).toBe(404);
   });
 
   test('GET /api/status 应当公开访问', async () => {
