@@ -166,7 +166,7 @@ export interface PluginApi extends PluginContext {
     }>;
   };
 
-  /** 检查用户是否是管理员 */
+  /** 检查用户是否拥有管理员权限（Owner 始终返回 true） */
   isUserAdmin(userId: number): boolean;
 
   /** 检查用户是否是服主 */

@@ -12,6 +12,7 @@ outputs/
 .vscode/
 .claude/
 CLAUDE.md
+.trae/
 
 config/*
 
