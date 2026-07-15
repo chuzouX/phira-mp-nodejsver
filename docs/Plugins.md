@@ -30,6 +30,14 @@
 
 插件系统允许在不修改核心代码的前提下扩展服务器功能。**社区开发者无需项目源码**，只需将插件文件夹放入 `plugins/` 目录即可被服务端自动加载。
 
+### 插件索引
+
+社区插件可访问 **插件索引仓库** 浏览和发现：
+
+> **[github.com/chuzouX/phira-mp-nodejsver-index](https://github.com/chuzouX/phira-mp-nodejsver-index)**
+
+该仓库收录了由社区开发者贡献的可用插件，每个插件包含简要说明、版本要求和安装方式。开发者也可通过提交 PR 将自己的插件加入索引。
+
 ### 插件目录结构
 
 ```
@@ -338,6 +346,19 @@ const unsub = api.events.on('player:auth:success', ({ user }) => {
 
 // 取消监听
 unsub();
+
+// 只监听一次；首次调用前会自动注销，递归触发也不会重复执行
+api.events.once('room:gameStart', ({ room }) => {
+  api.logger.info(`房间 ${room.name} 首次开始游戏`);
+});
+
+// 也可以按原处理函数注销；返回是否成功移除了监听器
+const onChat = ({ content }) => api.logger.info(content);
+api.events.on('chat:message', onChat);
+api.events.off('chat:message', onChat);
+
+// 查询当前监听器数量
+api.logger.debug(`聊天监听器数量: ${api.events.listenerCount('chat:message')}`);
 
 // 触发自定义事件（同步）
 api.events.emit('custom:my-event', { data: 123 });

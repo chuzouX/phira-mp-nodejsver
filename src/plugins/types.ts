@@ -28,13 +28,26 @@ export type PluginEventMap = {
   [key: `custom:${string}`]: any;
 };
 
-export type PluginEventName = keyof PluginEventMap | `custom:${string}`;
+export type PluginEventName = keyof PluginEventMap;
+export type PluginEventPayload<E extends PluginEventName> = PluginEventMap[E];
 export type PluginEventHandler<T = any> = (payload: T) => void | Promise<void>;
 
 export interface PluginEventBus {
-  on<T = any>(event: PluginEventName, handler: PluginEventHandler<T>): () => void;
-  emit<T = any>(event: PluginEventName, payload: T): void;
-  emitAsync<T = any>(event: PluginEventName, payload: T): Promise<void>;
+  on<E extends PluginEventName>(
+    event: E,
+    handler: PluginEventHandler<PluginEventPayload<E>>,
+  ): () => void;
+  once<E extends PluginEventName>(
+    event: E,
+    handler: PluginEventHandler<PluginEventPayload<E>>,
+  ): () => void;
+  off<E extends PluginEventName>(
+    event: E,
+    handler: PluginEventHandler<PluginEventPayload<E>>,
+  ): boolean;
+  listenerCount(event: PluginEventName): number;
+  emit<E extends PluginEventName>(event: E, payload: PluginEventPayload<E>): void;
+  emitAsync<E extends PluginEventName>(event: E, payload: PluginEventPayload<E>): Promise<void>;
 }
 
 export interface PacketHandlerRegistration {

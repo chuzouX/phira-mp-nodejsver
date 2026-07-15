@@ -15,9 +15,7 @@ CLAUDE.md
 
 config/*
 
-# 保留 example 和 web-dashboard 作为示例
+# 只保留 example 作为官方示例插件
 plugins/*
 !plugins/example/
-!plugins/web-dashboard/
-!plugins/websocket/
-!plugins/nonebot-auth/
+!plugins/tsconfig.json
