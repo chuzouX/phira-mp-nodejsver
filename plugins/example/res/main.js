@@ -25,6 +25,9 @@ const pluginModule = {
         unsubscribers.push(api.events.on('player:auth:success', ({ user }) => {
             api.logger.info(`[示例插件] ${greeting}, ${user.name}!`);
         }));
+        unsubscribers.push(api.events.once('player:connect', ({ ip }) => {
+            api.logger.info(`[示例插件] 本次运行中首个玩家连接来自 ${ip}`);
+        }));
         unsubscribers.push(api.events.on('room:create', ({ room, user }) => {
             api.logger.info(`[示例插件] ${user.name} 创建了房间 ${room.name}`);
         }));

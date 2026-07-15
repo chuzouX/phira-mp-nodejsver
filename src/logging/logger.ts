@@ -69,7 +69,7 @@ export class ConsoleLogger implements Logger {
   // Flood protection static properties
   private static messageCount = 0;
   private static isSuppressing = false;
-  private static readonly THRESHOLD = 30; // Max logs per second before suppression
+  private static readonly THRESHOLD = 50; // Max logs per second before suppression
   private static lastResetTime = Date.now();
 
   constructor(private readonly context: string = 'app', level: string | undefined = 'info') {

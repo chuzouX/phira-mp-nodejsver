@@ -16,11 +16,10 @@
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
     "format": "prettier --write \"src/**/*.ts\"",
-    "make-out-dir": "cross-var node -e \"require('fs').mkdirSync('./outputs/' + '$npm_package_version', { recursive: true })\"",
-    "package:exe": "npm run build && npm run make-out-dir && cross-var pkg . --targets node18-win-x64 --output ./outputs/$npm_package_version/phira-mp-nodejsver-v$npm_package_version.exe --no-bytecode",
-    "package:linux": "npm run build && npm run make-out-dir && cross-var pkg . --targets node18-linux-x64 --output ./outputs/$npm_package_version/phira-mp-nodejsver-linux-v$npm_package_version --no-bytecode",
-    "package:macos-x64": "npm run build && npm run make-out-dir && cross-var pkg . --targets node18-macos-x64 --output ./outputs/$npm_package_version/phira-mp-nodejsver-macos-x64-v$npm_package_version --no-bytecode",
-    "package:macos-arm64": "npm run build && npm run make-out-dir && cross-var pkg . --targets node18-macos-arm64 --output ./outputs/$npm_package_version/phira-mp-nodejsver-macos-arm64-v$npm_package_version --no-bytecode",
+    "package:exe": "npm run build && node scripts/package.js win-x64",
+    "package:linux": "npm run build && node scripts/package.js linux-x64",
+    "package:macos-x64": "npm run build && node scripts/package.js macos-x64",
+    "package:macos-arm64": "npm run build && node scripts/package.js macos-arm64",
     "package:all": "npm run package:exe && npm run package:linux && npm run package:macos-x64 && npm run package:macos-arm64"
   },
   "pkg": {
@@ -53,20 +52,18 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^24.9.2",
     "@types/supertest": "^6.0.3",
-    "@types/uuid": "^9.0.8",
     "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^8.46.2",
     "@typescript-eslint/parser": "^8.46.2",
-    "cross-var": "^1.1.0",
+    "@yao-pkg/pkg": "6.10.1",
     "eslint": "^9.38.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
     "jest": "^30.2.0",
     "nodemon": "^3.1.10",
-    "pkg": "^5.8.1",
     "prettier": "^3.6.2",
     "supertest": "^7.2.2",
-    "ts-jest": "^29.4.5",
+    "ts-jest": "^29.4.11",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   },
@@ -76,7 +73,6 @@
     "express": "^5.2.1",
     "express-session": "^1.19.0",
     "js-yaml": "^4.1.0",
-    "uuid": "^9.0.1",
     "ws": "^8.19.0"
   }
 }

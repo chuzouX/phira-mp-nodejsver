@@ -435,13 +435,30 @@ declare module 'phira-plugin-api' {
     [key: `custom:${string}`]: any;
   };
 
-  export type PluginEventName = keyof PluginEventMap | `custom:${string}`;
+  export type PluginEventName = keyof PluginEventMap;
+  export type PluginEventPayload<E extends PluginEventName> = PluginEventMap[E];
   export type PluginEventHandler<T = any> = (payload: T) => void | Promise<void>;
 
   export interface PluginEventBus {
-    on<T = any>(event: PluginEventName, handler: PluginEventHandler<T>): () => void;
-    emit<T = any>(event: PluginEventName, payload: T): void;
-    emitAsync<T = any>(event: PluginEventName, payload: T): Promise<void>;
+    /** Register a listener and return an idempotent unsubscribe function. */
+    on<E extends PluginEventName>(
+      event: E,
+      handler: PluginEventHandler<PluginEventPayload<E>>,
+    ): () => void;
+    /** Register a listener that is removed before its first invocation. */
+    once<E extends PluginEventName>(
+      event: E,
+      handler: PluginEventHandler<PluginEventPayload<E>>,
+    ): () => void;
+    /** Remove all registrations of the given handler for an event. */
+    off<E extends PluginEventName>(
+      event: E,
+      handler: PluginEventHandler<PluginEventPayload<E>>,
+    ): boolean;
+    /** Return the number of listeners currently registered for an event. */
+    listenerCount(event: PluginEventName): number;
+    emit<E extends PluginEventName>(event: E, payload: PluginEventPayload<E>): void;
+    emitAsync<E extends PluginEventName>(event: E, payload: PluginEventPayload<E>): Promise<void>;
   }
 
   // ======================== 插件 API ========================
@@ -689,6 +706,9 @@ declare namespace PhiraPlugin {
   export type PluginEventBus = import('phira-plugin-api').PluginEventBus;
   export type PluginEventMap = import('phira-plugin-api').PluginEventMap;
   export type PluginEventName = import('phira-plugin-api').PluginEventName;
+  export type PluginEventPayload<E extends PluginEventName> =
+    import('phira-plugin-api').PluginEventPayload<E>;
+  export type PluginEventHandler<T = any> = import('phira-plugin-api').PluginEventHandler<T>;
   export type PacketHandlerRegistration = import('phira-plugin-api').PacketHandlerRegistration;
   export type PluginRouteMethod = import('phira-plugin-api').PluginRouteMethod;
 }
