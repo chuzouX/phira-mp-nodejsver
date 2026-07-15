@@ -804,7 +804,7 @@ export class PluginManager {
 
         const expressMethod = method.toLowerCase() as PluginRouteMethod;
         (app[expressMethod] as any).call(app, routePath, wrappedHandler);
-        this.context.logger.plugin(`${pluginName} 注册路由 ${method.toUpperCase()} ${routePath}`);
+        this.context.logger.debug(`[PLUGIN] ${pluginName} 注册路由 ${method.toUpperCase()} ${routePath}`);
       },
       serveStatic: (mountPath: string, rootDir: string) => {
         const app = this.context.expressApp ?? this.context.httpServer?.getExpressApp();
@@ -851,7 +851,7 @@ export class PluginManager {
         return sessions.map(session => ({
           ...session,
           connectionId: '', // 无法直接获取 connectionId
-          isAdmin: this.context.config.adminPhiraId.includes(session.id),
+          isAdmin: this.isAdminOrOwner(session.id),
           isOwner: this.context.config.ownerPhiraId.includes(session.id),
         }));
       },
@@ -927,7 +927,7 @@ export class PluginManager {
       },
 
       isUserAdmin: (userId: number) => {
-        return this.context.config.adminPhiraId.includes(userId);
+        return this.isAdminOrOwner(userId);
       },
 
       isUserOwner: (userId: number) => {
@@ -946,7 +946,7 @@ export class PluginManager {
           connectionId: '', // 无法直接获取 connectionId
           roomId: room?.id,
           roomName: room?.name,
-          isAdmin: this.context.config.adminPhiraId.includes(userId),
+          isAdmin: this.isAdminOrOwner(userId),
           isOwner: this.context.config.ownerPhiraId.includes(userId),
         };
       },
@@ -993,5 +993,12 @@ export class PluginManager {
         return this.context.protocolHandler.closeRoomByAdmin(roomId);
       },
     };
+  }
+
+  private isAdminOrOwner(userId: number): boolean {
+    return (
+      this.context.config.adminPhiraId.includes(userId) ||
+      this.context.config.ownerPhiraId.includes(userId)
+    );
   }
 }
