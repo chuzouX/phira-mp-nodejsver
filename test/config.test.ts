@@ -47,4 +47,14 @@ describe('配置服务 (Config)', () => {
     // 其他值应保持默认或环境值
     expect(config.serverName).toBe(process.env.SERVER_NAME || 'Server');
   });
+
+  test('Owner 应当自动继承 Admin 权限', () => {
+    const config = createServerConfig({
+      adminPhiraId: [100, 200],
+      ownerPhiraId: [200, 300],
+    });
+
+    expect(config.adminPhiraId).toEqual([100, 200, 300]);
+    expect(config.ownerPhiraId).toEqual([200, 300]);
+  });
 });

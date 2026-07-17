@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import yaml from 'js-yaml';
+import { createRequire } from 'module';
 import { Logger } from '../logging/logger';
 import {
   PluginApi,
@@ -139,6 +140,33 @@ export class PluginManager {
 
   constructor(private readonly context: PluginContext) {
     this.eventsBus = new SafePluginEventBus(context.logger);
+    this.setupPluginModuleResolver();
+  }
+
+  private setupPluginModuleResolver(): void {
+    const Module = require('module') as any;
+    const snapshotRequire = createRequire(__filename);
+    const originalResolve = Module._resolveFilename;
+
+    Module._resolveFilename = (
+      request: string,
+      parent: any,
+      ...args: any[]
+    ) => {
+      try {
+        return originalResolve.call(Module, request, parent, ...args);
+      } catch (_err) {
+        if (parent && parent.filename && typeof parent.filename === 'string') {
+          const normalizedFilename = parent.filename.replace(/\\/g, '/');
+          if (normalizedFilename.includes('/plugins/')) {
+            try {
+              return snapshotRequire.resolve(request);
+            } catch {}
+          }
+        }
+        throw _err;
+      }
+    };
   }
 
   public get events(): PluginEventBus {
@@ -804,7 +832,7 @@ export class PluginManager {
 
         const expressMethod = method.toLowerCase() as PluginRouteMethod;
         (app[expressMethod] as any).call(app, routePath, wrappedHandler);
-        this.context.logger.plugin(`${pluginName} 注册路由 ${method.toUpperCase()} ${routePath}`);
+        this.context.logger.debug(`[PLUGIN] ${pluginName} 注册路由 ${method.toUpperCase()} ${routePath}`);
       },
       serveStatic: (mountPath: string, rootDir: string) => {
         const app = this.context.expressApp ?? this.context.httpServer?.getExpressApp();
@@ -851,7 +879,7 @@ export class PluginManager {
         return sessions.map(session => ({
           ...session,
           connectionId: '', // 无法直接获取 connectionId
-          isAdmin: this.context.config.adminPhiraId.includes(session.id),
+          isAdmin: this.isAdminOrOwner(session.id),
           isOwner: this.context.config.ownerPhiraId.includes(session.id),
         }));
       },
@@ -927,7 +955,7 @@ export class PluginManager {
       },
 
       isUserAdmin: (userId: number) => {
-        return this.context.config.adminPhiraId.includes(userId);
+        return this.isAdminOrOwner(userId);
       },
 
       isUserOwner: (userId: number) => {
@@ -946,7 +974,7 @@ export class PluginManager {
           connectionId: '', // 无法直接获取 connectionId
           roomId: room?.id,
           roomName: room?.name,
-          isAdmin: this.context.config.adminPhiraId.includes(userId),
+          isAdmin: this.isAdminOrOwner(userId),
           isOwner: this.context.config.ownerPhiraId.includes(userId),
         };
       },
@@ -993,5 +1021,12 @@ export class PluginManager {
         return this.context.protocolHandler.closeRoomByAdmin(roomId);
       },
     };
+  }
+
+  private isAdminOrOwner(userId: number): boolean {
+    return (
+      this.context.config.adminPhiraId.includes(userId) ||
+      this.context.config.ownerPhiraId.includes(userId)
+    );
   }
 }
