@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import yaml from 'js-yaml';
+import { createRequire } from 'module';
 import { Logger } from '../logging/logger';
 import {
   PluginApi,
@@ -139,6 +140,33 @@ export class PluginManager {
 
   constructor(private readonly context: PluginContext) {
     this.eventsBus = new SafePluginEventBus(context.logger);
+    this.setupPluginModuleResolver();
+  }
+
+  private setupPluginModuleResolver(): void {
+    const Module = require('module') as any;
+    const snapshotRequire = createRequire(__filename);
+    const originalResolve = Module._resolveFilename;
+
+    Module._resolveFilename = (
+      request: string,
+      parent: any,
+      ...args: any[]
+    ) => {
+      try {
+        return originalResolve.call(Module, request, parent, ...args);
+      } catch (_err) {
+        if (parent && parent.filename && typeof parent.filename === 'string') {
+          const normalizedFilename = parent.filename.replace(/\\/g, '/');
+          if (normalizedFilename.includes('/plugins/')) {
+            try {
+              return snapshotRequire.resolve(request);
+            } catch {}
+          }
+        }
+        throw _err;
+      }
+    };
   }
 
   public get events(): PluginEventBus {
