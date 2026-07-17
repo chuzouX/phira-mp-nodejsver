@@ -251,12 +251,19 @@ export const createServerConfig = (overrides: Partial<ServerConfig> = {}): Serve
     pluginsEnabled: parseBoolean(process.env.PLUGINS_ENABLED, defaultConfig.pluginsEnabled),
   };
 
-  return {
+  const config: ServerConfig = {
     ...envConfig,
     ...overrides,
     protocol: { ...envConfig.protocol, ...overrides.protocol },
     logging: { ...envConfig.logging, ...overrides.logging },
   };
+
+  // Owner is the highest role and always inherits every Admin permission.
+  config.adminPhiraId = Array.from(
+    new Set([...config.adminPhiraId, ...config.ownerPhiraId]),
+  );
+
+  return config;
 };
 
 export class ConfigService {
@@ -267,7 +274,7 @@ export class ConfigService {
   getConfig(): ServerConfig { return this.config; }
 
   public updateAdminPhiraIds(ids: number[]): void {
-    this.config.adminPhiraId = ids;
+    this.config.adminPhiraId = Array.from(new Set([...ids, ...this.config.ownerPhiraId]));
     this.saveConfigToFile('ADMIN_PHIRA_ID', ids.join(','));
   }
 

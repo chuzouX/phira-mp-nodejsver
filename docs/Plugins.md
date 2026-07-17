@@ -478,6 +478,9 @@ const isAdmin = api.isUserAdmin(userId);
 const isOwner = api.isUserOwner(userId);
 ```
 
+`Owner` 是最高权限角色并继承全部 `Admin` 权限，因此 Owner 调用
+`api.isUserAdmin(userId)` 时也会返回 `true`。
+
 #### 获取玩家信息
 
 ```js
