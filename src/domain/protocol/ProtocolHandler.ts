@@ -1660,6 +1660,9 @@ export class ProtocolHandler {
             this.federationManager.buildLocalRoomInfo(room)
           ).catch(() => {});
         }
+
+        // 通知插件系统谱面已变更（async 操作完成后触发）
+        this.pluginManager?.emit('protocol:afterHandle', { connectionId, command: { type: ClientCommandType.SelectChart, id: chartId } });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'failed to fetch chart';
         this.logger.error(`获取谱面信息失败: ${connectionId} (谱面: ${chartId}, 错误: ${errorMessage})`, { userId: session.userId });
