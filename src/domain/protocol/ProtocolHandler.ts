@@ -1345,7 +1345,7 @@ export class ProtocolHandler {
       return;
     }
 
-    if (room.state.type !== 'SelectChart') {
+    if (room.state.type !== 'SelectChart' && room.state.type !== 'Playing') {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.JoinRoom,
         result: { ok: false, error: '他们正在游戏中哦' },
@@ -1362,6 +1362,16 @@ export class ProtocolHandler {
       if (monitor && !room.live) {
         room.live = true;
         this.logger.info(`房间 “${roomId}” 已进入 live 模式`, { userId: session.userId });
+      }
+
+      // 游戏中加入的玩家自动标记为 Aborted
+      if (room.state.type === 'Playing') {
+        const joinedPlayer = room.players.get(session.userId);
+        if (joinedPlayer) {
+          joinedPlayer.isReady = false;
+          joinedPlayer.isFinished = true;
+          joinedPlayer.score = null;
+        }
       }
 
       this.broadcastToRoom(room, {
