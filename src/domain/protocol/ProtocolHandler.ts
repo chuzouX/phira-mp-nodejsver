@@ -1365,12 +1365,14 @@ export class ProtocolHandler {
       }
 
       // 游戏中加入的玩家自动标记为 Aborted
+      let joinAborted = false;
       if (room.state.type === 'Playing') {
         const joinedPlayer = room.players.get(session.userId);
         if (joinedPlayer) {
           joinedPlayer.isReady = false;
           joinedPlayer.isFinished = true;
           joinedPlayer.score = null;
+          joinAborted = true;
         }
       }
 
@@ -1396,8 +1398,9 @@ export class ProtocolHandler {
       const usersInRoom = Array.from(room.players.values()).map((p) => p.user);
       const serverUser: UserInfo = { id: -1, name: this.serverName, avatar: this.defaultAvatar, monitor: true };
       
+      const isSpectator = room.state.type === 'Playing' && joinAborted;
       const joinResponse: JoinRoomResponse = {
-        state: room.state,
+        state: isSpectator ? { type: 'SelectChart' as const, chartId: room.selectedChart?.id ?? null } : room.state,
         users: [...usersInRoom, serverUser],
         live: room.live,
       };
