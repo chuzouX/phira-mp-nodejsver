@@ -2284,12 +2284,12 @@ export class ProtocolHandler {
       if ((s.std ?? 0) > 0) {
         line += `，误差：±${s.std}ms，无暇度分数：${s.stdScore ?? 0}`;
       }
+      line += `\n        Perfect：${s.perfect ?? 0}，Good：${s.good ?? 0}，Bad：${s.bad ?? 0}，Miss：${s.miss ?? 0}`;
       if (s.isAp) {
         line += `，AP！！！`;
       } else if (s.fc) {
         line += `，全连`;
       }
-      line += `\n        Perfect：${s.perfect ?? 0}，Good：${s.good ?? 0}，Bad：${s.bad ?? 0}，Miss：${s.miss ?? 0}`;
       if (s.mods && (Array.isArray(s.mods) ? s.mods.length > 0 : true)) {
         const modList = Array.isArray(s.mods) ? s.mods.join(', ') : String(s.mods);
         line += `，使用的模组：${modList}`;
