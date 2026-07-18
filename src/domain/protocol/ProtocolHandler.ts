@@ -1373,6 +1373,18 @@ export class ProtocolHandler {
           joinedPlayer.isFinished = true;
           joinedPlayer.score = null;
           joinAborted = true;
+          // 延迟发送提示，确保客户端已加载
+          const userId = session.userId;
+          setTimeout(() => {
+            this.sendCommandToUser(userId, {
+              type: ServerCommandType.Message as any,
+              message: {
+                type: 'Chat',
+                user: -1,
+                content: '此房间正在游戏中，请等待游戏结束',
+              },
+            });
+          }, 2000);
         }
       }
 
