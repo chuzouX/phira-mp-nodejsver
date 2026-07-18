@@ -594,6 +594,16 @@ export class ProtocolHandler {
     }
   }
 
+  private broadcastToActivePlayers(room: Room, command: ServerCommand): void {
+    for (const playerInfo of room.players.values()) {
+      if (playerInfo.isFinished) continue;
+      const callback = this.broadcastCallbacks.get(playerInfo.connectionId);
+      if (callback) {
+        callback(command);
+      }
+    }
+  }
+
   private async fetchChartInfo(chartId: number): Promise<ChartInfo> {
     if (isNaN(Number(chartId))) throw new Error('Invalid chart ID');
     this.logger.debug(`正在获取谱面信息: ${chartId}`, { userId: -1 });
@@ -1788,11 +1798,21 @@ export class ProtocolHandler {
         }
 
         this.roomManager.setRoomState(room.id, { type: 'Playing' });
-        this.broadcastMessage(room, { type: 'StartPlaying' });
-        this.broadcastToRoom(room, {
-          type: ServerCommandType.ChangeState,
-          state: { type: 'Playing' },
-        });
+        this.broadcastToActivePlayers(room, { type: ServerCommandType.ChangeState as any, state: { type: 'Playing' } } as any);
+
+        // 通知未准备玩家
+        for (const playerInfo of room.players.values()) {
+          if (playerInfo.isFinished) {
+            const cb = this.broadcastCallbacks.get(playerInfo.connectionId);
+            if (cb) {
+              cb({
+                type: ServerCommandType.Message as any,
+                message: { type: 'Chat', user: -1, content: '60秒计时结束，你未准备，已被视为放弃本局' },
+              } as any);
+            }
+          }
+        }
+
         this.pluginManager?.emit('room:gameStart', {
           room,
           triggeredBy: session.userId,
