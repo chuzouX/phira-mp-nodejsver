@@ -2136,8 +2136,8 @@ export class ProtocolHandler {
       finishTime: Date.now(),
       std: recordInfo.std ?? 0,
       stdScore: recordInfo.stdScore ?? 0,
-      isAp: recordInfo.isAp ?? false,
-      fc: recordInfo.fc ?? recordInfo.fullCombo ?? false,
+      isAp: recordInfo.isAp ?? recordInfo.is_ap ?? (recordInfo.accuracy >= 1),
+      fc: recordInfo.fc ?? recordInfo.is_fc ?? recordInfo.fullCombo ?? recordInfo.full_combo ?? false,
       mods: recordInfo.mods ?? null,
     };
 
