@@ -2145,15 +2145,6 @@ export class ProtocolHandler {
 
     this.logger.mark(`“${session.userInfo.name}” 在房间 “${room.id}” 完成游玩并上传记录（分数：${recordInfo.score}，Acc：${recordInfo.accuracy}）`, { userId: session.userId });
 
-    // 广播 Played 消息给其他玩家
-    this.broadcastMessage(room, {
-      type: 'Played',
-      user: session.userId,
-      score: recordInfo.score,
-      accuracy: recordInfo.accuracy,
-      fullCombo: recordInfo.fullCombo,
-    });
-
     this.respond(connectionId, sendResponse, {
       type: ServerCommandType.Played,
       result: { ok: true, value: undefined },
