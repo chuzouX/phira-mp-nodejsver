@@ -2134,6 +2134,11 @@ export class ProtocolHandler {
       miss: recordInfo.miss ?? 0,
       maxCombo: recordInfo.maxCombo ?? 0,
       finishTime: Date.now(),
+      std: recordInfo.std ?? 0,
+      stdScore: recordInfo.stdScore ?? 0,
+      isAp: recordInfo.isAp ?? false,
+      fc: recordInfo.fc ?? recordInfo.fullCombo ?? false,
+      mods: recordInfo.mods ?? null,
     };
 
     const activePlayers = Array.from(room.players.values()).filter((p) => !p.user.monitor);
@@ -2281,7 +2286,27 @@ export class ProtocolHandler {
     this.broadcastMessage(room, { type: 'GameEnd' });
 
     // Push a summary message to the public screen history
-    const summary = rankings.map(r => `${r.rank}. ${r.userName}: ${r.score?.score.toLocaleString() ?? '0'} (${((r.score?.accuracy ?? 0) * 100).toFixed(2)}%)`).join('\n');
+    const summary = rankings.map(r => {
+      const s = r.score;
+      if (!s) return `${r.userName}[${r.userId}] 未上传成绩`;
+      const acc = ((s.accuracy ?? 0) * 100).toFixed(2);
+      let line = `${r.userName}[${r.userId}] 结算详情：\n`;
+      line += `        分数：${(s.score ?? 0).toLocaleString()}，准度：${acc}%`;
+      if ((s.std ?? 0) > 0) {
+        line += `，误差：±${s.std}ms，无暇度分数：${s.stdScore ?? 0}`;
+      }
+      if (s.isAp) {
+        line += `，AP！！！`;
+      } else if (s.fc) {
+        line += `，全连`;
+      }
+      line += `\n        Perfect：${s.perfect ?? 0}，Good：${s.good ?? 0}，Bad：${s.bad ?? 0}，Miss：${s.miss ?? 0}`;
+      if (s.mods && (Array.isArray(s.mods) ? s.mods.length > 0 : true)) {
+        const modList = Array.isArray(s.mods) ? s.mods.join(', ') : String(s.mods);
+        line += `，使用的模组：${modList}`;
+      }
+      return line;
+    }).join('\n\n');
     this.roomManager.addMessageToRoom(room.id, {
         type: 'Chat',
         user: -1,
