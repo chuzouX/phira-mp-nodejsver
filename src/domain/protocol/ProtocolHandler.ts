@@ -2307,10 +2307,16 @@ export class ProtocolHandler {
       }
       return line;
     }).join('\n\n');
+    const content = `【游戏结算】\n${summary}`;
     this.roomManager.addMessageToRoom(room.id, {
         type: 'Chat',
         user: -1,
-        content: `【游戏结算】\n${summary}`
+        content: content
+    });
+    this.broadcastMessage(room, {
+        type: 'Chat',
+        user: -1,
+        content: content
     });
 
     const oldState = room.state.type;
