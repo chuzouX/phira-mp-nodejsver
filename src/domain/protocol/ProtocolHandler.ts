@@ -38,6 +38,7 @@ export class ProtocolHandler {
   private readonly connectionIps = new Map<string, string>();
   private federationManager: any = null;  // 联邦管理器（避免循环依赖用 any）
   private pluginManager?: PluginManager;
+  private readonly roomTimers = new Map<string, NodeJS.Timeout>();
 
   constructor(
     private readonly roomManager: RoomManager,
@@ -1735,6 +1736,45 @@ export class ProtocolHandler {
         type: ServerCommandType.ChangeState,
         state: { type: 'WaitingForReady' },
       });
+
+      // 发送60秒计时提示
+      this.broadcastMessage(room, {
+        type: 'Chat',
+        user: -1,
+        content: '房主已选择开始游戏，请在60秒内准备，不准备视为放弃',
+      });
+
+      // 启动60秒自动开始计时器
+      const timer = setTimeout(() => {
+        this.roomTimers.delete(room.id);
+        if (room.state.type !== 'WaitingForReady') return;
+
+        for (const playerInfo of room.players.values()) {
+          if (playerInfo.user.id === room.ownerId) {
+            playerInfo.isReady = true;
+          } else if (!playerInfo.isReady) {
+            playerInfo.isReady = false;
+            playerInfo.isFinished = true;
+            playerInfo.score = null;
+          } else {
+            playerInfo.isFinished = false;
+            playerInfo.score = null;
+          }
+        }
+
+        this.roomManager.setRoomState(room.id, { type: 'Playing' });
+        this.broadcastMessage(room, { type: 'StartPlaying' });
+        this.broadcastToRoom(room, {
+          type: ServerCommandType.ChangeState,
+          state: { type: 'Playing' },
+        });
+        this.pluginManager?.emit('room:gameStart', {
+          room,
+          triggeredBy: session.userId,
+          mode: 'force',
+        });
+      }, 60000);
+      this.roomTimers.set(room.id, timer);
     } else {
       if (!this.roomManager.isSoloConfirmPending(room.id)) {
         this.roomManager.setSoloConfirmPending(room.id, true);
@@ -1841,6 +1881,8 @@ export class ProtocolHandler {
       .filter((p) => p.user.id !== room.ownerId)
       .every((p) => p.isReady);
     if (allReady) {
+      const timer = this.roomTimers.get(room.id);
+      if (timer) { clearTimeout(timer); this.roomTimers.delete(room.id); }
       this.logger.info(`房间 “${room.id}” 对局开始，玩家：${Array.from(room.players.keys()).join(', ')}`, { userId: session.userId });
 
       for (const playerInfo of room.players.values()) {
@@ -1923,6 +1965,8 @@ export class ProtocolHandler {
     player.score = null;
 
     if (room.ownerId === session.userId) {
+      const timer = this.roomTimers.get(room.id);
+      if (timer) { clearTimeout(timer); this.roomTimers.delete(room.id); }
       this.roomManager.setRoomState(room.id, { type: 'SelectChart', chartId: room.selectedChart?.id ?? null });
       this.roomManager.setSoloConfirmPending(room.id, false);
 
