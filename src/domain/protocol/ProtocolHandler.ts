@@ -1762,6 +1762,8 @@ export class ProtocolHandler {
       }
       this.roomManager.setRoomState(room.id, { type: 'WaitingForReady' });
 
+      this.pluginManager?.emit('room:requestStart', { room, triggeredBy: session.userId });
+
       this.broadcastMessage(room, {
         type: 'GameStart',
         user: session.userId,
