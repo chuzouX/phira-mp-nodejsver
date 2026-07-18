@@ -127,6 +127,11 @@ export interface PlayerScore {
   miss: number;
   maxCombo: number;
   finishTime: number;
+  std?: number;
+  stdScore?: number;
+  isAp?: boolean;
+  fc?: boolean;
+  mods?: any;
 }
 
 export interface PlayerRanking {
