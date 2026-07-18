@@ -2274,8 +2274,6 @@ export class ProtocolHandler {
       })),
     });
 
-    this.broadcastMessage(room, { type: 'GameEnd' });
-
     // Push a summary message to the public screen history
     const summary = rankings.map(r => {
       const s = r.score;
@@ -2309,6 +2307,8 @@ export class ProtocolHandler {
         user: -1,
         content: content
     });
+
+    this.broadcastMessage(room, { type: 'GameEnd' });
 
     const oldState = room.state.type;
 
