@@ -26,7 +26,7 @@ async function main(): Promise<void> {
 
   const clients: PhiraClient[] = [];
   for (let i = 0; i < config.connections; i++) {
-    clients.push(createClient(config.host, config.port, i, metrics));
+    clients.push(createClient(config.host, config.port, i, metrics, config.useProxy));
   }
 
   const startTime = Date.now();

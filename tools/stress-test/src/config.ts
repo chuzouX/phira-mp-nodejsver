@@ -7,6 +7,7 @@ export interface StressConfig {
   rate: number;
   rampUp: number;
   token: string;
+  useProxy: boolean;
 }
 
 export function parseArgs(args: string[]): StressConfig {
@@ -28,5 +29,6 @@ export function parseArgs(args: string[]): StressConfig {
     rate: parseInt(get('--rate', '10')),
     rampUp: parseInt(get('--ramp-up', '5')),
     token: get('--token', randomToken),
+    useProxy: args.includes('--use-proxy'),
   };
 }
