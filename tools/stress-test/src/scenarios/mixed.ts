@@ -21,46 +21,37 @@ export async function runMixedScenario(
   }
   console.log(`  Authenticated: ${authenticated.length}/${clients.length}\n`);
 
-  if (authenticated.length === 0) {
-    console.log('  No clients, aborting');
+  if (authenticated.length < 2) {
+    console.log('  Need at least 2 clients');
     return;
   }
 
-  const actions = ['create_room', 'join', 'leave', 'chat'] as const;
   const chatMsgs = ['hello', 'gg', 'nice', '再来', '666'];
-
   const deadline = Date.now() + duration * 1000;
   const interval = 1000 / Math.max(rate, 1);
   const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
-  let roomSeq = 0;
+  let ops = 0; let roomSeq = 0;
 
   while (Date.now() < deadline) {
-    const c = authenticated[Math.floor(Math.random() * authenticated.length)];
-    const action = actions[Math.floor(Math.random() * actions.length)];
+    const a = authenticated[Math.floor(Math.random() * authenticated.length)];
+    const b = authenticated[Math.floor(Math.random() * authenticated.length)];
+    if (a.id === b.id) { await wait(50); continue; }
 
-    try {
-      switch (action) {
-        case 'create_room':
-          await c.createRoom(`mix_${roomSeq++ % 50}`);
-          await wait(50);
-          await c.leaveRoom();
-          break;
-        case 'join':
-          await c.joinRoom(`mix_${Math.floor(Math.random() * 50) % 50}`);
-          break;
-        case 'leave':
-          await c.leaveRoom();
-          break;
-        case 'chat':
-          await c.sendChat(chatMsgs[Math.floor(Math.random() * chatMsgs.length)]);
-          break;
-      }
-    } catch {}
+    const roomId = `mix_${roomSeq++ % 30}`;
+    ops += 4;
 
+    try { await a.createRoom(roomId); } catch {}
     await wait(interval);
+    try { await b.joinRoom(roomId); } catch {}
+    await wait(interval);
+    try { await a.sendChat(chatMsgs[Math.floor(Math.random() * chatMsgs.length)]); } catch {}
+    await wait(interval);
+    try { await b.leaveRoom(); } catch {}
+    await wait(interval);
+    try { await a.leaveRoom(); } catch {}
 
-    if (roomSeq % 20 === 0) {
-      console.log(`  [${metrics.elapsed().toFixed(0)}s] ${roomSeq} ops`);
+    if (roomSeq % 15 === 0) {
+      console.log(`  [${metrics.elapsed().toFixed(0)}s] ${ops} ops`);
     }
   }
 

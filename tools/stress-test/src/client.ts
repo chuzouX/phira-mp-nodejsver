@@ -23,7 +23,7 @@ export function createClient(
 ): PhiraClient {
   let socket: net.Socket | null = null;
   let buffer = Buffer.alloc(0);
-  let msgResolvers = new Map<number, (cmdType: number) => void>();
+  let msgResolvers = new Map<number, { resolve: (cmdType: number) => void; expectedTypes: number[] }>();
 
   const PROXY_V2_LOCAL = Buffer.from([
     0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D, 0x0A, 0x51, 0x55, 0x49, 0x54, 0x0A,
@@ -39,6 +39,7 @@ export function createClient(
         if (useProxy) {
           socket!.write(PROXY_V2_LOCAL);
         }
+        socket!.write(Buffer.from([0x01])); // protocol version = 1
         metrics.record('connect', Date.now() - start);
         resolve();
       });
@@ -48,16 +49,21 @@ export function createClient(
       });
       socket.on('data', (data: Buffer) => {
         buffer = Buffer.concat([buffer, data]);
+        if (process.env.DEBUG) console.log('[tcp] recv ' + data.length + ' bytes, buf now ' + buffer.length);
         while (true) {
           const header = parseHeader(buffer);
           if (!header) break;
           buffer = buffer.subarray(header.consumed);
-          const keys = Array.from(msgResolvers.keys());
-          if (keys.length > 0) {
-            const firstKey = keys[0];
-            const resolve = msgResolvers.get(firstKey)!;
-            msgResolvers.delete(firstKey);
-            resolve(header.commandType);
+          if (process.env.DEBUG) console.log('[tcp] parsed cmd=' + header.commandType + ' bodyLen=' + header.body.length + ' resolvers=' + msgResolvers.size);
+
+          for (const [key, entry] of msgResolvers) {
+            if (entry.expectedTypes.includes(header.commandType)) {
+              if (process.env.DEBUG) console.log('[tcp] MATCH cmd=' + header.commandType + ' resolver=' + entry.expectedTypes);
+              msgResolvers.delete(key);
+              entry.resolve(header.commandType);
+              break;
+            }
+            if (process.env.DEBUG) console.log('[tcp] SKIP cmd=' + header.commandType + ' vs expected=' + entry.expectedTypes);
           }
         }
       });
@@ -74,21 +80,21 @@ export function createClient(
     return body;
   }
 
-  function waitResponse(timeoutMs = 5000): Promise<number> {
+  function waitResponse(expectedTypes: number[], timeoutMs = 5000): Promise<number> {
     return new Promise((resolve) => {
       const key = Math.random();
-      msgResolvers.set(key, resolve);
+      msgResolvers.set(key, { resolve, expectedTypes });
       setTimeout(() => {
         if (msgResolvers.has(key)) { msgResolvers.delete(key); resolve(-1); }
       }, timeoutMs);
     });
   }
 
-  async function runCmd(name: string, type: number, fn: (w: BinaryWriter) => void): Promise<boolean> {
+  async function runCmd(name: string, type: number, fn: (w: BinaryWriter) => void, expectedRespTypes: number[] = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]): Promise<boolean> {
     const start = Date.now();
     try {
       sendCmd(type, fn);
-      const resp = await waitResponse();
+      const resp = await waitResponse(expectedRespTypes);
       const ok = resp >= 0;
       metrics.record(name, Date.now() - start, !ok);
       return ok;
@@ -102,16 +108,16 @@ export function createClient(
     id,
     async connect() { return connectSocket(); },
     async authenticate(token: string) {
-      return runCmd('auth', ClientCommand.Authenticate, (w) => { w.string(token); });
+      return runCmd('auth', ClientCommand.Authenticate, (w) => { w.string(token); }, [ServerCommand.Authenticate]);
     },
     async createRoom(roomId: string) {
-      return runCmd('create_room', ClientCommand.CreateRoom, (w) => { w.string(roomId); });
+      return runCmd('create_room', ClientCommand.CreateRoom, (w) => { w.string(roomId); }, [ServerCommand.CreateRoom]);
     },
     async joinRoom(roomId: string) {
-      return runCmd('join_room', ClientCommand.JoinRoom, (w) => { w.string(roomId); w.bool(false); });
+      return runCmd('join_room', ClientCommand.JoinRoom, (w) => { w.string(roomId); w.bool(false); }, [ServerCommand.JoinRoom]);
     },
     async leaveRoom() {
-      return runCmd('leave_room', ClientCommand.LeaveRoom, () => {});
+      return runCmd('leave_room', ClientCommand.LeaveRoom, () => {}, [ServerCommand.LeaveRoom]);
     },
     async sendChat(content: string) {
       const start = Date.now();
