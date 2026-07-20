@@ -20,3 +20,5 @@ config/*
 plugins/*
 !plugins/example/
 !plugins/tsconfig.json
+
+tools/

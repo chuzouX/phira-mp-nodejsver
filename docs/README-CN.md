@@ -1,6 +1,6 @@
 # Phira 多人游戏服务器
 
-中文说明 | [English](README.md)
+中文说明 | [English](../README.md)
 
 基于 TypeScript 的 Node.js 服务器，支持 TCP 协议，专为多人在线游戏设计。
 
@@ -106,43 +106,26 @@ npm install
 | `PUB_PREFIX` | 公开房间前缀 | `pub` |
 | `ENABLE_PRI_WEB` | 是否在网页端隐藏特定前缀的私密房间 | `false` |
 | `PRI_PREFIX` | 私密房间前缀 | `sm` |
-| **联邦服务器 (多服联动)** | | |
-| `FEDERATION_ENABLED` | 是否启用联邦服务器模式 | `false` |
-| `FEDERATION_SEED_NODES` | 初始种子节点列表 (逗号分隔) | (空) |
-| `FEDERATION_SECRET` | 联邦通信共享密钥 | (空) |
-| `FEDERATION_NODE_URL` | 当前节点外部访问地址 (用于联邦大厅) | (空) |
-| `FEDERATION_NODE_ID` | 当前节点唯一 ID (留空则自动生成) | (空) |
-| `FEDERATION_ALLOW_LOCAL` | 是否允许联邦连接本地/私有 IP | `false` |
-| `FEDERATION_HEALTH_INTERVAL` | 联邦健康检查间隔 (ms) | `300` |
-| `FEDERATION_SYNC_INTERVAL` | 联邦状态同步间隔 (ms) | `150` |
 
 ## 🌟 联邦服务器 (Federation)
 
-### 1. 作用与意义
-联邦模式旨在打破“服务器孤岛”。通过启用联邦功能，您的服务器可以与其他 Phira 多人服务器建立连接：
-*   **跨服大厅**：玩家在您的服务器网页上，可以直接看到联邦网络中其他服务器的公开房间。
-*   **流量互通**：提升小型服务器的可见度，让玩家更容易找到活跃的对局。
-*   **去中心化**：没有单一的控制中心，任何服务器都可以随时加入或离开网络。
+联邦功能以**插件**形式提供（`plugins/federation/`），不再通过 `.env` 配置。
 
-### 2. 工作原理
-*   **节点发现**：服务器启动时会连接 `FEDERATION_SEED_NODES` 中定义的“种子节点”，并获取当前网络中的所有活跃节点列表。
-*   **健康检查**：节点间会定期进行心跳包交换。如果某个服务器宕机，其他节点会在短时间内将其从列表中剔除。
-*   **状态同步**：每隔一段时间，各服务器会广播自己的公开房间列表和在线人数。
-*   **安全验证**：所有节点间通信必须携带匹配的 `FEDERATION_SECRET`。只有密钥一致的服务器才能互相交换数据。
+联邦功能以**插件**形式提供（`plugins/federation/`），不再通过 `.env` 配置。
 
-### 3. 如何配置
-在 `.env` 文件中设置以下变量：
+### 启用方式
 
-1.  **开启功能**：将 `FEDERATION_ENABLED` 设置为 `true`。
-2.  **设置身份**：
-    *   `FEDERATION_NODE_ID`: 给你的节点起个唯一名字（如 `MyPhiraServer-HK`），留空则自动生成。
-    *   `FEDERATION_NODE_URL`: **非常关键**。填写外部玩家或节点可以访问到你 Web 端口的地址（例如 `http://1.2.3.4:8080`）。
-3.  **连接网络**：
-    *   `FEDERATION_SEED_NODES`: 填写已知活跃节点的地址（多个用逗号分隔）。如果是加入现有网络，请向网络发起人索要种子地址。
-    *   `FEDERATION_SECRET`: 设置一个复杂的共享密钥，并确保你想连接的服务器伙伴也使用相同的密钥。
-4.  **调整频率**（可选）：
-    *   `FEDERATION_HEALTH_INTERVAL`: 健康检查频率（默认 30000ms）。
-    *   `FEDERATION_SYNC_INTERVAL`: 状态同步频率（默认 15000ms）。
+编辑 `config/federation/config.yaml`（首次加载自动生成）：
+
+```yaml
+enabled: true
+secret: "共享密钥"                  # 同一网络所有节点必须一致
+nodeUrl: http://your-ip:8080       # 本节点对外地址
+seedNodes:
+  - http://other-server:8080       # 种子节点
+```
+
+更详细的联邦配置与使用说明，请参阅 [联邦插件仓库](https://github.com/chuzouX/phira-mp-nodejsver-federation)。
 
 ## 部署与运行
 

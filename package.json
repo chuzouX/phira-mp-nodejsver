@@ -1,6 +1,6 @@
 {
   "name": "phira-mp-server",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "TypeScript Node.js server with TCP socket support",
   "main": "dist/index.js",
   "bin": "dist/index.js",
@@ -8,7 +8,6 @@
     "build": "tsc && npm run build:plugins",
     "build:plugins": "tsc -p plugins/tsconfig.json",
     "plugin:create": "node scripts/create-plugin.js",
-    "sync:plugin-sdk": "bash scripts/sync-plugin-sdk.sh",
     "dev": "nodemon",
     "start": "node dist/index.js",
     "test": "jest --verbose",

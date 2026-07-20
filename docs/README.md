@@ -1,6 +1,6 @@
 # Phira Multiplayer Server
 
-[中文说明](README-CN.md) | English
+中文说明 | [English](../README.md)
 
 TypeScript-based Node.js server with TCP support for multiplayer gaming.
 

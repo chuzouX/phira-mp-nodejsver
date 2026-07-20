@@ -295,7 +295,6 @@ npx tsc
 ```
 服务器启动
   → TCP / HTTP 服务启动完毕
-  → 联邦节点启动（如已启用）
   → PluginManager.loadAllFromDirectory()
       → 按目录名字母序扫描 plugins/
       → 对每个插件: require(index.js) → 调用 init(api)
@@ -304,13 +303,13 @@ npx tsc
 服务器关闭
   → PluginManager.destroyAll()
       → 对每个插件: 调用 destroy()（如已定义）
-  → 联邦节点停止
   → TCP / HTTP 服务停止
 ```
 
 **重要事项：**
 - 服务端优先加载 `index.js`；仅在开发模式（ts-node）下才 fallback 到 `index.ts`
 - 加载顺序由目录名字母序决定。如果插件间有依赖关系，可通过命名前缀控制（如 `00-base`、`01-dashboard`）
+- 联邦插件（`federation`）作为标准插件加载，其内部联邦网络启动在插件 `init` 中完成
 - `init` 支持同步和异步（`async init`）
 - `destroy` 中应清理所有资源：取消事件监听、清除定时器、关闭连接等
 
@@ -331,8 +330,15 @@ npx tsc
 | `networkServer` | `NetworkServer` | TCP 服务器实例 |
 | `httpServer` | `HttpServer \| undefined` | HTTP 服务器（`ENABLE_WEB_SERVER=false` 时为 `undefined`） |
 | `banManager` | `BanManager` | 封禁管理器 |
-| `federationManager` | `FederationManager \| undefined` | 联邦管理器（未启用联邦时为 `undefined`） |
+| `federationManager` | `FederationManager \| undefined` | 联邦管理器（懒获取，由联邦插件注入后可用） |
 | `pluginName` | `string` | 当前插件名称 |
+
+`federationManager` 是一个 getter，只有在联邦插件加载后才会返回实例。如需主动获取联邦实例：
+
+```js
+// 联邦插件自行注册（仅 federation 插件调用）
+api.registerFederationManager(fm);
+```
 
 ### 事件总线
 
@@ -712,12 +718,58 @@ messagePrefix: "【房间播报】"
 - `/roomannouncer status` - 查看插件状态
 - `/roomannouncer announce` - 手动触发播报
 
+### 6. **federation** — 联邦网络
+
+去中心化多服务器互联，支持节点发现、房间同步、跨服代理等。
+
+**配置文件**: `config/federation/config.yaml`
+
+```yaml
+# 是否启用联邦
+enabled: false
+
+# 种子节点列表
+seedNodes:
+  - http://other-server:8080
+
+# 共享密钥（所有联入同一网络的节点必须一致）
+secret: ""
+
+# 本节点对外地址
+nodeUrl: ""
+
+# 节点 ID（留空自动生成）
+nodeId: ""
+
+# 健康检查间隔（ms）
+healthInterval: 300
+
+# 房间同步间隔（ms）
+syncInterval: 150
+
+# 是否允许连接本地 IP
+allowLocal: false
+```
+
+**注意**: 联邦不再通过 `.env` 配置，全部通过插件配置文件管理。联邦路由由插件自行通过 `app.post/get` 注册。
+
+### 7. **titles** — 称号系统
+
+基于玩家数据提供冠军称号和排名系统。
+
+### 8. **tournament** — 锦标赛
+
+提供锦标赛比赛系统，支持配对、淘汰、排名等功能。
+
 ---
 
 | 插件 | 目录 | 说明 |
 |------|------|------|
-| **web-dashboard** | `plugins/web-dashboard/` | Web 管理面板，提供登录、房间管理、封禁管理、联邦路由等完整后台 |
+| **web-dashboard** | `plugins/web-dashboard/` | Web 管理面板，提供登录、房间管理、封禁管理等完整后台 |
+| **federation** | `plugins/federation/` | 联邦网络，去中心化多服互联（节点发现、房间同步、跨服代理） |
 | **websocket** | `plugins/websocket/` | WebSocket 服务，为前端提供实时房间状态推送 |
 | **example** | `plugins/example/` | 示例插件，展示事件监听、路由注册、控制台命令、配置读写等核心用法 |
 | **nonebot-auth** | `plugins/nonebot-auth/` | NoneBot 鉴权插件，支持 SHA-256 和 AES-256-CBC 认证 |
 | **room-announcer** | `plugins/room-announcer/` | 房间播报插件，自动向玩家播报公开房间列表 |
+| **titles** | `plugins/titles/` | 冠军称号与排名系统 |
+| **tournament** | `plugins/tournament/` | 锦标赛比赛系统 |
