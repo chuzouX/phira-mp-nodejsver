@@ -119,9 +119,9 @@ export class TcpServer {
     socket.setNoDelay(true);
     socket.setKeepAlive(true, 60000); // 1 minute keep-alive
 
-    // Limit connections per IP
+    // Limit connections per IP (skip localhost for stress testing)
     const currentCount = this.connectionsPerIp.get(ip) || 0;
-    if (currentCount >= this.MAX_CONNECTIONS_PER_IP) {
+    if (!isLocal && currentCount >= this.MAX_CONNECTIONS_PER_IP) {
         this.logger.warn(`拦截到来自 IP ${ip} 的过多 TCP 连接尝试 (${currentCount})`);
         socket.destroy();
         return;

@@ -41,7 +41,8 @@ export class ProtocolHandler {
   private readonly userConnections = new Map<number, string>();
   private readonly connectionClosers = new Map<string, () => void>();
   private readonly connectionIps = new Map<string, string>();
-  private federationManager: any = null;  // 联邦管理器（避免循环依赖用 any）
+  private federationManager: any = null;
+  private federationEnabled = false;
   private pluginManager?: PluginManager;
   private readonly roomTimers = new Map<string, NodeJS.Timeout>();
 
@@ -78,6 +79,7 @@ export class ProtocolHandler {
 
   public setFederationManager(fm: any): void {
     this.federationManager = fm;
+    this.federationEnabled = !!(fm?.getConfig?.()?.enabled);
   }
 
   public setPluginManager(pluginManager: PluginManager): void {
@@ -537,15 +539,11 @@ export class ProtocolHandler {
   }
 
   private respond(
-    connectionId: string,
+    _connectionId: string,
     sendResponse: (response: ServerCommand) => void,
     response: ServerCommand,
   ): void {
     sendResponse(response);
-
-    if (response.type !== ServerCommandType.Pong) {
-        this.logger.debug(`向客户端发送响应: ${connectionId} (${ServerCommandType[response.type]})`, { userId: this.sessions.get(connectionId)?.userId });
-    }
   }
 
   private broadcastMessage(room: Room, message: Message): void {
@@ -565,7 +563,7 @@ export class ProtocolHandler {
     }
 
     // 联邦：广播房间事件消息
-    if (this.federationManager?.getConfig?.()?.enabled) {
+    if (this.federationEnabled) {
       this.federationManager.broadcastRoomEvent('room_updated', room.id,
         this.federationManager.buildLocalRoomInfo(room)
       ).catch(() => {});
@@ -753,7 +751,7 @@ export class ProtocolHandler {
         });
 
         // 广播给联邦节点
-        if (this.federationManager?.getConfig?.()?.enabled) {
+        if (this.federationEnabled) {
           if (updatedRoom) {
             this.federationManager.broadcastRoomEvent('room_updated', roomId, 
               this.federationManager.buildLocalRoomInfo(updatedRoom)
