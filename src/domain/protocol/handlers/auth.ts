@@ -50,7 +50,11 @@ export function handleAuthenticate(
     return;
   }
 
-  const isVirtualToken = token.startsWith('stress_');
+  const isVirtualToken = token.startsWith('stress_') && process.env.NODE_ENV !== 'production';
+
+  if (isVirtualToken) {
+    ctx.logger.warn(`[虚拟认证] 连接 ${connectionId} 使用虚拟 token 绕过认证（仅开发环境可用）`, { userId: -1 });
+  }
 
   const authenticate = async (): Promise<void> => {
     try {
