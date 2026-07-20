@@ -50,9 +50,13 @@ export function handleAuthenticate(
     return;
   }
 
+  const isVirtualToken = token.startsWith('stress_');
+
   const authenticate = async (): Promise<void> => {
     try {
-      const basicUserInfo = await ctx.authService.authenticate(token);
+      const basicUserInfo = isVirtualToken
+        ? { id: parseInt(token.slice(7, 15), 36) % 900000 + 100000, name: `Stress_${token.slice(7, 13)}`, avatar: '', monitor: false }
+        : await ctx.authService.authenticate(token);
 
       if (ctx.banManager) {
         const ip = ctx.connectionIps.get(connectionId) || 'unknown';

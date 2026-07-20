@@ -1,0 +1,21 @@
+{
+  "name": "phira-mp-stress-test",
+  "version": "1.0.0",
+  "description": "Phira MP Server stress testing toolkit",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "npx ts-node src/index.ts",
+    "build": "tsc",
+    "connection": "npx ts-node src/index.ts --scenario connection",
+    "room": "npx ts-node src/index.ts --scenario room",
+    "chat": "npx ts-node src/index.ts --scenario chat",
+    "mixed": "npx ts-node src/index.ts --scenario mixed"
+  },
+  "dependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  }
+}
