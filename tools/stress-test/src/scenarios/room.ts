@@ -21,43 +21,44 @@ export async function runRoomScenario(
   }
   console.log(`  Authenticated: ${authenticated.length}/${clients.length}\n`);
 
-  if (authenticated.length === 0) {
-    console.log('  No clients authenticated, aborting');
+  if (authenticated.length < 2) {
+    console.log('  Need at least 2 clients for room test');
     return;
   }
 
   const deadline = Date.now() + duration * 1000;
   const interval = 1000 / Math.max(rate, 1);
-  let roomSeq = 0;
-
   const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
+  let roomSeq = 0;
+  let ops = 0;
 
   while (Date.now() < deadline) {
-    const c = authenticated[Math.floor(Math.random() * authenticated.length)];
-    roomSeq++;
-    const roomId = `stress_${roomSeq % 100}`;
+    const host = authenticated[Math.floor(Math.random() * authenticated.length)];
+    const guest = authenticated[Math.floor(Math.random() * authenticated.length)];
+    if (host.id === guest.id) { await wait(100); continue; }
 
-    try { await c.createRoom(roomId); } catch {}
-    await wait(interval / 3);
+    const roomId = `stress_${roomSeq++ % 50}`;
+    ops++;
 
-    try { await c.leaveRoom(); } catch {}
-    await wait(interval / 3);
+    try { await host.createRoom(roomId); } catch {}
+    await wait(interval);
 
-    try { await c.joinRoom(roomId); } catch {}
-    await wait(interval / 3);
+    try { await guest.joinRoom(roomId); } catch {}
+    await wait(interval);
 
-    if (roomSeq % 10 === 0) {
-      console.log(`  [${metrics.elapsed().toFixed(0)}s] ${roomSeq} ops | ${formatInline(metrics)}`);
+    try { await guest.leaveRoom(); } catch {}
+    await wait(interval);
+
+    try { await host.leaveRoom(); } catch {}
+    await wait(interval);
+
+    if (ops % 10 === 0) {
+      console.log(`  [${metrics.elapsed().toFixed(0)}s] ${ops} ops | ` +
+        `create:${metrics.get('create_room')?.count ?? 0}/` +
+        `join:${metrics.get('join_room')?.count ?? 0}/` +
+        `leave:${metrics.get('leave_room')?.count ?? 0}`);
     }
   }
 
   for (const c of clients) c.close();
-}
-
-function formatInline(m: Metrics): string {
-  const parts: string[] = [];
-  for (const [name, entry] of m.all()) {
-    parts.push(`${name}: ${entry.count}`);
-  }
-  return parts.join(' | ');
 }
