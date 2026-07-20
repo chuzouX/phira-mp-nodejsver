@@ -38,6 +38,7 @@ export class ProtocolHandler {
   private readonly connectionIps = new Map<string, string>();
   private federationManager: any = null;  // 联邦管理器（避免循环依赖用 any）
   private pluginManager?: PluginManager;
+  private readonly roomTimers = new Map<string, NodeJS.Timeout>();
 
   constructor(
     private readonly roomManager: RoomManager,
@@ -589,6 +590,16 @@ export class ProtocolHandler {
       if (callback) {
         callback(command);
         this.logger.debug(`广播命令给客户端: ${playerInfo.connectionId} (${ServerCommandType[command.type]})`, { userId: playerInfo.user.id });
+      }
+    }
+  }
+
+  private broadcastToActivePlayers(room: Room, command: ServerCommand): void {
+    for (const playerInfo of room.players.values()) {
+      if (playerInfo.isFinished) continue;
+      const callback = this.broadcastCallbacks.get(playerInfo.connectionId);
+      if (callback) {
+        callback(command);
       }
     }
   }
@@ -1344,7 +1355,7 @@ export class ProtocolHandler {
       return;
     }
 
-    if (room.state.type !== 'SelectChart') {
+    if (room.state.type !== 'SelectChart' && room.state.type !== 'Playing') {
       this.respond(connectionId, sendResponse, {
         type: ServerCommandType.JoinRoom,
         result: { ok: false, error: '他们正在游戏中哦' },
@@ -1361,6 +1372,30 @@ export class ProtocolHandler {
       if (monitor && !room.live) {
         room.live = true;
         this.logger.info(`房间 “${roomId}” 已进入 live 模式`, { userId: session.userId });
+      }
+
+      // 游戏中加入的玩家自动标记为 Aborted
+      let joinAborted = false;
+      if (room.state.type === 'Playing') {
+        const joinedPlayer = room.players.get(session.userId);
+        if (joinedPlayer) {
+          joinedPlayer.isReady = false;
+          joinedPlayer.isFinished = true;
+          joinedPlayer.score = null;
+          joinAborted = true;
+          // 延迟发送提示，确保客户端已加载
+          const userId = session.userId;
+          setTimeout(() => {
+            this.sendCommandToUser(userId, {
+              type: ServerCommandType.Message as any,
+              message: {
+                type: 'Chat',
+                user: -1,
+                content: '此房间正在游戏中，请等待游戏结束',
+              },
+            });
+          }, 2000);
+        }
       }
 
       this.broadcastToRoom(room, {
@@ -1385,8 +1420,9 @@ export class ProtocolHandler {
       const usersInRoom = Array.from(room.players.values()).map((p) => p.user);
       const serverUser: UserInfo = { id: -1, name: this.serverName, avatar: this.defaultAvatar, monitor: true };
       
+      const isSpectator = room.state.type === 'Playing' && joinAborted;
       const joinResponse: JoinRoomResponse = {
-        state: room.state,
+        state: isSpectator ? { type: 'SelectChart' as const, chartId: room.selectedChart?.id ?? null } : room.state,
         users: [...usersInRoom, serverUser],
         live: room.live,
       };
@@ -1660,6 +1696,9 @@ export class ProtocolHandler {
             this.federationManager.buildLocalRoomInfo(room)
           ).catch(() => {});
         }
+
+        // 通知插件系统谱面已变更（async 操作完成后触发）
+        this.pluginManager?.emit('protocol:afterHandle', { connectionId, command: { type: ClientCommandType.SelectChart, id: chartId } });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'failed to fetch chart';
         this.logger.error(`获取谱面信息失败: ${connectionId} (谱面: ${chartId}, 错误: ${errorMessage})`, { userId: session.userId });
@@ -1723,6 +1762,8 @@ export class ProtocolHandler {
       }
       this.roomManager.setRoomState(room.id, { type: 'WaitingForReady' });
 
+      this.pluginManager?.emit('room:requestStart', { room, triggeredBy: session.userId });
+
       this.broadcastMessage(room, {
         type: 'GameStart',
         user: session.userId,
@@ -1732,6 +1773,55 @@ export class ProtocolHandler {
         type: ServerCommandType.ChangeState,
         state: { type: 'WaitingForReady' },
       });
+
+      // 发送60秒计时提示
+      this.broadcastMessage(room, {
+        type: 'Chat',
+        user: -1,
+        content: '房主已选择开始游戏，请在60秒内准备，不准备视为放弃',
+      });
+
+      // 启动60秒自动开始计时器
+      const timer = setTimeout(() => {
+        this.roomTimers.delete(room.id);
+        if (room.state.type !== 'WaitingForReady') return;
+
+        for (const playerInfo of room.players.values()) {
+          if (playerInfo.user.id === room.ownerId) {
+            playerInfo.isReady = true;
+          } else if (!playerInfo.isReady) {
+            playerInfo.isReady = false;
+            playerInfo.isFinished = true;
+            playerInfo.score = null;
+          } else {
+            playerInfo.isFinished = false;
+            playerInfo.score = null;
+          }
+        }
+
+        this.roomManager.setRoomState(room.id, { type: 'Playing' });
+        this.broadcastToActivePlayers(room, { type: ServerCommandType.ChangeState as any, state: { type: 'Playing' } } as any);
+
+        // 通知未准备玩家
+        for (const playerInfo of room.players.values()) {
+          if (playerInfo.isFinished) {
+            const cb = this.broadcastCallbacks.get(playerInfo.connectionId);
+            if (cb) {
+              cb({
+                type: ServerCommandType.Message as any,
+                message: { type: 'Chat', user: -1, content: '60秒计时结束，你未准备，已被视为放弃本局' },
+              } as any);
+            }
+          }
+        }
+
+        this.pluginManager?.emit('room:gameStart', {
+          room,
+          triggeredBy: session.userId,
+          mode: 'force',
+        });
+      }, 60000);
+      this.roomTimers.set(room.id, timer);
     } else {
       if (!this.roomManager.isSoloConfirmPending(room.id)) {
         this.roomManager.setSoloConfirmPending(room.id, true);
@@ -1838,6 +1928,8 @@ export class ProtocolHandler {
       .filter((p) => p.user.id !== room.ownerId)
       .every((p) => p.isReady);
     if (allReady) {
+      const timer = this.roomTimers.get(room.id);
+      if (timer) { clearTimeout(timer); this.roomTimers.delete(room.id); }
       this.logger.info(`房间 “${room.id}” 对局开始，玩家：${Array.from(room.players.keys()).join(', ')}`, { userId: session.userId });
 
       for (const playerInfo of room.players.values()) {
@@ -1920,6 +2012,8 @@ export class ProtocolHandler {
     player.score = null;
 
     if (room.ownerId === session.userId) {
+      const timer = this.roomTimers.get(room.id);
+      if (timer) { clearTimeout(timer); this.roomTimers.delete(room.id); }
       this.roomManager.setRoomState(room.id, { type: 'SelectChart', chartId: room.selectedChart?.id ?? null });
       this.roomManager.setSoloConfirmPending(room.id, false);
 
@@ -2042,20 +2136,16 @@ export class ProtocolHandler {
       miss: recordInfo.miss ?? 0,
       maxCombo: recordInfo.maxCombo ?? 0,
       finishTime: Date.now(),
+      std: recordInfo.std ?? 0,
+      stdScore: recordInfo.stdScore ?? 0,
+      isAp: recordInfo.isAp ?? recordInfo.is_ap ?? (recordInfo.accuracy >= 1),
+      fc: recordInfo.fc ?? recordInfo.is_fc ?? recordInfo.fullCombo ?? recordInfo.full_combo ?? false,
+      mods: recordInfo.mods ?? null,
     };
 
     const activePlayers = Array.from(room.players.values()).filter((p) => !p.user.monitor);
 
     this.logger.mark(`“${session.userInfo.name}” 在房间 “${room.id}” 完成游玩并上传记录（分数：${recordInfo.score}，Acc：${recordInfo.accuracy}）`, { userId: session.userId });
-
-    // 广播 Played 消息给其他玩家
-    this.broadcastMessage(room, {
-      type: 'Played',
-      user: session.userId,
-      score: recordInfo.score,
-      accuracy: recordInfo.accuracy,
-      fullCombo: recordInfo.fullCombo,
-    });
 
     this.respond(connectionId, sendResponse, {
       type: ServerCommandType.Played,
@@ -2186,15 +2276,41 @@ export class ProtocolHandler {
       })),
     });
 
-    this.broadcastMessage(room, { type: 'GameEnd' });
-
     // Push a summary message to the public screen history
-    const summary = rankings.map(r => `${r.rank}. ${r.userName}: ${r.score?.score.toLocaleString() ?? '0'} (${((r.score?.accuracy ?? 0) * 100).toFixed(2)}%)`).join('\n');
+    const summary = rankings.map(r => {
+      const s = r.score;
+      if (!s) return `${r.userName}[${r.userId}] 未上传成绩`;
+      const acc = ((s.accuracy ?? 0) * 100).toFixed(2);
+      let line = `${r.userName}[${r.userId}] 结算详情：\n`;
+      line += `        分数：${(s.score ?? 0).toLocaleString()}，准度：${acc}%`;
+      if ((s.std ?? 0) > 0) {
+        line += `，误差：±${s.std}ms，无暇度分数：${s.stdScore ?? 0}`;
+      }
+      line += `\n        Perfect：${s.perfect ?? 0}，Good：${s.good ?? 0}，Bad：${s.bad ?? 0}，Miss：${s.miss ?? 0}`;
+      if (s.isAp) {
+        line += `，AP！！！`;
+      } else if (s.fc) {
+        line += `，全连`;
+      }
+      if (s.mods && (Array.isArray(s.mods) ? s.mods.length > 0 : true)) {
+        const modList = Array.isArray(s.mods) ? s.mods.join(', ') : String(s.mods);
+        line += `，使用的模组：${modList}`;
+      }
+      return line;
+    }).join('\n\n');
+    const content = `【游戏结算】\n${summary}`;
     this.roomManager.addMessageToRoom(room.id, {
         type: 'Chat',
         user: -1,
-        content: `【游戏结算】\n${summary}`
+        content: content
     });
+    this.broadcastMessage(room, {
+        type: 'Chat',
+        user: -1,
+        content: content
+    });
+
+    this.broadcastMessage(room, { type: 'GameEnd' });
 
     const oldState = room.state.type;
 
