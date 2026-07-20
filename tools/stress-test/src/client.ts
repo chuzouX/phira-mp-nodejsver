@@ -19,10 +19,16 @@ export function createClient(
   port: number,
   id: number,
   metrics: Metrics,
+  useProxy: boolean = false,
 ): PhiraClient {
   let socket: net.Socket | null = null;
   let buffer = Buffer.alloc(0);
   let msgResolvers = new Map<number, (cmdType: number) => void>();
+
+  const PROXY_V2_LOCAL = Buffer.from([
+    0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D, 0x0A, 0x51, 0x55, 0x49, 0x54, 0x0A,
+    0x20, 0x00, 0x00, 0x00,
+  ]);
 
   function connectSocket(): Promise<void> {
     const start = Date.now();
@@ -30,6 +36,9 @@ export function createClient(
       socket = new net.Socket();
       socket.setNoDelay(true);
       socket.connect(port, host, () => {
+        if (useProxy) {
+          socket!.write(PROXY_V2_LOCAL);
+        }
         metrics.record('connect', Date.now() - start);
         resolve();
       });
@@ -43,9 +52,13 @@ export function createClient(
           const header = parseHeader(buffer);
           if (!header) break;
           buffer = buffer.subarray(header.consumed);
-          const resolvers = Array.from(msgResolvers.values());
-          msgResolvers.clear();
-          for (const fn of resolvers) fn(header.commandType);
+          const keys = Array.from(msgResolvers.keys());
+          if (keys.length > 0) {
+            const firstKey = keys[0];
+            const resolve = msgResolvers.get(firstKey)!;
+            msgResolvers.delete(firstKey);
+            resolve(header.commandType);
+          }
         }
       });
       socket.on('close', () => {});
@@ -76,7 +89,7 @@ export function createClient(
     try {
       sendCmd(type, fn);
       const resp = await waitResponse();
-      const ok = resp !== -1 && resp !== ServerCommand.Authenticate;
+      const ok = resp >= 0;
       metrics.record(name, Date.now() - start, !ok);
       return ok;
     } catch {
