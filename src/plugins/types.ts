@@ -25,6 +25,7 @@ export type PluginEventMap = {
   'protocol:beforeHandle': { connectionId: string; command: ClientCommand };
   'protocol:afterHandle': { connectionId: string; command: ClientCommand };
   'chat:message': { room: Room; userId: number; content: string; connectionId: string };
+  'room:requestStart': { room: Room; triggeredBy: number };
   [key: `custom:${string}`]: any;
 };
 

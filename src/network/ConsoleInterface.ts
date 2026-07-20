@@ -921,12 +921,14 @@ export class ConsoleInterface {
 
     if (metadata.dependencies && metadata.dependencies.length > 0) {
       this.logger.command(`依赖 (${metadata.dependencies.length}):`);
-      metadata.dependencies.forEach(depUuid => {
+      metadata.dependencies.forEach(dep => {
+        const depUuid = typeof dep === 'string' ? dep : (dep as any).uuid;
         const depPlugin = this.pluginManager!.getPluginByUuid(depUuid);
         if (depPlugin) {
           this.logger.command(`  - ${depPlugin.metadata.name} (${depUuid})`);
         } else {
-          this.logger.command(`  - ${depUuid}`);
+          const depName = typeof dep === 'string' ? '' : (dep as any).name;
+          this.logger.command(`  - ${depName || depUuid}${depName ? ' (' + depUuid + ')' : ''}`);
         }
       });
     } else {
