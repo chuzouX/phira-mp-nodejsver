@@ -30,6 +30,7 @@ USE_PROXY_PROTOCOL=false
 # Proxy trust hops (1 for Nginx, 2 for CDN+Nginx)
 TRUST_PROXY_HOPS=1
 LOG_LEVEL=info
+# WARNING: Set to production for public servers, otherwise virtual auth (stress_ token) remains active
 NODE_ENV=development
 PHIRA_API_URL=https://phira.5wyxi.com
 SERVER_NAME=Server

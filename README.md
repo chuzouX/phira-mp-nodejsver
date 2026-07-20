@@ -14,7 +14,7 @@ High-performance, extensible multiplayer server for the Phira rhythm game, imple
 - **Web Dashboard** — full admin panel with player/room/ban management
 - **Titles & Tournament** — champion title system and competitive tournament mode
 - **Security** — IP banning, CAPTCHA, Proxy Protocol v2, brute-force protection
-- **Virtual Token** — stress-test friendly auth bypass (development only)
+- **Virtual Token** — stress-test auth bypass (**development only**, disabled in production)
 
 ## Quick Start
 
@@ -80,6 +80,10 @@ Copy `.env.example` to `.env` and edit:
 | `OWNER_PHIRA_ID` | Owner user IDs (comma-separated) | |
 | `USE_PROXY_PROTOCOL` | Enable Proxy Protocol v2 for real IP | `false` |
 | `TRUST_PROXY_HOPS` | Proxy trust depth (1=Nginx, 2=CDN+Nginx) | `1` |
+
+> ⚠️ **Production Security**: Set `NODE_ENV=production` before deploying publicly.
+> Leaving it as `development` keeps *virtual token authentication* enabled — tokens starting with
+> `stress_` bypass the Phira API and create fake user accounts. This feature is for local testing only.
 
 Plugins have their own config files under `config/<plugin-name>/config.yaml`, auto-generated from `config.default.yaml` on first load.
 
