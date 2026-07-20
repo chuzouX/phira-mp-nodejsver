@@ -12,7 +12,6 @@ import { ProtocolHandler } from './domain/protocol/ProtocolHandler';
 import { NetworkServer } from './network/NetworkServer';
 import { HttpServer } from './network/HttpServer';
 import { version } from '../package.json';
-import { FederationManager, FederationConfig } from './federation/FederationManager';
 import { ConsoleInterface } from './network/ConsoleInterface';
 import { PluginManager } from './plugins/manager';
 import { PluginEventName } from './plugins/types';
@@ -67,9 +66,8 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
   const authLogger = new ConsoleLogger('认证', logLevel);
   const protocolLogger = new ConsoleLogger('协议', logLevel);
   const webSocketLogger = new ConsoleLogger('WebSocket', logLevel);
-  const federationLogger = new ConsoleLogger('联邦', logLevel);
 
-  [logger, roomLogger, authLogger, protocolLogger, webSocketLogger, federationLogger].forEach(l => {
+  [logger, roomLogger, authLogger, protocolLogger, webSocketLogger].forEach(l => {
     l.setSilentIds(config.silentPhiraIds);
   });
 
@@ -95,31 +93,6 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
     config.defaultAvatar
   );
   
-  // ========== 联邦节点管理 ==========
-  let federationManager: FederationManager | undefined;
-  
-  if (config.federationEnabled) {
-    const fedConfig: FederationConfig = {
-      enabled: config.federationEnabled,
-      seedNodes: config.federationSeedNodes,
-      secret: config.federationSecret,
-      nodeId: config.federationNodeId,
-      nodeUrl: config.federationNodeUrl,
-      healthInterval: config.federationHealthInterval,
-      syncInterval: config.federationSyncInterval,
-      serverName: config.serverName,
-      allowLocal: config.federationAllowLocal,
-    };
-
-    federationManager = new FederationManager(fedConfig, federationLogger, roomManager);
-    
-    // 双向绑定：FederationManager <-> ProtocolHandler
-    federationManager.setProtocolHandler(protocolHandler);
-    protocolHandler.setFederationManager(federationManager);
-    
-    logger.info(`[联邦] 联邦节点已配置 (种子节点: ${config.federationSeedNodes.length} 个)`);
-  }
-
   const networkServer = new NetworkServer(config, logger, protocolHandler);
   let httpServer: HttpServer | undefined;
 
@@ -130,7 +103,6 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
       roomManager,
       protocolHandler,
       banManager,
-      federationManager,
     );
     logger.info('[程序] Web 功能将完全由插件系统承载。');
   } else {
@@ -152,7 +124,7 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
     );
 
     // Update Logger silents
-    [logger, roomLogger, authLogger, protocolLogger, webSocketLogger, federationLogger].forEach(l => {
+    [logger, roomLogger, authLogger, protocolLogger, webSocketLogger].forEach(l => {
         l.setSilentIds(newConfig.silentPhiraIds);
     });
 
@@ -200,7 +172,7 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
     const validLevels = ['debug', 'info', 'mark', 'warn', 'error'];
     const normalized = level.toLowerCase();
     if (validLevels.includes(normalized)) {
-        [logger, roomLogger, authLogger, protocolLogger, webSocketLogger, federationLogger].forEach(l => {
+        [logger, roomLogger, authLogger, protocolLogger, webSocketLogger].forEach(l => {
             l.setLevel(normalized as any);
         });
         logger.mark(`[程序] 日志等级已设置为: ${normalized.toUpperCase()}`);
@@ -216,7 +188,7 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
     if (filtered.length === 1) {
         setLogLevel(filtered[0]);
     } else {
-        [logger, roomLogger, authLogger, protocolLogger, webSocketLogger, federationLogger].forEach(l => {
+        [logger, roomLogger, authLogger, protocolLogger, webSocketLogger].forEach(l => {
             l.setAllowedLevels(filtered);
         });
         logger.mark(`[程序] 日志等级已设置为显示: ${filtered.join(', ').toUpperCase()}`);
@@ -251,7 +223,6 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
       webSocketServer,
       expressApp: httpServer?.getExpressApp(),
       banManager,
-      federationManager,
     });
     protocolHandler.setPluginManager(pluginManager);
     consoleInterface.setPluginManager(pluginManager);
@@ -268,12 +239,7 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
     }
     await Promise.all(promises);
 
-    // 启动联邦节点（在HTTP服务器启动后，因为需要接收联邦请求）
-    if (federationManager) {
-      await federationManager.start();
-    }
-
-    // 加载插件
+    // 加载插件（联邦插件会在此时自行启动）
     if (pluginManager) {
       await pluginManager.loadAllFromDirectory();
     }
@@ -284,14 +250,9 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
   const stop = async (): Promise<void> => {
     consoleInterface.stop();
 
-    // 销毁所有插件
+    // 销毁所有插件（联邦插件会在此时自行停止）
     if (pluginManager) {
       await pluginManager.destroyAll();
-    }
-
-    // 先停止联邦（清理远程连接）
-    if (federationManager) {
-      await federationManager.stop();
     }
 
     const promises: Promise<void>[] = [networkServer.stop()];

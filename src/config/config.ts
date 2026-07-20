@@ -48,22 +48,14 @@ PRI_PREFIX=sm
 ENABLE_UPDATE_CHECK=true
 
 # Admin Credentials
-ADMIN_SECRET=
 ADMIN_PHIRA_ID=
 OWNER_PHIRA_ID=
 BAN_ID_WHITELIST=
 BAN_IP_WHITELIST=
 SILENT_PHIRA_IDS=
 
-# Federation Configuration
-FEDERATION_ENABLED=false
-FEDERATION_SEED_NODES=
-FEDERATION_SECRET=
-FEDERATION_NODE_URL=
-FEDERATION_NODE_ID=
-FEDERATION_ALLOW_LOCAL=false
-FEDERATION_HEALTH_INTERVAL=300
-FEDERATION_SYNC_INTERVAL=150
+# Plugin System
+PLUGINS_ENABLED=true
 `;
     }
 
@@ -82,22 +74,14 @@ if (process.env.NODE_ENV !== 'production') {
   dotenv.config();
 }
 
-export interface ProtocolOptions {
-  tcp: boolean;
-}
-
-export interface LoggingOptions {
-  level: string;
-}
-
 export interface ServerConfig {
   port: number;
   host: string;
   webPort: number;
   enableWebServer: boolean;
   useProxyProtocol: boolean;
-  protocol: ProtocolOptions;
-  logging: LoggingOptions;
+  protocol: { tcp: boolean };
+  logging: { level: string };
   phiraApiUrl: string;
   serverName: string;
   roomSize: number;
@@ -110,14 +94,6 @@ export interface ServerConfig {
   defaultAvatar: string;
   enableUpdateCheck: boolean;
   trustProxyHops: number;
-  federationEnabled: boolean;
-  federationSeedNodes: string[];
-  federationSecret: string;
-  federationNodeId: string;
-  federationNodeUrl: string;
-  federationHealthInterval: number;
-  federationSyncInterval: number;
-  federationAllowLocal: boolean;
   pluginsEnabled: boolean;
   enablePubWeb: boolean;
   pubPrefix: string;
@@ -156,14 +132,6 @@ const defaultConfig: ServerConfig = {
   pubPrefix: 'pub',
   enablePriWeb: false,
   priPrefix: 'sm',
-  federationEnabled: false,
-  federationSeedNodes: [],
-  federationSecret: '',
-  federationNodeId: '',
-  federationNodeUrl: '',
-  federationHealthInterval: 300,
-  federationSyncInterval: 150,
-  federationAllowLocal: false,
   pluginsEnabled: true,
 };
 
@@ -176,44 +144,6 @@ const parseNumberList = (value: string | undefined, fallback: number[]): number[
   if (value === undefined || value.trim() === '') return fallback;
   return value.split(/[,，]/).map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
 };
-
-const parseStringList = (value: string | undefined, fallback: string[]): string[] => {
-  if (value === undefined || value.trim() === '') return fallback;
-  return value.split(/[,，]/).map(s => s.trim()).filter(s => s !== '');
-};
-
-export const env = {
-  port: parseInt(process.env.PORT || '12346', 10),
-  host: process.env.HOST || '0.0.0.0',
-  webPort: parseInt(process.env.WEB_PORT || '8080', 10),
-  enableWebServer: parseBoolean(process.env.ENABLE_WEB_SERVER, false),
-  useProxyProtocol: parseBoolean(process.env.USE_PROXY_PROTOCOL, false),
-  roomSize: parseInt(process.env.ROOM_SIZE || '8', 10),
-  enablePubWeb: parseBoolean(process.env.ENABLE_PUB_WEB, false),
-  pubPrefix: process.env.PUB_PREFIX || 'pub',
-  enablePriWeb: parseBoolean(process.env.ENABLE_PRI_WEB, false),
-  priPrefix: process.env.PRI_PREFIX || 'sm',
-  adminPhiraId: parseNumberList(process.env.ADMIN_PHIRA_ID, []),
-  ownerPhiraId: parseNumberList(process.env.OWNER_PHIRA_ID, []),
-  banIdWhitelist: parseNumberList(process.env.BAN_ID_WHITELIST, []),
-  banIpWhitelist: (process.env.BAN_IP_WHITELIST || '').split(',').map(s => s.trim()).filter(s => s !== ''),
-  silentPhiraIds: parseNumberList(process.env.SILENT_PHIRA_IDS, []),
-  phiraApiUrl: process.env.PHIRA_API_URL || 'https://phira.5wyxi.com',
-  tcpEnabled: parseBoolean(process.env.TCP_ENABLED, true),
-  logLevel: process.env.LOG_LEVEL || 'info',
-  serverName: process.env.SERVER_NAME || 'Server',
-  federationEnabled: parseBoolean(process.env.FEDERATION_ENABLED, false),
-  federationSeedNodes: parseStringList(process.env.FEDERATION_SEED_NODES, []),
-  federationSecret: process.env.FEDERATION_SECRET || '',
-  federationNodeId: process.env.FEDERATION_NODE_ID || '',
-  federationNodeUrl: process.env.FEDERATION_NODE_URL || '',
-  federationHealthInterval: parseInt(process.env.FEDERATION_HEALTH_INTERVAL || '300', 10),
-  federationSyncInterval: parseInt(process.env.FEDERATION_SYNC_INTERVAL || '150', 10),
-  pluginsEnabled: parseBoolean(process.env.PLUGINS_ENABLED, true),
-  nodeEnv: process.env.NODE_ENV || 'development',
-  isDevelopment: process.env.NODE_ENV !== 'production',
-  isProduction: process.env.NODE_ENV === 'production',
-} as const;
 
 export const createServerConfig = (overrides: Partial<ServerConfig> = {}): ServerConfig => {
   const envConfig: ServerConfig = {
@@ -240,14 +170,6 @@ export const createServerConfig = (overrides: Partial<ServerConfig> = {}): Serve
     defaultAvatar: process.env.DEFAULT_AVATAR ?? defaultConfig.defaultAvatar,
     enableUpdateCheck: parseBoolean(process.env.ENABLE_UPDATE_CHECK, defaultConfig.enableUpdateCheck),
     trustProxyHops: Number.parseInt(process.env.TRUST_PROXY_HOPS ?? `${defaultConfig.trustProxyHops}`, 10),
-    federationEnabled: parseBoolean(process.env.FEDERATION_ENABLED, defaultConfig.federationEnabled),
-    federationSeedNodes: parseStringList(process.env.FEDERATION_SEED_NODES, defaultConfig.federationSeedNodes),
-    federationSecret: process.env.FEDERATION_SECRET ?? defaultConfig.federationSecret,
-    federationNodeId: process.env.FEDERATION_NODE_ID ?? defaultConfig.federationNodeId,
-    federationNodeUrl: process.env.FEDERATION_NODE_URL ?? defaultConfig.federationNodeUrl,
-    federationHealthInterval: Number.parseInt(process.env.FEDERATION_HEALTH_INTERVAL ?? `${defaultConfig.federationHealthInterval}`, 10),
-    federationSyncInterval: Number.parseInt(process.env.FEDERATION_SYNC_INTERVAL ?? `${defaultConfig.federationSyncInterval}`, 10),
-    federationAllowLocal: parseBoolean(process.env.FEDERATION_ALLOW_LOCAL, defaultConfig.federationAllowLocal),
     pluginsEnabled: parseBoolean(process.env.PLUGINS_ENABLED, defaultConfig.pluginsEnabled),
   };
 

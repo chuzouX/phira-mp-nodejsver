@@ -265,6 +265,9 @@ declare module 'phira-plugin-api' {
     toggleRoomMode(roomId: string): boolean;
     sendCommandToUser(userId: number, command: ServerCommand): boolean;
     broadcastToRoomById(roomId: string, command: ServerCommand): boolean;
+    addVirtualSession(connectionId: string, userId: number, userInfo: UserInfo, broadcastCallback: (cmd: ServerCommand) => void): void;
+    removeVirtualSession(connectionId: string): void;
+    setFederationManager(fm: any): void;
     broadcastRoomUpdate(room: Room): void;
     setRoomBlacklistByAdmin(roomId: string, userIds: number[]): Promise<boolean>;
     setRoomWhitelistByAdmin(roomId: string, userIds: number[]): Promise<boolean>;
@@ -397,14 +400,6 @@ declare module 'phira-plugin-api' {
     pubPrefix: string;
     enablePriWeb: boolean;
     priPrefix: string;
-    federationEnabled: boolean;
-    federationSeedNodes: string[];
-    federationSecret: string;
-    federationNodeId: string;
-    federationNodeUrl: string;
-    federationHealthInterval: number;
-    federationSyncInterval: number;
-    federationAllowLocal: boolean;
     pluginsEnabled: boolean;
     // 以下为插件可选配置（由各插件通过 readPluginConfig 自行管理）
     sessionSecret?: string;
@@ -481,6 +476,8 @@ declare module 'phira-plugin-api' {
     readonly expressApp?: ExpressApp;
     readonly banManager: BanManager;
     readonly federationManager?: FederationManager;
+    /** 注册联邦管理器（由联邦插件在 init 时调用） */
+    registerFederationManager(fm: FederationManager): void;
     readonly events: PluginEventBus;
     readonly pluginName: string;
 

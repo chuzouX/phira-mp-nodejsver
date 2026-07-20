@@ -8,7 +8,6 @@ import { ServerConfig } from '../config/config';
 import { RoomManager } from '../domain/rooms/RoomManager';
 import { ProtocolHandler } from '../domain/protocol/ProtocolHandler';
 import { BanManager } from '../domain/auth/BanManager';
-import { FederationManager } from '../federation/FederationManager';
 import { version } from '../../package.json';
 
 export class HttpServer {
@@ -26,7 +25,7 @@ export class HttpServer {
     private readonly roomManager: RoomManager,
     private readonly protocolHandler: ProtocolHandler,
     private readonly banManager: BanManager,
-    private readonly federationManager?: FederationManager,
+    private readonly federationManager?: any,
   ) {
     this.app = express();
     this.server = createServer(this.app);

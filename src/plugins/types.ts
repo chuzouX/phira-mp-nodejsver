@@ -8,7 +8,6 @@ import { ProtocolHandler } from '../domain/protocol/ProtocolHandler';
 import { NetworkServer } from '../network/NetworkServer';
 import { HttpServer } from '../network/HttpServer';
 import { BanManager } from '../domain/auth/BanManager';
-import { FederationManager } from '../federation/FederationManager';
 
 export type PluginRouteMethod = 'get' | 'post' | 'put' | 'patch' | 'delete' | 'options' | 'head' | 'use';
 
@@ -66,7 +65,6 @@ export interface PluginContext {
   readonly webSocketServer?: { broadcast(type: string, payload: any): void };
   readonly expressApp?: express.Application;
   readonly banManager: BanManager;
-  readonly federationManager?: FederationManager;
 }
 
 export interface PluginApi extends PluginContext {
@@ -85,6 +83,12 @@ export interface PluginApi extends PluginContext {
   
   /** 向指定用户发送协议命令（用于发送私信等） */
   sendCommandToUser(userId: number, command: ServerCommand): boolean;
+
+  /** 联邦管理器（由联邦插件注入，懒获取） */
+  readonly federationManager?: any;
+
+  /** 联邦插件调用此方法注册自身 */
+  registerFederationManager(fm: any): void;
 
   // ========== 服务器数据访问 API ==========
 

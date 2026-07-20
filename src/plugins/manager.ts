@@ -17,6 +17,7 @@ import {
   PluginRouteMethod,
 } from './types';
 import { ClientCommand, ServerCommand } from '../domain/protocol/Commands';
+import { createPluginApi } from './PluginApiFactory';
 
 interface RegisteredPluginEventHandler {
   handler: PluginEventHandler;
@@ -137,6 +138,7 @@ export class PluginManager {
   private readonly commandHandlers = new Map<string, (...args: string[]) => void | Promise<void>>();
   private readonly pluginRoutes = new Map<string, Set<string>>(); // 记录每个插件的路由
   private readonly cascadeUnloadHistory = new Map<string, Set<string>>(); // 记录级联卸载历史
+  private federationManager: any = null; // 由联邦插件注入
 
   constructor(private readonly context: PluginContext) {
     this.eventsBus = new SafePluginEventBus(context.logger);
@@ -797,236 +799,17 @@ export class PluginManager {
     return this.pluginsByUuid.get(uuid);
   }
 
+  public setFederationManager(fm: any): void {
+    this.federationManager = fm;
+  }
+
+  public getFederationManager(): any {
+    return this.federationManager;
+  }
+
   private createApi(pluginName: string, resDir: string): PluginApi {
-    const pluginConfigDir = path.join(process.cwd(), 'config', pluginName);
-    const pluginConfigPath = path.join(pluginConfigDir, 'config.yaml');
-
-    return {
-      ...this.context,
-      pluginName,
-      events: this.eventsBus,
-      registerRoute: (method: PluginRouteMethod, routePath: string, handler: express.RequestHandler) => {
-        const app = this.context.expressApp ?? this.context.httpServer?.getExpressApp();
-        if (!app) {
-          this.context.logger.plugin(`${pluginName} 注册路由失败，HTTP 服务未启用: ${method.toUpperCase()} ${routePath}`);
-          return;
-        }
-
-        // 记录路由
-        if (!this.pluginRoutes.has(pluginName)) {
-          this.pluginRoutes.set(pluginName, new Set());
-        }
-        this.pluginRoutes.get(pluginName)!.add(`${method.toUpperCase()} ${routePath}`);
-
-        // 包装 handler，添加插件状态检查
-        const wrappedHandler: express.RequestHandler = (req, res, next) => {
-          // 检查插件是否仍然加载
-          if (!this.plugins.has(pluginName)) {
-            return res.status(503).json({
-              error: 'Service Unavailable',
-              message: `Plugin '${pluginName}' is not loaded`
-            });
-          }
-          return handler(req, res, next);
-        };
-
-        const expressMethod = method.toLowerCase() as PluginRouteMethod;
-        (app[expressMethod] as any).call(app, routePath, wrappedHandler);
-        this.context.logger.debug(`[PLUGIN] ${pluginName} 注册路由 ${method.toUpperCase()} ${routePath}`);
-      },
-      serveStatic: (mountPath: string, rootDir: string) => {
-        const app = this.context.expressApp ?? this.context.httpServer?.getExpressApp();
-        if (!app) {
-          this.context.logger.plugin(`${pluginName} 挂载静态目录失败，HTTP 服务未启用: ${mountPath}`);
-          return;
-        }
-        // 如果 rootDir 是相对路径，相对于插件的 res 目录解析
-        const resolvedDir = path.isAbsolute(rootDir) ? rootDir : path.join(resDir, rootDir);
-        app.use(mountPath, express.static(resolvedDir));
-        this.context.logger.plugin(`${pluginName} 挂载静态目录 ${mountPath} -> ${resolvedDir}`);
-      },
-      getExpressApp: () => this.context.expressApp ?? this.context.httpServer?.getExpressApp(),
-      getPluginConfigDir: () => pluginConfigDir,
-      readPluginConfig: <T = any>() => {
-        if (!fs.existsSync(pluginConfigPath)) {
-          return undefined;
-        }
-        const raw = fs.readFileSync(pluginConfigPath, 'utf8');
-        return yaml.load(raw) as T | undefined;
-      },
-      writePluginConfig: (config: unknown) => {
-        fs.mkdirSync(pluginConfigDir, { recursive: true });
-        fs.writeFileSync(pluginConfigPath, yaml.dump(config), 'utf8');
-      },
-      broadcastWs: (event: string, data: any) => {
-        this.context.webSocketServer?.broadcast(event, data);
-      },
-      registerCommand: (name: string, handler: (...args: string[]) => void | Promise<void>) => {
-        this.commandHandlers.set(name.toLowerCase(), handler);
-      },
-      registerPacketHandler: (registration: PacketHandlerRegistration) => {
-        const list = this.packetHandlers.get(registration.commandType) ?? [];
-        list.push({ ...registration, pluginName });
-        this.packetHandlers.set(registration.commandType, list);
-      },
-      broadcastToRoom: (roomId: string, command: ServerCommand) => this.context.protocolHandler.broadcastToRoomById(roomId, command),
-      sendCommandToUser: (userId: number, command: ServerCommand) => this.context.protocolHandler.sendCommandToUser(userId, command),
-
-      // ========== 服务器数据访问 API ==========
-
-      getOnlinePlayers: () => {
-        const sessions = this.context.protocolHandler.getAllSessions();
-        return sessions.map(session => ({
-          ...session,
-          connectionId: '', // 无法直接获取 connectionId
-          isAdmin: this.isAdminOrOwner(session.id),
-          isOwner: this.context.config.ownerPhiraId.includes(session.id),
-        }));
-      },
-
-      getRooms: () => {
-        return this.context.roomManager.listRooms().map(room => ({
-          id: room.id,
-          name: room.name,
-          playerCount: room.players.size,
-          maxPlayers: room.maxPlayers,
-          state: room.state.type,
-          locked: room.locked,
-          cycle: room.cycle,
-          ownerId: room.ownerId,
-          players: Array.from(room.players.values()).map(p => ({
-            id: p.user.id,
-            name: p.user.name,
-            isReady: p.isReady,
-            isFinished: p.isFinished,
-          })),
-        }));
-      },
-
-      getRoom: (roomId: string) => {
-        const room = this.context.roomManager.getRoom(roomId);
-        if (!room) return undefined;
-
-        return {
-          id: room.id,
-          name: room.name,
-          playerCount: room.players.size,
-          maxPlayers: room.maxPlayers,
-          state: room.state.type,
-          locked: room.locked,
-          cycle: room.cycle,
-          ownerId: room.ownerId,
-          players: Array.from(room.players.values()).map(p => ({
-            id: p.user.id,
-            name: p.user.name,
-            isReady: p.isReady,
-            isFinished: p.isFinished,
-          })),
-        };
-      },
-
-      getServerStats: () => {
-        const used = process.memoryUsage();
-        return {
-          serverName: this.context.config.serverName,
-          onlinePlayers: this.context.protocolHandler.getSessionCount(),
-          roomCount: this.context.roomManager.count(),
-          uptime: process.uptime(),
-          memoryUsage: {
-            rss: Math.round(used.rss / 1024 / 1024 * 100) / 100,
-            heapTotal: Math.round(used.heapTotal / 1024 / 1024 * 100) / 100,
-            heapUsed: Math.round(used.heapUsed / 1024 / 1024 * 100) / 100,
-          },
-        };
-      },
-
-      getBanList: () => {
-        const bans = this.context.banManager.getAllBans();
-        return {
-          idBans: bans.idBans.map(ban => ({
-            ...ban,
-            target: ban.target as number,
-          })),
-          ipBans: bans.ipBans.map(ban => ({
-            ...ban,
-            target: ban.target as string,
-          })),
-        };
-      },
-
-      isUserAdmin: (userId: number) => {
-        return this.isAdminOrOwner(userId);
-      },
-
-      isUserOwner: (userId: number) => {
-        return this.context.config.ownerPhiraId.includes(userId);
-      },
-
-      getPlayer: (userId: number) => {
-        const sessions = this.context.protocolHandler.getAllSessions();
-        const session = sessions.find(s => s.id === userId);
-        if (!session) return undefined;
-
-        const room = this.context.roomManager.getRoomByUserId(userId);
-
-        return {
-          ...session,
-          connectionId: '', // 无法直接获取 connectionId
-          roomId: room?.id,
-          roomName: room?.name,
-          isAdmin: this.isAdminOrOwner(userId),
-          isOwner: this.context.config.ownerPhiraId.includes(userId),
-        };
-      },
-
-      sendServerMessage: (roomId: string, content: string) => {
-        this.context.protocolHandler.sendServerMessage(roomId, content);
-      },
-
-      kickPlayer: (userId: number) => {
-        return this.context.protocolHandler.kickPlayer(userId);
-      },
-
-      banPlayer: (userId: number, duration: number | null, reason: string, adminName?: string) => {
-        this.context.banManager.banId(userId, duration, reason, adminName);
-        this.context.protocolHandler.kickPlayer(userId);
-      },
-
-      unbanPlayer: (userId: number, adminName?: string) => {
-        return this.context.banManager.unbanId(userId, adminName);
-      },
-
-      banIp: (ip: string, duration: number | null, reason: string, adminName?: string) => {
-        this.context.banManager.banIp(ip, duration, reason, adminName);
-        this.context.protocolHandler.kickIp(ip);
-      },
-
-      unbanIp: (ip: string, adminName?: string) => {
-        return this.context.banManager.unbanIp(ip, adminName);
-      },
-
-      forceStartGame: (roomId: string) => {
-        return this.context.protocolHandler.forceStartGame(roomId);
-      },
-
-      toggleRoomLock: (roomId: string) => {
-        return this.context.protocolHandler.toggleRoomLock(roomId);
-      },
-
-      setRoomMaxPlayers: (roomId: string, maxPlayers: number) => {
-        return this.context.protocolHandler.setRoomMaxPlayers(roomId, maxPlayers);
-      },
-
-      closeRoom: (roomId: string) => {
-        return this.context.protocolHandler.closeRoomByAdmin(roomId);
-      },
-    };
+    return createPluginApi(this, pluginName, resDir);
   }
 
-  private isAdminOrOwner(userId: number): boolean {
-    return (
-      this.context.config.adminPhiraId.includes(userId) ||
-      this.context.config.ownerPhiraId.includes(userId)
-    );
-  }
 }
+
