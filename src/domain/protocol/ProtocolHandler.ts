@@ -1,7 +1,7 @@
 /*
  * MIT License
  * Copyright (c) 2024
- * 
+ *
  * IMPORTANT: This file must match phira-mp-server/src/session.rs logic exactly
  * Source: https://github.com/TeamFlos/phira-mp/blob/main/phira-mp-server/src/session.rs:376-712
  */
@@ -17,16 +17,29 @@ import {
   ServerCommandType,
   UserInfo,
   ClientRoomState,
-  JoinRoomResponse,
   Message,
-  PlayerRanking,
 } from './Commands';
 import { PluginManager } from '../../plugins';
 import { handleAuthenticate } from './handlers/auth';
 import { handleChat } from './handlers/chat';
 import { handleTouches, handleJudges } from './handlers/input';
-import { handleCreateRoom, handleJoinRoom, handleLeaveRoom, handleLockRoom, handleCycleRoom } from './handlers/room';
-import { handleSelectChart, handleRequestStart, handleReady, handleCancelReady, handlePlayed, handleAbort, checkGameEnd, endGame } from './handlers/game';
+import {
+  handleCreateRoom,
+  handleJoinRoom,
+  handleLeaveRoom,
+  handleLockRoom,
+  handleCycleRoom,
+} from './handlers/room';
+import {
+  handleSelectChart,
+  handleRequestStart,
+  handleReady,
+  handleCancelReady,
+  handlePlayed,
+  handleAbort,
+  checkGameEnd,
+  endGame,
+} from './handlers/game';
 
 interface UserSession {
   userId: number;
@@ -79,7 +92,7 @@ export class ProtocolHandler {
 
   public setFederationManager(fm: any): void {
     this.federationManager = fm;
-    this.federationEnabled = !!(fm?.getConfig?.()?.enabled);
+    this.federationEnabled = !!fm?.getConfig?.()?.enabled;
   }
 
   public setPluginManager(pluginManager: PluginManager): void {
@@ -102,7 +115,10 @@ export class ProtocolHandler {
     this.broadcastCallbacks.set(connectionId, broadcastCallback);
     this.userConnections.set(userId, connectionId);
     this.onSessionChange?.();
-    this.logger.debug(`[虚拟] 已创建虚拟会话: ${connectionId} (用户: ${userInfo.name}, ID: ${userId})`, { userId });
+    this.logger.debug(
+      `[虚拟] 已创建虚拟会话: ${connectionId} (用户: ${userInfo.name}, ID: ${userId})`,
+      { userId },
+    );
   }
 
   /** 移除虚拟会话 */
@@ -158,18 +174,24 @@ export class ProtocolHandler {
   }
 
   public kickIp(ip: string): void {
-    const connectionsToKick = Array.from(this.connectionIps.entries())
-      .filter(([_, connIp]) => connIp === ip);
-    
+    const connectionsToKick = Array.from(this.connectionIps.entries()).filter(
+      ([_, connIp]) => connIp === ip,
+    );
+
     for (const [connectionId, _] of connectionsToKick) {
       const session = this.sessions.get(connectionId);
       if (session) {
-        this.logger.info(`IP ${ip} 已被封禁，正在踢出玩家 ${session.userId} (${session.userInfo.name})`, { userId: -1 });
+        this.logger.info(
+          `IP ${ip} 已被封禁，正在踢出玩家 ${session.userId} (${session.userInfo.name})`,
+          { userId: -1 },
+        );
         this.kickPlayer(session.userId);
       } else {
         const closer = this.connectionClosers.get(connectionId);
         if (closer) {
-          this.logger.info(`IP ${ip} 已被封禁，正在强制断开未验证连接 ${connectionId}`, { userId: -1 });
+          this.logger.info(`IP ${ip} 已被封禁，正在强制断开未验证连接 ${connectionId}`, {
+            userId: -1,
+          });
           closer();
         }
       }
@@ -191,69 +213,69 @@ export class ProtocolHandler {
   public kickPlayer(userId: number): boolean {
     const connectionId = this.userConnections.get(userId);
     const room = this.roomManager.getRoomByUserId(userId);
-    
+
     if (room) {
-        const userInfo = room.players.get(userId)?.user;
-        const userName = userInfo?.name || `ID: ${userId}`;
-        const wasHost = room.ownerId === userId;
+      const userInfo = room.players.get(userId)?.user;
+      const userName = userInfo?.name || `ID: ${userId}`;
+      const wasHost = room.ownerId === userId;
 
-        // 1. Notify the room with standard LeaveRoom message
-        this.broadcastMessage(room, {
-          type: 'LeaveRoom',
-          user: userId,
-          name: userName,
+      // 1. Notify the room with standard LeaveRoom message
+      this.broadcastMessage(room, {
+        type: 'LeaveRoom',
+        user: userId,
+        name: userName,
+      });
+
+      // 2. Also send a system chat for clarity
+      this.broadcastMessage(room, {
+        type: 'Chat',
+        user: -1,
+        content: `【系统】管理员已将玩家 ${userName} 移出房间`,
+      });
+
+      // 3. Force the player's client to leave by sending the LeaveRoom response
+      if (connectionId) {
+        const callback = this.broadcastCallbacks.get(connectionId);
+        if (callback) {
+          callback({
+            type: ServerCommandType.LeaveRoom,
+            result: { ok: true, value: undefined },
+          });
+        }
+      }
+
+      // 4. Remove from room
+      this.roomManager.removePlayerFromRoom(room.id, userId);
+
+      // 5. Handle Host Migration if necessary
+      const updatedRoom = this.roomManager.getRoom(room.id);
+      if (updatedRoom && wasHost && updatedRoom.ownerId !== userId) {
+        this.broadcastMessage(updatedRoom, {
+          type: 'NewHost',
+          user: updatedRoom.ownerId,
         });
 
-        // 2. Also send a system chat for clarity
-        this.broadcastMessage(room, {
-          type: 'Chat',
-          user: -1,
-          content: `【系统】管理员已将玩家 ${userName} 移出房间`,
-        });
-
-        // 3. Force the player's client to leave by sending the LeaveRoom response
-        if (connectionId) {
-          const callback = this.broadcastCallbacks.get(connectionId);
+        for (const playerInfo of updatedRoom.players.values()) {
+          const isHost = playerInfo.user.id === updatedRoom.ownerId;
+          const callback = this.broadcastCallbacks.get(playerInfo.connectionId);
           if (callback) {
             callback({
-              type: ServerCommandType.LeaveRoom,
-              result: { ok: true, value: undefined },
+              type: ServerCommandType.ChangeHost,
+              isHost,
             });
           }
         }
-
-        // 4. Remove from room
-        this.roomManager.removePlayerFromRoom(room.id, userId);
-
-        // 5. Handle Host Migration if necessary
-        const updatedRoom = this.roomManager.getRoom(room.id);
-        if (updatedRoom && wasHost && updatedRoom.ownerId !== userId) {
-          this.broadcastMessage(updatedRoom, {
-            type: 'NewHost',
-            user: updatedRoom.ownerId,
-          });
-
-          for (const playerInfo of updatedRoom.players.values()) {
-            const isHost = playerInfo.user.id === updatedRoom.ownerId;
-            const callback = this.broadcastCallbacks.get(playerInfo.connectionId);
-            if (callback) {
-              callback({
-                type: ServerCommandType.ChangeHost,
-                isHost,
-              });
-            }
-          }
-        }
+      }
     }
 
     // Force Disconnect from Server (whether in room or not)
     if (connectionId) {
-        const closer = this.connectionClosers.get(connectionId);
-        if (closer) {
-            this.logger.info(`管理员已强制断开玩家 ${userId} 的连接`, { userId: -1 });
-            closer();
-        }
-        return true;
+      const closer = this.connectionClosers.get(connectionId);
+      if (closer) {
+        this.logger.info(`管理员已强制断开玩家 ${userId} 的连接`, { userId: -1 });
+        closer();
+      }
+      return true;
     }
 
     return room !== undefined;
@@ -290,7 +312,7 @@ export class ProtocolHandler {
           maxCombo: 0,
           finishTime: Date.now(),
         };
-        
+
         this.broadcastMessage(room, {
           type: 'Abort',
           user: playerInfo.user.id,
@@ -299,16 +321,16 @@ export class ProtocolHandler {
     }
 
     this.roomManager.setRoomState(room.id, { type: 'Playing' });
-    
+
     // Broadcast messages to the room
     this.broadcastMessage(room, {
       type: 'Chat',
       user: -1,
       content: '【系统】管理员已强制开始游戏',
     });
-    
+
     this.broadcastMessage(room, { type: 'StartPlaying' });
-    
+
     this.broadcastToRoom(room, {
       type: ServerCommandType.ChangeState,
       state: { type: 'Playing' },
@@ -343,7 +365,9 @@ export class ProtocolHandler {
       content: `【系统】管理员已${newLockState ? '锁定' : '解锁'}了房间`,
     });
 
-    this.logger.info(`管理员已将房间 “${roomId}” 的锁定状态修改为: ${newLockState}`, { userId: -1 });
+    this.logger.info(`管理员已将房间 “${roomId}” 的锁定状态修改为: ${newLockState}`, {
+      userId: -1,
+    });
     return true;
   }
 
@@ -407,7 +431,9 @@ export class ProtocolHandler {
       content: `【系统】管理员已将房间模式更改为 ${modeName}`,
     });
 
-    this.logger.info(`管理员已将房间 “${roomId}” 的循环状态切换为: ${newCycleState}`, { userId: -1 });
+    this.logger.info(`管理员已将房间 “${roomId}” 的循环状态切换为: ${newCycleState}`, {
+      userId: -1,
+    });
     return true;
   }
 
@@ -421,47 +447,51 @@ export class ProtocolHandler {
     // Fetch names for the blacklist report
     const blacklistDetails: string[] = [];
     for (const id of userIds) {
-        if (isNaN(Number(id))) continue; // SSRF 防护：严格数字校验
-        try {
-            const response = await fetch(`https://phira.5wyxi.com/user/${id}`, {
-                headers: { 'User-Agent': 'PhiraServer/1.0' },
-                redirect: 'error'
-            });
-            if (response.ok) {
-                const data = await response.json() as any;
-                blacklistDetails.push(`${data.name} (${id})`);
-            } else {
-                blacklistDetails.push(`未知用户 (${id})`);
-            }
-        } catch (error) {
-            blacklistDetails.push(`获取失败 (${id})`);
+      if (isNaN(Number(id))) continue; // SSRF 防护：严格数字校验
+      try {
+        const response = await fetch(`https://phira.5wyxi.com/user/${id}`, {
+          headers: { 'User-Agent': 'PhiraServer/1.0' },
+          redirect: 'error',
+        });
+        if (response.ok) {
+          const data = (await response.json()) as any;
+          blacklistDetails.push(`${data.name} (${id})`);
+        } else {
+          blacklistDetails.push(`未知用户 (${id})`);
         }
+      } catch (error) {
+        blacklistDetails.push(`获取失败 (${id})`);
+      }
     }
 
     // Broadcast update message
     let content = `【系统】黑名单已被更新，目前有 ${userIds.length} 人，分别是：`;
     if (blacklistDetails.length > 0) {
-        content += `\n=========BlackList==========\n${blacklistDetails.join('\n')}\n=========BlackList==========`;
+      content += `\n=========BlackList==========\n${blacklistDetails.join('\n')}\n=========BlackList==========`;
     } else {
-        content += ' (空)';
+      content += ' (空)';
     }
 
     this.broadcastMessage(room, {
-        type: 'Chat',
-        user: -1,
-        content: content
+      type: 'Chat',
+      user: -1,
+      content: content,
     });
 
     // Check currently in-room players and kick if blacklisted
     const currentPlayers = Array.from(room.players.values());
     for (const player of currentPlayers) {
       if (userIds.includes(player.user.id)) {
-        this.logger.info(`管理员在房间 “${roomId}” 强制踢出黑名单玩家: ${player.user.id}`, { userId: -1 });
+        this.logger.info(`管理员在房间 “${roomId}” 强制踢出黑名单玩家: ${player.user.id}`, {
+          userId: -1,
+        });
         this.kickPlayer(player.user.id);
       }
     }
 
-    this.logger.info(`管理员更新了房间 “${roomId}” 的黑名单，当前人数: ${userIds.length}`, { userId: -1 });
+    this.logger.info(`管理员更新了房间 “${roomId}” 的黑名单，当前人数: ${userIds.length}`, {
+      userId: -1,
+    });
     return true;
   }
 
@@ -475,56 +505,67 @@ export class ProtocolHandler {
     // Fetch names for the whitelist report
     const whitelistDetails: string[] = [];
     for (const id of userIds) {
-        if (isNaN(Number(id))) continue; // SSRF 防护：严格数字校验
-        try {
-            const response = await fetch(`https://phira.5wyxi.com/user/${id}`, {
-                headers: { 'User-Agent': 'PhiraServer/1.0' },
-                redirect: 'error'
-            });
-            if (response.ok) {
-                const data = await response.json() as any;
-                whitelistDetails.push(`${data.name} (${id})`);
-            } else {
-                whitelistDetails.push(`未知用户 (${id})`);
-            }
-        } catch (error) {
-            whitelistDetails.push(`获取失败 (${id})`);
+      if (isNaN(Number(id))) continue; // SSRF 防护：严格数字校验
+      try {
+        const response = await fetch(`https://phira.5wyxi.com/user/${id}`, {
+          headers: { 'User-Agent': 'PhiraServer/1.0' },
+          redirect: 'error',
+        });
+        if (response.ok) {
+          const data = (await response.json()) as any;
+          whitelistDetails.push(`${data.name} (${id})`);
+        } else {
+          whitelistDetails.push(`未知用户 (${id})`);
         }
+      } catch (error) {
+        whitelistDetails.push(`获取失败 (${id})`);
+      }
     }
 
     // Broadcast update message
     let content = `【系统】白名单已被更新，目前有 ${userIds.length} 人，分别是：`;
     if (whitelistDetails.length > 0) {
-        content += `\n=========WhiteList==========\n${whitelistDetails.join('\n')}\n=========WhiteList==========`;
+      content += `\n=========WhiteList==========\n${whitelistDetails.join('\n')}\n=========WhiteList==========`;
     } else {
-        content += ' (空，全员可进)';
+      content += ' (空，全员可进)';
     }
 
     this.broadcastMessage(room, {
-        type: 'Chat',
-        user: -1,
-        content: content
+      type: 'Chat',
+      user: -1,
+      content: content,
     });
 
     // Enforcement: Kick anyone NOT in the whitelist (if whitelist is active)
     if (userIds.length > 0) {
-        const currentPlayers = Array.from(room.players.values());
-        for (const player of currentPlayers) {
-            const userId = player.user.id;
-            // Don't kick the room owner or the server user (-1) or those in whitelist
-            if (userId !== room.ownerId && userId !== -1 && !userIds.includes(userId)) {
-                this.logger.info(`管理员在房间 “${roomId}” 强制踢出非白名单玩家: ${userId}`, { userId: -1 });
-                this.kickPlayer(userId);
-            }
+      const currentPlayers = Array.from(room.players.values());
+      for (const player of currentPlayers) {
+        const userId = player.user.id;
+        // Don't kick the room owner or the server user (-1) or those in whitelist
+        if (userId !== room.ownerId && userId !== -1 && !userIds.includes(userId)) {
+          this.logger.info(`管理员在房间 “${roomId}” 强制踢出非白名单玩家: ${userId}`, {
+            userId: -1,
+          });
+          this.kickPlayer(userId);
         }
+      }
     }
 
-    this.logger.info(`管理员更新了房间 “${roomId}” 的白名单，当前人数: ${userIds.length}`, { userId: -1 });
+    this.logger.info(`管理员更新了房间 “${roomId}” 的白名单，当前人数: ${userIds.length}`, {
+      userId: -1,
+    });
     return true;
   }
 
-  public getAllSessions(): { id: number; name: string; roomId?: string; roomName?: string; ip: string }[] {
-    const sessions: { id: number; name: string; roomId?: string; roomName?: string; ip: string }[] = [];
+  public getAllSessions(): {
+    id: number;
+    name: string;
+    roomId?: string;
+    roomName?: string;
+    ip: string;
+  }[] {
+    const sessions: { id: number; name: string; roomId?: string; roomName?: string; ip: string }[] =
+      [];
     for (const session of this.sessions.values()) {
       const room = this.roomManager.getRoomByUserId(session.userId);
       sessions.push({
@@ -564,9 +605,13 @@ export class ProtocolHandler {
 
     // 联邦：广播房间事件消息
     if (this.federationEnabled) {
-      this.federationManager.broadcastRoomEvent('room_updated', room.id,
-        this.federationManager.buildLocalRoomInfo(room)
-      ).catch(() => {});
+      this.federationManager
+        .broadcastRoomEvent(
+          'room_updated',
+          room.id,
+          this.federationManager.buildLocalRoomInfo(room),
+        )
+        .catch(() => {});
     }
   }
 
@@ -578,7 +623,10 @@ export class ProtocolHandler {
       const callback = this.broadcastCallbacks.get(playerInfo.connectionId);
       if (callback) {
         callback(command);
-        this.logger.debug(`广播命令给客户端: ${playerInfo.connectionId} (${ServerCommandType[command.type]})`, { userId: playerInfo.user.id });
+        this.logger.debug(
+          `广播命令给客户端: ${playerInfo.connectionId} (${ServerCommandType[command.type]})`,
+          { userId: playerInfo.user.id },
+        );
       }
     }
   }
@@ -596,47 +644,58 @@ export class ProtocolHandler {
   private async fetchChartInfo(chartId: number): Promise<ChartInfo> {
     if (isNaN(Number(chartId))) throw new Error('Invalid chart ID');
     this.logger.debug(`正在获取谱面信息: ${chartId}`, { userId: -1 });
-    
+
     const response = await fetch(`https://phira.5wyxi.com/chart/${chartId}`, {
-        headers: { 'User-Agent': 'PhiraServer/1.0' },
-        redirect: 'error'
+      headers: { 'User-Agent': 'PhiraServer/1.0' },
+      redirect: 'error',
     });
-    
+
     if (!response.ok) {
       throw new Error(`API返回了一个神秘的状态： ${response.status}`);
     }
-    
-    const chartData = await response.json() as any;
-    
+
+    const chartData = (await response.json()) as any;
+
     // Explicitly extract uploader ID as a number
     const rawUploader = chartData.uploader ?? chartData.uploaderId;
-    const uploaderId = rawUploader !== undefined && rawUploader !== null ? Number(rawUploader) : undefined;
-    
-    this.logger.debug(`谱面 API 响应: ${chartData.name} (ID: ${chartId}, 上传者: ${uploaderId})`, { userId: -1 });
-    
+    const uploaderId =
+      rawUploader !== undefined && rawUploader !== null ? Number(rawUploader) : undefined;
+
+    this.logger.debug(`谱面 API 响应: ${chartData.name} (ID: ${chartId}, 上传者: ${uploaderId})`, {
+      userId: -1,
+    });
+
     let uploaderInfo;
     if (uploaderId && !isNaN(Number(uploaderId))) {
-        try {
-            const userResponse = await fetch(`https://phira.5wyxi.com/user/${uploaderId}`, {
-                headers: { 'User-Agent': 'PhiraServer/1.0' },
-                redirect: 'error'
-            });
-            if (userResponse.ok) {
-                const userData = await userResponse.json() as any;
-                uploaderInfo = {
-                    id: userData.id,
-                    name: userData.name,
-                    avatar: userData.avatar ?? this.defaultAvatar,
-                    rks: userData.rks ?? 0,
-                    bio: userData.bio,
-                };
-                this.logger.debug(`成功获取上传者信息: ${userData.name} (ID: ${uploaderId})`, { userId: -1 });
-            } else {
-                this.logger.warn(`获取上传者信息失败: API 返回 ${userResponse.status} (ID: ${uploaderId})`, { userId: -1 });
-            }
-        } catch (error) {
-            this.logger.error(`获取上传者信息出错: ${error instanceof Error ? error.message : String(error)} (ID: ${uploaderId})`, { userId: -1 });
+      try {
+        const userResponse = await fetch(`https://phira.5wyxi.com/user/${uploaderId}`, {
+          headers: { 'User-Agent': 'PhiraServer/1.0' },
+          redirect: 'error',
+        });
+        if (userResponse.ok) {
+          const userData = (await userResponse.json()) as any;
+          uploaderInfo = {
+            id: userData.id,
+            name: userData.name,
+            avatar: userData.avatar ?? this.defaultAvatar,
+            rks: userData.rks ?? 0,
+            bio: userData.bio,
+          };
+          this.logger.debug(`成功获取上传者信息: ${userData.name} (ID: ${uploaderId})`, {
+            userId: -1,
+          });
+        } else {
+          this.logger.warn(
+            `获取上传者信息失败: API 返回 ${userResponse.status} (ID: ${uploaderId})`,
+            { userId: -1 },
+          );
         }
+      } catch (error) {
+        this.logger.error(
+          `获取上传者信息出错: ${error instanceof Error ? error.message : String(error)} (ID: ${uploaderId})`,
+          { userId: -1 },
+        );
+      }
     }
 
     return {
@@ -654,9 +713,16 @@ export class ProtocolHandler {
     };
   }
 
-  handleConnection(connectionId: string, closeConnection?: () => void, ip: string = 'unknown'): void {
-    this.logger.debug(`建立新连接: ${connectionId} (${ip}) (当前房间总数: ${this.roomManager.count()})`, { userId: -1 });
-    
+  handleConnection(
+    connectionId: string,
+    closeConnection?: () => void,
+    ip: string = 'unknown',
+  ): void {
+    this.logger.debug(
+      `建立新连接: ${connectionId} (${ip}) (当前房间总数: ${this.roomManager.count()})`,
+      { userId: -1 },
+    );
+
     if (closeConnection) {
       this.connectionClosers.set(connectionId, closeConnection);
     }
@@ -679,7 +745,10 @@ export class ProtocolHandler {
         }
         this.broadcastCallbacks.delete(connectionId);
         this.onSessionChange?.();
-        this.logger.info(`[联邦断线] 代理玩家 ${session.userInfo.name} (${session.userId}) 已断开`, { userId: session.userId });
+        this.logger.info(
+          `[联邦断线] 代理玩家 ${session.userInfo.name} (${session.userId}) 已断开`,
+          { userId: session.userId },
+        );
         return;
       }
 
@@ -688,11 +757,14 @@ export class ProtocolHandler {
         const roomId = room.id;
         const wasPlaying = room.state.type === 'Playing';
         const wasHost = room.ownerId === session.userId;
-        
+
         if (wasPlaying) {
           const player = room.players.get(session.userId);
           if (player && !player.isFinished) {
-            this.logger.info(`[断线] 玩家 “${session.userInfo.name}” (ID: ${session.userId}) 在房间 “${room.id}” 游戏中途断线，已标记为放弃`, { userId: session.userId });
+            this.logger.info(
+              `[断线] 玩家 “${session.userInfo.name}” (ID: ${session.userId}) 在房间 “${room.id}” 游戏中途断线，已标记为放弃`,
+              { userId: session.userId },
+            );
 
             player.isFinished = true;
             player.score = {
@@ -705,20 +777,22 @@ export class ProtocolHandler {
               maxCombo: 0,
               finishTime: Date.now(),
             };
-            
+
             this.broadcastMessage(room, {
               type: 'Abort',
               user: session.userId,
             });
           }
         }
-        
+
         this.roomManager.removePlayerFromRoom(roomId, session.userId);
-        
+
         const updatedRoom = this.roomManager.getRoom(roomId);
 
         if (updatedRoom) {
-          updatedRoom.live = Array.from(updatedRoom.players.values()).some((playerInfo) => playerInfo.user.monitor);
+          updatedRoom.live = Array.from(updatedRoom.players.values()).some(
+            (playerInfo) => playerInfo.user.monitor,
+          );
         }
 
         // 处理房主转移广播
@@ -753,11 +827,17 @@ export class ProtocolHandler {
         // 广播给联邦节点
         if (this.federationEnabled) {
           if (updatedRoom) {
-            this.federationManager.broadcastRoomEvent('room_updated', roomId, 
-              this.federationManager.buildLocalRoomInfo(updatedRoom)
-            ).catch(() => {});
+            this.federationManager
+              .broadcastRoomEvent(
+                'room_updated',
+                roomId,
+                this.federationManager.buildLocalRoomInfo(updatedRoom),
+              )
+              .catch(() => {});
           } else {
-            this.federationManager.broadcastRoomEvent('room_deleted', roomId, { id: roomId }).catch(() => {});
+            this.federationManager
+              .broadcastRoomEvent('room_deleted', roomId, { id: roomId })
+              .catch(() => {});
           }
         }
 
@@ -767,7 +847,7 @@ export class ProtocolHandler {
           }
         }
       }
-      
+
       if (this.userConnections.get(session.userId) === connectionId) {
         this.userConnections.delete(session.userId);
       }
@@ -781,7 +861,10 @@ export class ProtocolHandler {
       user: session?.userInfo,
       ip: session?.ip ?? this.connectionIps.get(connectionId),
     });
-    this.logger.debug(`[断线] 连接已断开: ${connectionId}${session ? ` (用户: ${session.userInfo.name} ID: ${session.userId})` : ''}`, { userId: session?.userId });
+    this.logger.debug(
+      `[断线] 连接已断开: ${connectionId}${session ? ` (用户: ${session.userInfo.name} ID: ${session.userId})` : ''}`,
+      { userId: session?.userId },
+    );
   }
 
   handleMessage(
@@ -790,7 +873,9 @@ export class ProtocolHandler {
     sendResponse: (response: ServerCommand) => void,
   ): void {
     const session = this.sessions.get(connectionId);
-    this.logger.debug(`收到消息: ${connectionId} (类型: ${ClientCommandType[message.type]})`, { userId: session?.userId });
+    this.logger.debug(`收到消息: ${connectionId} (类型: ${ClientCommandType[message.type]})`, {
+      userId: session?.userId,
+    });
 
     // 联邦连接不覆盖广播回调（保持联邦HTTP回调）
     if (!connectionId.startsWith('federation:')) {
@@ -870,7 +955,10 @@ export class ProtocolHandler {
         break;
 
       default:
-        this.logger.warn(`收到未知的指令类型: ${connectionId} (类型: ${ClientCommandType[message.type]})`, { userId: session?.userId });
+        this.logger.warn(
+          `收到未知的指令类型: ${connectionId} (类型: ${ClientCommandType[message.type]})`,
+          { userId: session?.userId },
+        );
         break;
     }
 
@@ -880,21 +968,28 @@ export class ProtocolHandler {
   private async fetchUserInfo(userId: number): Promise<{ rks?: number; bio?: string }> {
     if (isNaN(Number(userId))) return {};
     try {
-        const response = await fetch(`https://phira.5wyxi.com/user/${userId}`, {
-            headers: { 'User-Agent': 'PhiraServer/1.0' },
-            redirect: 'error'
-        });
-        if (response.ok) {
-            const userData = await response.json() as any;
-            return { rks: userData.rks ?? 0, bio: userData.bio };
-        }
+      const response = await fetch(`https://phira.5wyxi.com/user/${userId}`, {
+        headers: { 'User-Agent': 'PhiraServer/1.0' },
+        redirect: 'error',
+      });
+      if (response.ok) {
+        const userData = (await response.json()) as any;
+        return { rks: userData.rks ?? 0, bio: userData.bio };
+      }
     } catch (error) {
-        this.logger.error(`获取用户详细信息失败: ${error instanceof Error ? error.message : String(error)} (ID: ${userId})`, { userId: -1 });
+      this.logger.error(
+        `获取用户详细信息失败: ${error instanceof Error ? error.message : String(error)} (ID: ${userId})`,
+        { userId: -1 },
+      );
     }
     return {};
   }
 
-  private handleAuthenticate(connectionId: string, token: string, sendResponse: (response: ServerCommand) => void): void {
+  private handleAuthenticate(
+    connectionId: string,
+    token: string,
+    sendResponse: (response: ServerCommand) => void,
+  ): void {
     handleAuthenticate(this as any, connectionId, token, sendResponse);
   }
 
@@ -969,10 +1064,7 @@ export class ProtocolHandler {
     handleRequestStart(this as any, connectionId, sendResponse);
   }
 
-  private handleReady(
-    connectionId: string,
-    sendResponse: (response: ServerCommand) => void,
-  ): void {
+  private handleReady(connectionId: string, sendResponse: (response: ServerCommand) => void): void {
     handleReady(this as any, connectionId, sendResponse);
   }
 
@@ -991,10 +1083,7 @@ export class ProtocolHandler {
     await handlePlayed(this as any, connectionId, recordId, sendResponse);
   }
 
-  private handleAbort(
-    connectionId: string,
-    sendResponse: (response: ServerCommand) => void,
-  ): void {
+  private handleAbort(connectionId: string, sendResponse: (response: ServerCommand) => void): void {
     handleAbort(this as any, connectionId, sendResponse);
   }
 
@@ -1007,7 +1096,10 @@ export class ProtocolHandler {
   }
 
   public broadcastRoomUpdate(room: Room): void {
-    this.logger.info(`[广播] 房间 “${room.id}” 状态更新 (${room.state.type})，广播人数：${room.players.size}`, { userId: -1 });
+    this.logger.info(
+      `[广播] 房间 “${room.id}” 状态更新 (${room.state.type})，广播人数：${room.players.size}`,
+      { userId: -1 },
+    );
 
     this.broadcastToRoom(room, {
       type: ServerCommandType.ChangeState,

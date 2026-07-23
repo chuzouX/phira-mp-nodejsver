@@ -31,11 +31,11 @@ export interface ChartInfo {
   rating?: number;
   ratingCount?: number;
   uploaderInfo?: {
-      id: number;
-      name: string;
-      avatar: string;
-      rks: number;
-      bio?: string;
+    id: number;
+    name: string;
+    avatar: string;
+    rks: number;
+    bio?: string;
   };
   // Add other chart fields as needed from the API response
 }
@@ -76,7 +76,12 @@ export interface RoomManager {
   deleteRoom(id: string): boolean;
   listRooms(): Room[];
   count(): number;
-  addPlayerToRoom(roomId: string, userId: number, userInfo: UserInfo, connectionId: string): boolean;
+  addPlayerToRoom(
+    roomId: string,
+    userId: number,
+    userInfo: UserInfo,
+    connectionId: string,
+  ): boolean;
   removePlayerFromRoom(roomId: string, userId: number): boolean;
   removePlayerFromAllRooms(userId: number): void;
   getRoomByUserId(userId: number): Room | undefined;
@@ -142,7 +147,6 @@ export class InMemoryRoomManager implements RoomManager {
     return allPlayers;
   }
 
-
   private notifyRoomsChanged(): void {
     if (this.onRoomsChanged) {
       this.onRoomsChanged();
@@ -150,7 +154,15 @@ export class InMemoryRoomManager implements RoomManager {
   }
 
   createRoom(options: CreateRoomOptions): Room {
-    const { id, name, ownerId, ownerInfo, connectionId, maxPlayers = this.roomSize, password } = options;
+    const {
+      id,
+      name,
+      ownerId,
+      ownerInfo,
+      connectionId,
+      maxPlayers = this.roomSize,
+      password,
+    } = options;
 
     if (this.globalLocked) {
       throw new Error('服务器当前已禁止创建新房间');
@@ -251,7 +263,9 @@ export class InMemoryRoomManager implements RoomManager {
     }
 
     if (room.whitelist.length > 0 && !room.whitelist.includes(userId)) {
-      this.logger.warn(`无法将玩家 ${userId} 加入到有白名单限制的房间 “${roomId}” (不在名单内)`, { userId });
+      this.logger.warn(`无法将玩家 ${userId} 加入到有白名单限制的房间 “${roomId}” (不在名单内)`, {
+        userId,
+      });
       return false;
     }
 
@@ -272,7 +286,9 @@ export class InMemoryRoomManager implements RoomManager {
     });
 
     this.userRoomIndex.set(userId, roomId);
-    this.logger.debug(`已添加玩家 ${userId} 到房间 "${roomId}" (当前人数: ${room.players.size})`, { userId });
+    this.logger.debug(`已添加玩家 ${userId} 到房间 "${roomId}" (当前人数: ${room.players.size})`, {
+      userId,
+    });
     this.notifyRoomsChanged();
     return true;
   }
@@ -433,7 +449,7 @@ export class InMemoryRoomManager implements RoomManager {
     }
 
     if (emptyRooms.length > 0) {
-        this.logger.info(`已清理 ${emptyRooms.length} 个空房间`, { userId: -1 });
+      this.logger.info(`已清理 ${emptyRooms.length} 个空房间`, { userId: -1 });
     }
     emptyRooms.forEach((id) => this.deleteRoom(id));
   }
@@ -441,13 +457,19 @@ export class InMemoryRoomManager implements RoomManager {
   migrateConnection(userId: number, oldConnectionId: string, newConnectionId: string): void {
     const room = this.getRoomByUserId(userId);
     if (!room) {
-      this.logger.warn(`[重连迁移] 找不到玩家 ${userId} 的房间 (连接: ${oldConnectionId} -> ${newConnectionId})`, { userId });
+      this.logger.warn(
+        `[重连迁移] 找不到玩家 ${userId} 的房间 (连接: ${oldConnectionId} -> ${newConnectionId})`,
+        { userId },
+      );
       return;
     }
 
     const player = room.players.get(userId);
     if (!player) {
-      this.logger.warn(`[重连迁移] 在房间 “${room.id}” 中找不到玩家 ${userId} (连接: ${oldConnectionId} -> ${newConnectionId})`, { userId });
+      this.logger.warn(
+        `[重连迁移] 在房间 “${room.id}” 中找不到玩家 ${userId} (连接: ${oldConnectionId} -> ${newConnectionId})`,
+        { userId },
+      );
       return;
     }
 
@@ -456,7 +478,10 @@ export class InMemoryRoomManager implements RoomManager {
     player.isConnected = true;
     player.disconnectTime = undefined;
 
-    this.logger.info(`[重连迁移] 玩家 ${userId} 的连接已从 ${oldConnectionId} 迁移至 ${newConnectionId} (房间 “${room.id}”)`, { userId });
+    this.logger.info(
+      `[重连迁移] 玩家 ${userId} 的连接已从 ${oldConnectionId} 迁移至 ${newConnectionId} (房间 “${room.id}”)`,
+      { userId },
+    );
   }
 
   setSoloConfirmPending(roomId: string, pending: boolean): boolean {

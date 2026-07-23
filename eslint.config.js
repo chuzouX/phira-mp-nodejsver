@@ -6,15 +6,31 @@ const globals = require('globals');
 
 module.exports = [
   {
-    ignores: ['dist/**', 'node_modules/**', 'outputs/**', 'plugins/**/*.js'],
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'outputs/**',
+      'coverage/**',
+      'tools/**',
+      'scripts/**',
+      'eslint.config.js',
+      'jest.config.js',
+      'plugins/**/*.js',
+      'plugins/server-control/res/public/**',
+    ],
   },
   ...tseslint.configs['flat/recommended'],
   {
-    files: ['src/**/*.ts', 'plugins/**/*.ts', 'test/**/*.ts'],
+    files: ['src/**/*.ts', 'plugins/**/*.ts', 'test/**/*.ts', 'plugin-api.d.ts'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
-        project: true,
+        project: [
+          './tsconfig.json',
+          './tsconfig.test.json',
+          './plugins/tsconfig.json',
+          './plugins/server-control/ui/tsconfig.json',
+        ],
         tsconfigRootDir: __dirname,
       },
       globals: {
@@ -27,6 +43,16 @@ module.exports = [
     },
     rules: {
       'prettier/prettier': 'warn',
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-require-imports': 'warn',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          caughtErrors: 'none',
+          destructuredArrayIgnorePattern: '^_',
+        },
+      ],
     },
   },
   prettierConfig,

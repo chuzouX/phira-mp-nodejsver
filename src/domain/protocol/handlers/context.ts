@@ -1,16 +1,10 @@
 import { RoomManager, Room, ChartInfo } from '../../rooms/RoomManager';
-import { Message, PlayerRanking } from '../Commands';
+import { Message } from '../Commands';
 import { AuthService } from '../../auth/AuthService';
 import { BanManager } from '../../auth/BanManager';
 import { Logger } from '../../../logging/logger';
 import { PluginManager } from '../../../plugins';
-import {
-  ServerCommand,
-  ServerCommandType,
-  ClientCommand,
-  UserInfo,
-  ClientRoomState,
-} from '../Commands';
+import { ServerCommand, UserInfo, ClientRoomState } from '../Commands';
 
 interface UserSession {
   userId: number;
@@ -39,10 +33,19 @@ export interface HandlerCtx {
   defaultAvatar: string;
   onSessionChange?: () => void;
 
-  reloadConfig(serverName: string, phiraApiUrl: string, serverAnnouncement: string, defaultAvatar: string): void;
+  reloadConfig(
+    serverName: string,
+    phiraApiUrl: string,
+    serverAnnouncement: string,
+    defaultAvatar: string,
+  ): void;
   sendCommandToUser(userId: number, command: ServerCommand): boolean;
 
-  respond(connectionId: string, sendResponse: (response: ServerCommand) => void, response: ServerCommand): void;
+  respond(
+    connectionId: string,
+    sendResponse: (response: ServerCommand) => void,
+    response: ServerCommand,
+  ): void;
   broadcastMessage(room: Room, message: Message): void;
   broadcastToRoom(room: Room, command: ServerCommand, excludeConnectionId?: string): void;
   broadcastToActivePlayers(room: Room, command: ServerCommand): void;

@@ -1,7 +1,7 @@
 /*
  * MIT License
  * Copyright (c) 2024
- * 
+ *
  * IMPORTANT: This file must match phira-mp-common/src/command.rs exactly
  * Source: https://github.com/TeamFlos/phira-mp/blob/main/phira-mp-common/src/command.rs
  */
@@ -209,7 +209,7 @@ export type ServerCommand =
   | { type: ServerCommandType.Ready; result: Result<void> }
   | { type: ServerCommandType.CancelReady; result: Result<void> }
   | { type: ServerCommandType.Played; result: Result<void> }
-  | { type: ServerCommandType.Abort; result: Result<void> }
+  | { type: ServerCommandType.Abort; result: Result<void> };
 
 export interface ParsedClientCommand {
   rawType: number;

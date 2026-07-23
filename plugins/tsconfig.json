@@ -16,13 +16,6 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false
   },
-  "include": [
-    "../plugin-api.d.ts",
-    "**/*.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "**/*.js",
-    "**/*.d.ts"
-  ]
+  "include": ["../plugin-api.d.ts", "**/*.ts"],
+  "exclude": ["node_modules", "server-control/ui", "**/*.js", "**/*.d.ts"]
 }

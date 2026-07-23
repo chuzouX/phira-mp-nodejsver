@@ -1,0 +1,3 @@
+[submodule "plugins/server-control"]
+	path = plugins/server-control
+	url = git@github.com:chuzouX/phira-mp-nodejsver-server-control.git
