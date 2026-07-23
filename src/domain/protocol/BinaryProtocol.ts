@@ -61,7 +61,7 @@ export class BinaryReader {
   }
 
   i8(): number {
-    return this.byte() << 24 >> 24;
+    return (this.byte() << 24) >> 24;
   }
 
   i16(): number {

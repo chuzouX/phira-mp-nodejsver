@@ -5,8 +5,8 @@
 
 // Suppress experimental fetch warning
 const originalEmit = process.emit;
-// @ts-ignore
-process.emit = function (name, data) {
+// @ts-expect-error Node's overloaded emit signature does not expose the warning event shape.
+process.emit = function (name: string, data: unknown, ...args: unknown[]) {
   if (
     name === 'warning' &&
     data &&
@@ -16,8 +16,8 @@ process.emit = function (name, data) {
   ) {
     return false;
   }
-  // @ts-ignore
-  return originalEmit.apply(process, arguments);
+  // @ts-expect-error Preserve Node's overloaded emit signature for arbitrary events.
+  return originalEmit.apply(process, [name, data, ...args]);
 };
 
 import { createApplication } from './app';

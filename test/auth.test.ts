@@ -1,4 +1,3 @@
-
 import { PhiraAuthService } from '../src/domain/auth/AuthService';
 import { Logger } from '../src/logging/logger';
 
@@ -17,7 +16,7 @@ describe('认证服务 (PhiraAuthService)', () => {
     } as any;
 
     authService = new PhiraAuthService('https://api.test', mockLogger);
-    
+
     // 模拟全局 fetch
     global.fetch = jest.fn();
   });
@@ -32,21 +31,21 @@ describe('认证服务 (PhiraAuthService)', () => {
       json: async () => ({
         id: 100,
         name: '测试用户',
-        avatar: 'avatar_url'
+        avatar: 'avatar_url',
       }),
     });
 
     const user = await authService.authenticate('valid_token');
-    
+
     expect(user.id).toBe(100);
     expect(user.name).toBe('测试用户');
     expect(global.fetch).toHaveBeenCalledWith(
       'https://api.test/me',
       expect.objectContaining({
         headers: expect.objectContaining({
-          Authorization: 'Bearer valid_token'
-        })
-      })
+          Authorization: 'Bearer valid_token',
+        }),
+      }),
     );
   });
 
@@ -58,7 +57,7 @@ describe('认证服务 (PhiraAuthService)', () => {
       ok: true,
       json: async () => ({
         id: 200,
-        name: '无头像用户'
+        name: '无头像用户',
         // 没有 avatar 字段
       }),
     });
@@ -72,10 +71,12 @@ describe('认证服务 (PhiraAuthService)', () => {
       ok: false,
       status: 401,
       statusText: 'Unauthorized',
-      text: async () => 'Invalid token'
+      text: async () => 'Invalid token',
     });
 
-    await expect(authService.authenticate('invalid_token')).rejects.toThrow('验证失败: 401 Unauthorized');
+    await expect(authService.authenticate('invalid_token')).rejects.toThrow(
+      '验证失败: 401 Unauthorized',
+    );
     expect(mockLogger.warn).toHaveBeenCalled();
   });
 

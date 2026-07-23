@@ -33,7 +33,13 @@ describe('IP 识别测试 (HTTP Headers)', () => {
       error: jest.fn(),
     } as any;
 
-    httpServer = new HttpServer(config, mockLogger, mockRoomManager, mockProtocolHandler, mockBanManager);
+    httpServer = new HttpServer(
+      config,
+      mockLogger,
+      mockRoomManager,
+      mockProtocolHandler,
+      mockBanManager,
+    );
   });
 
   afterEach(async () => {
@@ -57,8 +63,7 @@ describe('IP 识别测试 (HTTP Headers)', () => {
   });
 
   test('未提供任何代理头时也应可访问公开状态接口', async () => {
-    const response = await request(httpServer.getInternalServer())
-      .get('/api/status');
+    const response = await request(httpServer.getInternalServer()).get('/api/status');
 
     expect(response.status).toBe(200);
   });

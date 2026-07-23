@@ -47,7 +47,7 @@ describe('内存房间管理器 (InMemoryRoomManager)', () => {
       'test-room',
       2,
       { id: 2, name: '玩家 2', monitor: false },
-      'conn-2'
+      'conn-2',
     );
 
     expect(success).toBe(true);
@@ -85,7 +85,7 @@ describe('内存房间管理器 (InMemoryRoomManager)', () => {
       'test-room',
       2,
       { id: 2, name: '玩家 2', monitor: false },
-      'conn-2'
+      'conn-2',
     );
 
     roomManager.removePlayerFromRoom('test-room', 1);
@@ -107,7 +107,7 @@ describe('内存房间管理器 (InMemoryRoomManager)', () => {
       'full-room',
       2,
       { id: 2, name: '玩家 2', monitor: false },
-      'conn-2'
+      'conn-2',
     );
 
     expect(success).toBe(false);
@@ -127,7 +127,7 @@ describe('内存房间管理器 (InMemoryRoomManager)', () => {
       'room',
       2,
       { id: 2, name: '被封禁用户', monitor: false },
-      'conn-2'
+      'conn-2',
     );
 
     expect(success).toBe(false);
@@ -149,7 +149,7 @@ describe('内存房间管理器 (InMemoryRoomManager)', () => {
       'whitelist-room',
       2,
       { id: 2, name: '不在名单', monitor: false },
-      'conn-2'
+      'conn-2',
     );
     expect(fail).toBe(false);
 
@@ -158,7 +158,7 @@ describe('内存房间管理器 (InMemoryRoomManager)', () => {
       'whitelist-room',
       3,
       { id: 3, name: '在名单内', monitor: false },
-      'conn-3'
+      'conn-3',
     );
     expect(success).toBe(true);
   });
@@ -180,7 +180,7 @@ describe('内存房间管理器 (InMemoryRoomManager)', () => {
       'conflict-room',
       2,
       { id: 2, name: '双重身份', monitor: false },
-      'conn-2'
+      'conn-2',
     );
 
     // 应当因为黑名单被拒绝
@@ -201,7 +201,7 @@ describe('内存房间管理器 (InMemoryRoomManager)', () => {
       'lock-room',
       2,
       { id: 2, name: '试图进入', monitor: false },
-      'conn-2'
+      'conn-2',
     );
     expect(success).toBe(false);
 
@@ -210,7 +210,7 @@ describe('内存房间管理器 (InMemoryRoomManager)', () => {
       'lock-room',
       2,
       { id: 2, name: '再次进入', monitor: false },
-      'conn-2'
+      'conn-2',
     );
     expect(success2).toBe(true);
   });

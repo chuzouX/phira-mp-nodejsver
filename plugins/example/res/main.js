@@ -59,7 +59,7 @@ const pluginModule = {
      * 应在此释放所有资源（取消监听、清除定时器等）
      */
     destroy() {
-        unsubscribers.forEach(unsub => unsub());
+        unsubscribers.forEach((unsub) => unsub());
         unsubscribers.length = 0;
     },
 };

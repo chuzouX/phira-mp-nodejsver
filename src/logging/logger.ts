@@ -20,7 +20,7 @@ export interface Logger {
   debug(message: string, metadata?: LogMetadata): void;
   ban(message: string, metadata?: LogMetadata): void;
   command(message: string, metadata?: LogMetadata): void;
-  plugin(message: string, metadata?: LogMetadata): void;  // 新增插件日志级别
+  plugin(message: string, metadata?: LogMetadata): void; // 新增插件日志级别
   setSilentIds(ids: number[]): void;
   setLevel(level: LogLevel): void;
   setAllowedLevels(levels: LogLevel[]): void;
@@ -36,19 +36,25 @@ const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
 
 const COLOR_CODES: Record<string, string> = {
   RESET: '\x1b[0m',
-  DEBUG: '\x1b[90m',   // 灰色
-  INFO: '\x1b[32m',    // 绿色
-  MARK: '\x1b[36m',    // 青色
-  BAN: '\x1b[35m',     // 紫色
-  WARN: '\x1b[33m',    // 黄色
-  ERROR: '\x1b[31m',   // 红色
-  CMD: '\x1b[36m',     // 青色 (与 MARK 相同)
-  PLUGIN: '\x1b[95m',  // 亮紫色 (Bright Magenta)
+  DEBUG: '\x1b[90m', // 灰色
+  INFO: '\x1b[32m', // 绿色
+  MARK: '\x1b[36m', // 青色
+  BAN: '\x1b[35m', // 紫色
+  WARN: '\x1b[33m', // 黄色
+  ERROR: '\x1b[31m', // 红色
+  CMD: '\x1b[36m', // 青色 (与 MARK 相同)
+  PLUGIN: '\x1b[95m', // 亮紫色 (Bright Magenta)
 };
 
 const normaliseLevel = (level: string | undefined): LogLevel => {
   const candidate = level?.toLowerCase();
-  if (candidate === 'debug' || candidate === 'info' || candidate === 'mark' || candidate === 'warn' || candidate === 'error') {
+  if (
+    candidate === 'debug' ||
+    candidate === 'info' ||
+    candidate === 'mark' ||
+    candidate === 'warn' ||
+    candidate === 'error'
+  ) {
     return candidate;
   }
 
@@ -72,9 +78,12 @@ export class ConsoleLogger implements Logger {
   private static readonly THRESHOLD = 50; // Max logs per second before suppression
   private static lastResetTime = Date.now();
 
-  constructor(private readonly context: string = 'app', level: string | undefined = 'info') {
+  constructor(
+    private readonly context: string = 'app',
+    level: string | undefined = 'info',
+  ) {
     this.minimumLevel = normaliseLevel(level);
-    
+
     // Ensure logs directory exists
     const logDir = path.join(process.cwd(), 'logs');
     if (!fs.existsSync(logDir)) {
@@ -83,15 +92,17 @@ export class ConsoleLogger implements Logger {
 
     // Initialize flood protection check if not already running
     if ((global as any).logFloodInterval === undefined) {
-        (global as any).logFloodInterval = setInterval(() => {
-            const now = Date.now();
-            if (ConsoleLogger.isSuppressing && ConsoleLogger.messageCount < ConsoleLogger.THRESHOLD) {
-                ConsoleLogger.isSuppressing = false;
-                console.info(`\x1b[32m[SYSTEM] 日志输出已恢复正常 (速率: ${ConsoleLogger.messageCount} msg/s)\x1b[0m`);
-            }
-            ConsoleLogger.messageCount = 0;
-            ConsoleLogger.lastResetTime = now;
-        }, 1000);
+      (global as any).logFloodInterval = setInterval(() => {
+        const now = Date.now();
+        if (ConsoleLogger.isSuppressing && ConsoleLogger.messageCount < ConsoleLogger.THRESHOLD) {
+          ConsoleLogger.isSuppressing = false;
+          console.info(
+            `\x1b[32m[SYSTEM] 日志输出已恢复正常 (速率: ${ConsoleLogger.messageCount} msg/s)\x1b[0m`,
+          );
+        }
+        ConsoleLogger.messageCount = 0;
+        ConsoleLogger.lastResetTime = now;
+      }, 1000);
     }
   }
 
@@ -116,40 +127,45 @@ export class ConsoleLogger implements Logger {
     return false;
   }
 
-  private checkFloodAndEmit(level: string, message: string, metadata: LogMetadata, logToConsole: boolean = true): void {
+  private checkFloodAndEmit(
+    level: string,
+    message: string,
+    metadata: LogMetadata,
+    logToConsole: boolean = true,
+  ): void {
     ConsoleLogger.messageCount++;
 
     if (ConsoleLogger.messageCount > ConsoleLogger.THRESHOLD) {
-        if (!ConsoleLogger.isSuppressing) {
-            ConsoleLogger.isSuppressing = true;
-            const warnMsg = `\x1b[31m[WARNING] 遭受到大量的连接/错误，暂时停止详细日志输出以保护性能 (当前速率: >${ConsoleLogger.THRESHOLD} msg/s)\x1b[0m`;
-            this.emitToConsole(warnMsg);
-            this.writeToFile(`[SYSTEM] [WARNING] 遭受到大量的连接/错误，暂时停止详细日志输出`);
-        }
-        return;
+      if (!ConsoleLogger.isSuppressing) {
+        ConsoleLogger.isSuppressing = true;
+        const warnMsg = `\x1b[31m[WARNING] 遭受到大量的连接/错误，暂时停止详细日志输出以保护性能 (当前速率: >${ConsoleLogger.THRESHOLD} msg/s)\x1b[0m`;
+        this.emitToConsole(warnMsg);
+        this.writeToFile(`[SYSTEM] [WARNING] 遭受到大量的连接/错误，暂时停止详细日志输出`);
+      }
+      return;
     }
 
     if (ConsoleLogger.isSuppressing) return;
 
     const formatted = this.formatMessage(level, message, metadata);
     if (logToConsole) {
-        this.emitToConsole(formatted.console);
+      this.emitToConsole(formatted.console);
     }
     this.writeToFile(formatted.file);
   }
 
   private emitToConsole(text: string): void {
     if (ConsoleLogger.rl) {
-        // Clear current line, move cursor to 0, print text
-        process.stdout.write('\r\x1b[K'); 
-        process.stdout.write(text + '\n');
-        
-        // Only restore prompt if not explicitly suppressed
-        if (!ConsoleLogger.isPromptSuppressed) {
-            ConsoleLogger.rl.prompt(true);
-        }
+      // Clear current line, move cursor to 0, print text
+      process.stdout.write('\r\x1b[K');
+      process.stdout.write(text + '\n');
+
+      // Only restore prompt if not explicitly suppressed
+      if (!ConsoleLogger.isPromptSuppressed) {
+        ConsoleLogger.rl.prompt(true);
+      }
     } else {
-        console.log(text);
+      console.log(text);
     }
   }
 
@@ -192,7 +208,10 @@ export class ConsoleLogger implements Logger {
     // Ban logs are always logged, ignore level and silence
     const formatted = this.formatMessage('BAN', message, metadata);
     // Use MARK color for BAN logs in console
-    const colorFormatted = formatted.console.replace('[BAN]', `${COLOR_CODES.MARK}[BAN]${COLOR_CODES.RESET}`);
+    const colorFormatted = formatted.console.replace(
+      '[BAN]',
+      `${COLOR_CODES.MARK}[BAN]${COLOR_CODES.RESET}`,
+    );
     this.emitToConsole(colorFormatted);
     this.writeToFile(formatted.file);
     this.writeToBanFile(formatted.file);
@@ -214,7 +233,7 @@ export class ConsoleLogger implements Logger {
 
   private shouldLog(level: LogLevel): boolean {
     if (this.allowedLevels) {
-        return this.allowedLevels.has(level);
+      return this.allowedLevels.has(level);
     }
     return LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[this.minimumLevel];
   }
@@ -251,7 +270,11 @@ export class ConsoleLogger implements Logger {
     }
   }
 
-  private formatMessage(level: string, message: any, metadata: LogMetadata): { console: string; file: string } {
+  private formatMessage(
+    level: string,
+    message: any,
+    metadata: LogMetadata,
+  ): { console: string; file: string } {
     const now = new Date();
     const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}.${String(now.getMilliseconds()).padStart(3, '0')}`;
 
@@ -281,11 +304,12 @@ export class ConsoleLogger implements Logger {
 
     const otherMetadata = { ...metadata };
     delete otherMetadata.userId;
-    const metaStr = Object.keys(otherMetadata).length > 0 ? ' ' + JSON.stringify(otherMetadata) : '';
-    
+    const metaStr =
+      Object.keys(otherMetadata).length > 0 ? ' ' + JSON.stringify(otherMetadata) : '';
+
     return {
       console: `[${timestamp}] ${color}[${level}] ${msgStr}${metaStr}${COLOR_CODES.RESET}`,
-      file: `[${timestamp}] [${level}] ${msgStr}${metaStr}`
+      file: `[${timestamp}] [${level}] ${msgStr}${metaStr}`,
     };
   }
 }

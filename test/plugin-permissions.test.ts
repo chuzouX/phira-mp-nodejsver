@@ -29,9 +29,7 @@ describe('plugin role permissions', () => {
     expect(api.isUserAdmin(200)).toBe(true);
     expect(api.isUserOwner(200)).toBe(true);
     expect(api.getOnlinePlayers()).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: 200, isAdmin: true, isOwner: true }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ id: 200, isAdmin: true, isOwner: true })]),
     );
     expect(api.getPlayer(200)).toEqual(
       expect.objectContaining({ id: 200, isAdmin: true, isOwner: true }),
