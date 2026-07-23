@@ -13,7 +13,7 @@
  */
 
 declare module 'phira-plugin-api' {
-  import type { Application as ExpressApp, RequestHandler, Request, Response, NextFunction } from 'express';
+  import type { Application as ExpressApp, RequestHandler } from 'express';
   import type { Server as HttpNodeServer } from 'http';
 
   // ======================== 日志 ========================
@@ -37,31 +37,79 @@ declare module 'phira-plugin-api' {
     setAllowedLevels(levels: LogLevel[]): void;
   }
 
-  // ======================== 协议 / 命令 ========================
-
-  export interface CompactPos { xBits: number; yBits: number; }
-  export interface TouchFrame { time: number; points: Array<{ id: number; pos: CompactPos }>; }
-
-  export enum Judgement {
-    Perfect = 0, Good = 1, Bad = 2, Miss = 3,
-    HoldPerfect = 4, HoldGood = 5,
+  export interface PluginCommandOptions {
+    /** Replace command arguments with <redacted> in command.log. */
+    redactInput?: boolean;
   }
 
-  export interface JudgeEvent { time: number; lineId: number; noteId: number; judgement: Judgement; }
+  // ======================== 协议 / 命令 ========================
+
+  export interface CompactPos {
+    xBits: number;
+    yBits: number;
+  }
+  export interface TouchFrame {
+    time: number;
+    points: Array<{ id: number; pos: CompactPos }>;
+  }
+
+  export enum Judgement {
+    Perfect = 0,
+    Good = 1,
+    Bad = 2,
+    Miss = 3,
+    HoldPerfect = 4,
+    HoldGood = 5,
+  }
+
+  export interface JudgeEvent {
+    time: number;
+    lineId: number;
+    noteId: number;
+    judgement: Judgement;
+  }
 
   export enum ClientCommandType {
-    Ping = 0, Authenticate = 1, Chat = 2, Touches = 3, Judges = 4,
-    CreateRoom = 5, JoinRoom = 6, LeaveRoom = 7, LockRoom = 8,
-    CycleRoom = 9, SelectChart = 10, RequestStart = 11, Ready = 12,
-    CancelReady = 13, Played = 14, Abort = 15, GameResult = 16,
+    Ping = 0,
+    Authenticate = 1,
+    Chat = 2,
+    Touches = 3,
+    Judges = 4,
+    CreateRoom = 5,
+    JoinRoom = 6,
+    LeaveRoom = 7,
+    LockRoom = 8,
+    CycleRoom = 9,
+    SelectChart = 10,
+    RequestStart = 11,
+    Ready = 12,
+    CancelReady = 13,
+    Played = 14,
+    Abort = 15,
+    GameResult = 16,
   }
 
   export enum ServerCommandType {
-    Pong = 0, Authenticate = 1, Chat = 2, Touches = 3, Judges = 4,
-    Message = 5, ChangeState = 6, ChangeHost = 7, CreateRoom = 8,
-    JoinRoom = 9, OnJoinRoom = 10, LeaveRoom = 11, LockRoom = 12,
-    CycleRoom = 13, SelectChart = 14, RequestStart = 15, Ready = 16,
-    CancelReady = 17, Played = 18, Abort = 19,
+    Pong = 0,
+    Authenticate = 1,
+    Chat = 2,
+    Touches = 3,
+    Judges = 4,
+    Message = 5,
+    ChangeState = 6,
+    ChangeHost = 7,
+    CreateRoom = 8,
+    JoinRoom = 9,
+    OnJoinRoom = 10,
+    LeaveRoom = 11,
+    LockRoom = 12,
+    CycleRoom = 13,
+    SelectChart = 14,
+    RequestStart = 15,
+    Ready = 16,
+    CancelReady = 17,
+    Played = 18,
+    Abort = 19,
   }
 
   export type ClientCommand =
@@ -81,7 +129,16 @@ declare module 'phira-plugin-api' {
     | { type: ClientCommandType.CancelReady }
     | { type: ClientCommandType.Played; id: number }
     | { type: ClientCommandType.Abort }
-    | { type: ClientCommandType.GameResult; score: number; accuracy: number; perfect: number; good: number; bad: number; miss: number; maxCombo: number };
+    | {
+        type: ClientCommandType.GameResult;
+        score: number;
+        accuracy: number;
+        perfect: number;
+        good: number;
+        bad: number;
+        miss: number;
+        maxCombo: number;
+      };
 
   export interface UserInfo {
     id: number;
@@ -93,12 +150,21 @@ declare module 'phira-plugin-api' {
   }
 
   export interface PlayerScore {
-    score: number; accuracy: number; perfect: number; good: number;
-    bad: number; miss: number; maxCombo: number; finishTime: number;
+    score: number;
+    accuracy: number;
+    perfect: number;
+    good: number;
+    bad: number;
+    miss: number;
+    maxCombo: number;
+    finishTime: number;
   }
 
   export interface PlayerRanking {
-    rank: number; userId: number; userName: string; score: PlayerScore | null;
+    rank: number;
+    userId: number;
+    userName: string;
+    score: PlayerScore | null;
   }
 
   export type RoomState =
@@ -107,13 +173,20 @@ declare module 'phira-plugin-api' {
     | { type: 'Playing' };
 
   export interface ClientRoomState {
-    id: string; state: RoomState; live: boolean; locked: boolean;
-    cycle: boolean; isHost: boolean; isReady: boolean;
+    id: string;
+    state: RoomState;
+    live: boolean;
+    locked: boolean;
+    cycle: boolean;
+    isHost: boolean;
+    isReady: boolean;
     users: Map<number, UserInfo>;
   }
 
   export interface JoinRoomResponse {
-    state: RoomState; users: UserInfo[]; live: boolean;
+    state: RoomState;
+    users: UserInfo[];
+    live: boolean;
   }
 
   export type Message =
@@ -223,7 +296,12 @@ declare module 'phira-plugin-api' {
     deleteRoom(id: string): boolean;
     listRooms(): Room[];
     count(): number;
-    addPlayerToRoom(roomId: string, userId: number, userInfo: UserInfo, connectionId: string): boolean;
+    addPlayerToRoom(
+      roomId: string,
+      userId: number,
+      userInfo: UserInfo,
+      connectionId: string,
+    ): boolean;
     removePlayerFromRoom(roomId: string, userId: number): boolean;
     removePlayerFromAllRooms(userId: number): void;
     getRoomByUserId(userId: number): Room | undefined;
@@ -254,7 +332,13 @@ declare module 'phira-plugin-api' {
 
   export interface ProtocolHandler {
     getSessionCount(): number;
-    getAllSessions(): { id: number; name: string; roomId?: string; roomName?: string; ip: string }[];
+    getAllSessions(): {
+      id: number;
+      name: string;
+      roomId?: string;
+      roomName?: string;
+      ip: string;
+    }[];
     sendServerMessage(roomId: string, content: string): void;
     kickPlayer(userId: number): boolean;
     kickIp(ip: string): void;
@@ -265,7 +349,12 @@ declare module 'phira-plugin-api' {
     toggleRoomMode(roomId: string): boolean;
     sendCommandToUser(userId: number, command: ServerCommand): boolean;
     broadcastToRoomById(roomId: string, command: ServerCommand): boolean;
-    addVirtualSession(connectionId: string, userId: number, userInfo: UserInfo, broadcastCallback: (cmd: ServerCommand) => void): void;
+    addVirtualSession(
+      connectionId: string,
+      userId: number,
+      userInfo: UserInfo,
+      broadcastCallback: (cmd: ServerCommand) => void,
+    ): void;
     removeVirtualSession(connectionId: string): void;
     setFederationManager(fm: any): void;
     broadcastRoomUpdate(room: Room): void;
@@ -351,7 +440,13 @@ declare module 'phira-plugin-api' {
     getRemoteRooms(): FederationRoomInfo[];
     getRemoteRoomInfo(roomId: string): FederationRoomInfo | undefined;
     getLocalRoomsForFederation(): any[];
-    handleIncomingHandshake(data: { nodeId: string; nodeUrl: string; serverName: string; instanceId?: string; isReverse?: boolean }): any;
+    handleIncomingHandshake(data: {
+      nodeId: string;
+      nodeUrl: string;
+      serverName: string;
+      instanceId?: string;
+      isReverse?: boolean;
+    }): any;
     start(): Promise<void>;
     stop(): Promise<void>;
   }
@@ -423,7 +518,16 @@ declare module 'phira-plugin-api' {
     'room:join': { room: Room; user: UserInfo; connectionId: string };
     'room:leave': { roomId: string; userId: number; userName: string; connectionId: string };
     'room:gameStart': { room: Room; triggeredBy: number; mode: 'ready' | 'solo-confirm' | 'force' };
-    'room:gameEnd': { room: Room; rankings: Array<{ rank: number; userId: number; userName: string; score: number; accuracy: number }> };
+    'room:gameEnd': {
+      room: Room;
+      rankings: Array<{
+        rank: number;
+        userId: number;
+        userName: string;
+        score: number;
+        accuracy: number;
+      }>;
+    };
     'protocol:beforeHandle': { connectionId: string; command: ClientCommand };
     'protocol:afterHandle': { connectionId: string; command: ClientCommand };
     'chat:message': { room: Room; userId: number; content: string; connectionId: string };
@@ -458,7 +562,15 @@ declare module 'phira-plugin-api' {
 
   // ======================== 插件 API ========================
 
-  export type PluginRouteMethod = 'get' | 'post' | 'put' | 'patch' | 'delete' | 'options' | 'head' | 'use';
+  export type PluginRouteMethod =
+    | 'get'
+    | 'post'
+    | 'put'
+    | 'patch'
+    | 'delete'
+    | 'options'
+    | 'head'
+    | 'use';
 
   export interface PacketHandlerRegistration {
     commandType: number;
@@ -475,6 +587,7 @@ declare module 'phira-plugin-api' {
     readonly webSocketServer?: { broadcast(type: string, payload: any): void };
     readonly expressApp?: ExpressApp;
     readonly banManager: BanManager;
+    readonly executeConsoleCommand?: (input: string) => Promise<void>;
     readonly federationManager?: FederationManager;
     /** 注册联邦管理器（由联邦插件在 init 时调用） */
     registerFederationManager(fm: FederationManager): void;
@@ -493,10 +606,22 @@ declare module 'phira-plugin-api' {
     readPluginConfig<T = any>(): T | undefined;
     /** 写入插件配置（自动创建目录） */
     writePluginConfig(config: unknown): void;
+    listPlugins(): Array<{
+      directory: string;
+      enabled: boolean;
+      loaded: boolean;
+      metadata?: PluginMetadata;
+    }>;
+    reloadPlugin(pluginName: string): Promise<boolean>;
+    reloadServerConfig(): boolean;
     /** 向所有 WebSocket 客户端广播 */
     broadcastWs(event: string, data: any): void;
     /** 注册控制台命令（通过 /<name> 调用） */
-    registerCommand(name: string, handler: (...args: string[]) => void | Promise<void>): void;
+    registerCommand(
+      name: string,
+      handler: (...args: string[]) => void | Promise<void>,
+      options?: PluginCommandOptions,
+    ): void;
     /** 注册协议数据包处理器 */
     registerPacketHandler(registration: PacketHandlerRegistration): void;
     /** 向指定房间广播协议命令 */
@@ -537,22 +662,24 @@ declare module 'phira-plugin-api' {
     }>;
 
     /** 获取房间详情 */
-    getRoom(roomId: string): {
-      id: string;
-      name: string;
-      playerCount: number;
-      maxPlayers: number;
-      state: string;
-      locked: boolean;
-      cycle: boolean;
-      ownerId: number;
-      players: Array<{
-        id: number;
-        name: string;
-        isReady: boolean;
-        isFinished: boolean;
-      }>;
-    } | undefined;
+    getRoom(roomId: string):
+      | {
+          id: string;
+          name: string;
+          playerCount: number;
+          maxPlayers: number;
+          state: string;
+          locked: boolean;
+          cycle: boolean;
+          ownerId: number;
+          players: Array<{
+            id: number;
+            name: string;
+            isReady: boolean;
+            isFinished: boolean;
+          }>;
+        }
+      | undefined;
 
     /** 获取服务器统计信息 */
     getServerStats(): {
@@ -592,16 +719,18 @@ declare module 'phira-plugin-api' {
     isUserOwner(userId: number): boolean;
 
     /** 获取玩家信息 */
-    getPlayer(userId: number): {
-      id: number;
-      name: string;
-      connectionId: string;
-      roomId?: string;
-      roomName?: string;
-      ip: string;
-      isAdmin: boolean;
-      isOwner: boolean;
-    } | undefined;
+    getPlayer(userId: number):
+      | {
+          id: number;
+          name: string;
+          connectionId: string;
+          roomId?: string;
+          roomName?: string;
+          ip: string;
+          isAdmin: boolean;
+          isOwner: boolean;
+        }
+      | undefined;
 
     /** 向指定房间发送系统消息 */
     sendServerMessage(roomId: string, content: string): void;

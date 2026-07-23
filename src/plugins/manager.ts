@@ -12,11 +12,11 @@ import {
   PluginEventName,
   PluginEventPayload,
   PluginModule,
+  PluginCommandOptions,
   LoadedPlugin,
   PacketHandlerRegistration,
-  PluginRouteMethod,
 } from './types';
-import { ClientCommand, ServerCommand } from '../domain/protocol/Commands';
+import { ClientCommand } from '../domain/protocol/Commands';
 import { createPluginApi } from './PluginApiFactory';
 
 interface RegisteredPluginEventHandler {
@@ -73,11 +73,15 @@ class SafePluginEventBus implements PluginEventBus {
         const result = handler(payload);
         if (result && typeof (result as Promise<void>).catch === 'function') {
           void (result as Promise<void>).catch((error) => {
-            this.logger.error(`[插件事件] ${String(event)} 执行失败: ${error instanceof Error ? error.message : String(error)}`);
+            this.logger.error(
+              `[插件事件] ${String(event)} 执行失败: ${error instanceof Error ? error.message : String(error)}`,
+            );
           });
         }
       } catch (error) {
-        this.logger.error(`[插件事件] ${String(event)} 执行失败: ${error instanceof Error ? error.message : String(error)}`);
+        this.logger.error(
+          `[插件事件] ${String(event)} 执行失败: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
   }
@@ -91,7 +95,9 @@ class SafePluginEventBus implements PluginEventBus {
       try {
         await handler(payload);
       } catch (error) {
-        this.logger.error(`[插件事件] ${String(event)} 异步执行失败: ${error instanceof Error ? error.message : String(error)}`);
+        this.logger.error(
+          `[插件事件] ${String(event)} 异步执行失败: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
   }
@@ -133,10 +139,14 @@ class SafePluginEventBus implements PluginEventBus {
 export class PluginManager {
   private readonly plugins = new Map<string, LoadedPlugin>();
   private readonly pluginsByUuid = new Map<string, LoadedPlugin>(); // UUID 索引
-  private readonly packetHandlers = new Map<number, Array<PacketHandlerRegistration & { pluginName: string }>>();
+  private readonly packetHandlers = new Map<
+    number,
+    Array<PacketHandlerRegistration & { pluginName: string }>
+  >();
   private readonly eventsBus: SafePluginEventBus;
   private readonly commandHandlers = new Map<string, (...args: string[]) => void | Promise<void>>();
-  private readonly pluginRoutes = new Map<string, Set<string>>(); // 记录每个插件的路由
+  private readonly commandOptions = new Map<string, PluginCommandOptions>();
+  private readonly pluginRoutes = new Map<string, Set<unknown>>(); // Express layers owned by each plugin
   private readonly cascadeUnloadHistory = new Map<string, Set<string>>(); // 记录级联卸载历史
   private federationManager: any = null; // 由联邦插件注入
 
@@ -150,11 +160,7 @@ export class PluginManager {
     const snapshotRequire = createRequire(__filename);
     const originalResolve = Module._resolveFilename;
 
-    Module._resolveFilename = (
-      request: string,
-      parent: any,
-      ...args: any[]
-    ) => {
+    Module._resolveFilename = (request: string, parent: any, ...args: any[]) => {
       try {
         return originalResolve.call(Module, request, parent, ...args);
       } catch (_err) {
@@ -175,18 +181,67 @@ export class PluginManager {
     return this.eventsBus;
   }
 
+  public snapshotExpressLayers(): Set<unknown> {
+    return new Set(this.getExpressStack());
+  }
+
+  public trackExpressLayers(pluginName: string, before: Set<unknown>): number {
+    const owned = this.pluginRoutes.get(pluginName) ?? new Set<unknown>();
+    let added = 0;
+    for (const layer of this.getExpressStack()) {
+      if (!before.has(layer) && !owned.has(layer)) {
+        owned.add(layer);
+        added++;
+      }
+    }
+    if (owned.size > 0) this.pluginRoutes.set(pluginName, owned);
+    return added;
+  }
+
+  public removePluginRoutes(pluginName: string): number {
+    const owned = this.pluginRoutes.get(pluginName);
+    if (!owned || owned.size === 0) {
+      this.pluginRoutes.delete(pluginName);
+      return 0;
+    }
+
+    const stack = this.getExpressStack();
+    let removed = 0;
+    for (let index = stack.length - 1; index >= 0; index--) {
+      if (owned.has(stack[index])) {
+        stack.splice(index, 1);
+        removed++;
+      }
+    }
+    this.pluginRoutes.delete(pluginName);
+    return removed;
+  }
+
+  private getExpressStack(): unknown[] {
+    const app = this.context.expressApp ?? this.context.httpServer?.getExpressApp();
+    if (!app) return [];
+    const expressApp = app as express.Application & {
+      router?: { stack?: unknown[] };
+      _router?: { stack?: unknown[] };
+    };
+    return expressApp.router?.stack ?? expressApp._router?.stack ?? [];
+  }
+
   public async loadAllFromDirectory(): Promise<void> {
     const pluginsDir = path.join(process.cwd(), 'plugins');
     if (!fs.existsSync(pluginsDir)) {
       fs.mkdirSync(pluginsDir, { recursive: true });
       this.context.logger.plugin(`已自动创建插件目录: ${pluginsDir}`);
-      this.context.logger.plugin('提示: 将插件目录放入 plugins/ 后使用 /plugins install <name> 加载');
+      this.context.logger.plugin(
+        '提示: 将插件目录放入 plugins/ 后使用 /plugins install <name> 加载',
+      );
       return;
     }
 
     this.context.logger.plugin('开始加载插件...');
 
-    const pluginNames = fs.readdirSync(pluginsDir, { withFileTypes: true })
+    const pluginNames = fs
+      .readdirSync(pluginsDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name)
       .filter((name) => !name.startsWith('!')) // 跳过以 ! 开头的目录（禁用的插件）
@@ -200,7 +255,10 @@ export class PluginManager {
     this.context.logger.plugin(`发现 ${pluginNames.length} 个插件: ${pluginNames.join(', ')}`);
 
     // 第一遍：读取所有插件元数据，检查依赖
-    const pluginMetadata = new Map<string, { name: string; metadata: any; hasMissingDeps: boolean; missingDeps: string[] }>();
+    const pluginMetadata = new Map<
+      string,
+      { name: string; metadata: any; hasMissingDeps: boolean; missingDeps: string[] }
+    >();
 
     for (const pluginName of pluginNames) {
       const pluginDir = path.join(process.cwd(), 'plugins', pluginName);
@@ -232,17 +290,28 @@ export class PluginManager {
           continue;
         }
 
-        pluginMetadata.set(pluginName, { name: pluginName, metadata, hasMissingDeps: false, missingDeps: [] });
+        pluginMetadata.set(pluginName, {
+          name: pluginName,
+          metadata,
+          hasMissingDeps: false,
+          missingDeps: [],
+        });
       } catch (error) {
-        this.context.logger.plugin(`读取 ${pluginName} 元数据失败: ${error instanceof Error ? error.message : String(error)}`);
+        this.context.logger.plugin(
+          `读取 ${pluginName} 元数据失败: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
 
     // 第二遍：检查依赖关系
-    for (const [pluginName, info] of pluginMetadata.entries()) {
+    for (const [_pluginName, info] of pluginMetadata.entries()) {
       const { metadata } = info;
 
-      if (metadata.dependencies && Array.isArray(metadata.dependencies) && metadata.dependencies.length > 0) {
+      if (
+        metadata.dependencies &&
+        Array.isArray(metadata.dependencies) &&
+        metadata.dependencies.length > 0
+      ) {
         const missingDeps: Array<{ uuid: string; name?: string }> = [];
 
         for (const dep of metadata.dependencies) {
@@ -251,7 +320,9 @@ export class PluginManager {
           const depName = typeof dep === 'object' && dep.name ? dep.name : undefined;
 
           // 查找依赖的插件
-          const depPlugin = Array.from(pluginMetadata.values()).find(p => p.metadata.uuid === depUuid);
+          const depPlugin = Array.from(pluginMetadata.values()).find(
+            (p) => p.metadata.uuid === depUuid,
+          );
 
           if (!depPlugin) {
             missingDeps.push({ uuid: depUuid, name: depName });
@@ -260,14 +331,12 @@ export class PluginManager {
 
         if (missingDeps.length > 0) {
           info.hasMissingDeps = true;
-          info.missingDeps = missingDeps.map(d => d.uuid);
+          info.missingDeps = missingDeps.map((d) => d.uuid);
 
           // 输出缺失依赖信息
-          this.context.logger.plugin(
-            `${metadata.name} (${metadata.uuid}) 缺少依赖插件，跳过加载:`
-          );
+          this.context.logger.plugin(`${metadata.name} (${metadata.uuid}) 缺少依赖插件，跳过加载:`);
 
-          missingDeps.forEach(dep => {
+          missingDeps.forEach((dep) => {
             if (dep.name) {
               this.context.logger.plugin(`  - ${dep.name} (${dep.uuid})`);
             } else {
@@ -279,8 +348,12 @@ export class PluginManager {
     }
 
     // 第三遍：加载没有依赖问题的插件
-    const loadedCount = Array.from(pluginMetadata.values()).filter(info => !info.hasMissingDeps).length;
-    const skippedCount = Array.from(pluginMetadata.values()).filter(info => info.hasMissingDeps).length;
+    const loadedCount = Array.from(pluginMetadata.values()).filter(
+      (info) => !info.hasMissingDeps,
+    ).length;
+    const skippedCount = Array.from(pluginMetadata.values()).filter(
+      (info) => info.hasMissingDeps,
+    ).length;
 
     for (const [pluginName, info] of pluginMetadata.entries()) {
       if (!info.hasMissingDeps) {
@@ -289,7 +362,7 @@ export class PluginManager {
     }
 
     this.context.logger.plugin(
-      `插件加载完成：成功 ${this.plugins.size}/${loadedCount}，跳过 ${skippedCount}`
+      `插件加载完成：成功 ${this.plugins.size}/${loadedCount}，跳过 ${skippedCount}`,
     );
   }
 
@@ -361,14 +434,18 @@ export class PluginManager {
           this.context.logger.plugin(`从 plugins/${pluginName}/config.default.yaml 读取默认配置`);
         } else if (fs.existsSync(defaultConfigInResPath)) {
           defaultConfig = fs.readFileSync(defaultConfigInResPath, 'utf8');
-          this.context.logger.plugin(`从 plugins/${pluginName}/res/config.default.yaml 读取默认配置`);
+          this.context.logger.plugin(
+            `从 plugins/${pluginName}/res/config.default.yaml 读取默认配置`,
+          );
         }
 
         if (defaultConfig) {
           // 创建配置目录
           fs.mkdirSync(pluginConfigDir, { recursive: true });
           fs.writeFileSync(pluginConfigPath, defaultConfig, 'utf8');
-          this.context.logger.plugin(`已为插件 ${pluginName} 创建默认配置: config/${pluginName}/config.yaml`);
+          this.context.logger.plugin(
+            `已为插件 ${pluginName} 创建默认配置: config/${pluginName}/config.yaml`,
+          );
         }
       }
 
@@ -381,7 +458,12 @@ export class PluginManager {
       }
 
       const api = this.createApi(pluginName, resDir);
-      await pluginModule.init(api);
+      const routeSnapshot = this.snapshotExpressLayers();
+      try {
+        await pluginModule.init(api);
+      } finally {
+        this.trackExpressLayers(pluginName, routeSnapshot);
+      }
 
       const loadedPlugin: LoadedPlugin = {
         name: metadata.name,
@@ -395,7 +477,9 @@ export class PluginManager {
 
       this.context.logger.plugin(`已加载 ${metadata.name} v${metadata.version} (${metadata.uuid})`);
     } catch (error) {
-      this.context.logger.plugin(`加载 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`);
+      this.context.logger.plugin(
+        `加载 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -404,8 +488,11 @@ export class PluginManager {
       try {
         await plugin.module.destroy?.();
       } catch (error) {
-        this.context.logger.plugin(`销毁 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`);
+        this.context.logger.plugin(
+          `销毁 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
+      this.removePluginRoutes(pluginName);
     }
     this.plugins.clear();
     this.pluginsByUuid.clear();
@@ -419,7 +506,7 @@ export class PluginManager {
 
     try {
       // 1. 查找依赖此插件的其他插件
-      const dependentPlugins = Array.from(this.plugins.values()).filter(p => {
+      const dependentPlugins = Array.from(this.plugins.values()).filter((p) => {
         const deps = p.metadata.dependencies || [];
         return deps.some((dep: any) => {
           const depUuid = typeof dep === 'string' ? dep : dep.uuid;
@@ -429,7 +516,9 @@ export class PluginManager {
 
       // 2. 先卸载依赖此插件的其他插件（级联卸载）
       if (dependentPlugins.length > 0) {
-        this.context.logger.plugin(`检测到 ${dependentPlugins.length} 个插件依赖 ${plugin.metadata.name}，将一并卸载`);
+        this.context.logger.plugin(
+          `检测到 ${dependentPlugins.length} 个插件依赖 ${plugin.metadata.name}，将一并卸载`,
+        );
         for (const depPlugin of dependentPlugins) {
           this.context.logger.plugin(`  - 级联卸载: ${depPlugin.metadata.name}`);
           await this.unloadPlugin(depPlugin.metadata.id);
@@ -444,11 +533,10 @@ export class PluginManager {
       this.pluginsByUuid.delete(plugin.metadata.uuid);
 
       // 5. 清除路由记录
-      const routes = this.pluginRoutes.get(pluginName);
-      if (routes && routes.size > 0) {
-        this.context.logger.plugin(`插件 ${pluginName} 的 ${routes.size} 个路由已禁用`);
+      const removedRoutes = this.removePluginRoutes(pluginName);
+      if (removedRoutes > 0) {
+        this.context.logger.plugin(`插件 ${pluginName} 的 ${removedRoutes} 个路由已移除`);
       }
-      this.pluginRoutes.delete(pluginName);
 
       // 6. 清除 Node.js 模块缓存
       const modulePath = plugin.modulePath;
@@ -457,7 +545,9 @@ export class PluginManager {
       this.context.logger.plugin(`已卸载 ${plugin.metadata.name} v${plugin.metadata.version}`);
       return true;
     } catch (error) {
-      this.context.logger.plugin(`卸载 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`);
+      this.context.logger.plugin(
+        `卸载 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`,
+      );
       return false;
     }
   }
@@ -477,23 +567,24 @@ export class PluginManager {
       this.plugins.delete(pluginName);
       this.pluginsByUuid.delete(plugin.metadata.uuid);
 
-      const routes = this.pluginRoutes.get(pluginName);
-      if (routes && routes.size > 0) {
-        this.context.logger.plugin(`插件 ${pluginName} 的 ${routes.size} 个路由已禁用`);
+      const removedRoutes = this.removePluginRoutes(pluginName);
+      if (removedRoutes > 0) {
+        this.context.logger.plugin(`插件 ${pluginName} 的 ${removedRoutes} 个路由已移除`);
       }
-      this.pluginRoutes.delete(pluginName);
 
       const modulePath = plugin.modulePath;
       delete require.cache[require.resolve(modulePath)];
 
       this.context.logger.plugin(`已卸载 ${plugin.metadata.name} v${plugin.metadata.version}`);
     } catch (error) {
-      this.context.logger.plugin(`卸载 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`);
+      this.context.logger.plugin(
+        `卸载 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`,
+      );
       return false;
     }
 
     // 等待一小段时间，确保资源释放
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     // 重新加载插件
     try {
@@ -501,7 +592,9 @@ export class PluginManager {
       this.context.logger.plugin(`${pluginName} 重载成功`);
       return true;
     } catch (error) {
-      this.context.logger.plugin(`${pluginName} 重载失败: ${error instanceof Error ? error.message : String(error)}`);
+      this.context.logger.plugin(
+        `${pluginName} 重载失败: ${error instanceof Error ? error.message : String(error)}`,
+      );
       return false;
     }
   }
@@ -520,8 +613,11 @@ export class PluginManager {
           await plugin.module.destroy?.();
           this.context.logger.plugin(`已卸载 ${plugin.metadata.name} v${plugin.metadata.version}`);
         } catch (error) {
-          this.context.logger.plugin(`卸载 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`);
+          this.context.logger.plugin(
+            `卸载 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`,
+          );
         }
+        this.removePluginRoutes(pluginName);
       }
     }
 
@@ -531,7 +627,7 @@ export class PluginManager {
     this.pluginRoutes.clear();
 
     // 等待资源释放
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     // 重新加载所有插件
     let successCount = 0;
@@ -542,7 +638,9 @@ export class PluginManager {
         await this.loadPlugin(pluginName);
         successCount++;
       } catch (error) {
-        this.context.logger.plugin(`重载 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`);
+        this.context.logger.plugin(
+          `重载 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`,
+        );
         failCount++;
       }
     }
@@ -563,7 +661,9 @@ export class PluginManager {
       this.context.logger.plugin(`已禁用插件: ${pluginName}（重启后会重新加载）`);
       return true;
     } catch (error) {
-      this.context.logger.plugin(`禁用插件 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`);
+      this.context.logger.plugin(
+        `禁用插件 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`,
+      );
       return false;
     }
   }
@@ -584,13 +684,15 @@ export class PluginManager {
     if (fs.existsSync(disabledPath)) {
       try {
         // 等待确保目录没有被占用
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
         // 重命名目录（移除 ! 前缀）
         fs.renameSync(disabledPath, pluginPath);
         this.context.logger.plugin(`已将 !${pluginName} 重命名为 ${pluginName}`);
       } catch (error) {
-        this.context.logger.plugin(`重命名插件目录失败: ${error instanceof Error ? error.message : String(error)}`);
+        this.context.logger.plugin(
+          `重命名插件目录失败: ${error instanceof Error ? error.message : String(error)}`,
+        );
         return false;
       }
     } else if (!fs.existsSync(pluginPath)) {
@@ -623,7 +725,9 @@ export class PluginManager {
 
       return true;
     } catch (error) {
-      this.context.logger.plugin(`启用插件 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`);
+      this.context.logger.plugin(
+        `启用插件 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`,
+      );
       return false;
     }
   }
@@ -683,11 +787,18 @@ export class PluginManager {
       // 5. 检查 UUID 是否与其他已加载插件冲突
       if (this.pluginsByUuid.has(metadata.uuid)) {
         const existing = this.pluginsByUuid.get(metadata.uuid);
-        return { success: false, message: `UUID 冲突: ${metadata.uuid} 已被插件 ${existing?.name} 使用` };
+        return {
+          success: false,
+          message: `UUID 冲突: ${metadata.uuid} 已被插件 ${existing?.name} 使用`,
+        };
       }
 
       // 6. 检查依赖
-      if (metadata.dependencies && Array.isArray(metadata.dependencies) && metadata.dependencies.length > 0) {
+      if (
+        metadata.dependencies &&
+        Array.isArray(metadata.dependencies) &&
+        metadata.dependencies.length > 0
+      ) {
         const missingDeps: string[] = [];
 
         for (const dep of metadata.dependencies) {
@@ -703,14 +814,14 @@ export class PluginManager {
         if (missingDeps.length > 0) {
           return {
             success: false,
-            message: `插件 ${pluginName} 缺少依赖: ${missingDeps.join(', ')}。请先安装依赖插件`
+            message: `插件 ${pluginName} 缺少依赖: ${missingDeps.join(', ')}。请先安装依赖插件`,
           };
         }
       }
 
       // 7. 如果是禁用状态，先启用
       if (isDisabled) {
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise((resolve) => setTimeout(resolve, 200));
         fs.renameSync(disabledPath, pluginPath);
         this.context.logger.plugin(`已将 !${pluginName} 重命名为 ${pluginName}`);
       }
@@ -723,7 +834,7 @@ export class PluginManager {
         const loadedPlugin = this.plugins.get(pluginName)!;
         return {
           success: true,
-          message: `已安装并加载插件: ${loadedPlugin.metadata.name} v${loadedPlugin.metadata.version}`
+          message: `已安装并加载插件: ${loadedPlugin.metadata.name} v${loadedPlugin.metadata.version}`,
         };
       } else {
         return { success: false, message: `插件 ${pluginName} 加载失败，请查看日志` };
@@ -731,7 +842,7 @@ export class PluginManager {
     } catch (error) {
       return {
         success: false,
-        message: `安装插件 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`
+        message: `安装插件 ${pluginName} 失败: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   }
@@ -742,11 +853,12 @@ export class PluginManager {
       return [];
     }
 
-    return fs.readdirSync(pluginsDir, { withFileTypes: true })
+    return fs
+      .readdirSync(pluginsDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .map((entry) => ({
         name: entry.name.startsWith('!') ? entry.name.substring(1) : entry.name,
-        enabled: !entry.name.startsWith('!')
+        enabled: !entry.name.startsWith('!'),
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
@@ -768,7 +880,9 @@ export class PluginManager {
       try {
         await registration.handler({ connectionId, command });
       } catch (error) {
-        this.context.logger.plugin(`数据包处理失败 ${registration.pluginName}: ${error instanceof Error ? error.message : String(error)}`);
+        this.context.logger.plugin(
+          `数据包处理失败 ${registration.pluginName}: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
   }
@@ -782,9 +896,25 @@ export class PluginManager {
     try {
       await handler(...args);
     } catch (error) {
-      this.context.logger.error(`[插件命令] ${name} 执行失败: ${error instanceof Error ? error.message : String(error)}`);
+      this.context.logger.error(
+        `[插件命令] ${name} 执行失败: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
     return true;
+  }
+
+  public registerCommand(
+    name: string,
+    handler: (...args: string[]) => void | Promise<void>,
+    options: PluginCommandOptions = {},
+  ): void {
+    const normalized = name.toLowerCase();
+    this.commandHandlers.set(normalized, handler);
+    this.commandOptions.set(normalized, options);
+  }
+
+  public shouldRedactCommandInput(name: string): boolean {
+    return this.commandOptions.get(name.toLowerCase())?.redactInput === true;
   }
 
   public getLoadedPlugins(): LoadedPlugin[] {
@@ -810,6 +940,4 @@ export class PluginManager {
   private createApi(pluginName: string, resDir: string): PluginApi {
     return createPluginApi(this, pluginName, resDir);
   }
-
 }
-

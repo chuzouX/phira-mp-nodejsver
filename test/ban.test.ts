@@ -1,4 +1,3 @@
-
 import * as fs from 'fs';
 import { BanManager } from '../src/domain/auth/BanManager';
 import { Logger } from '../src/logging/logger';

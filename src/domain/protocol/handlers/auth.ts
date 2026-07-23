@@ -1,7 +1,10 @@
 import { HandlerCtx } from './context';
 import { ServerCommandType, UserInfo } from '../Commands';
 
-export async function fetchUserInfo(ctx: HandlerCtx, userId: number): Promise<{ rks?: number; bio?: string }> {
+export async function fetchUserInfo(
+  ctx: HandlerCtx,
+  userId: number,
+): Promise<{ rks?: number; bio?: string }> {
   if (isNaN(Number(userId))) return {};
   try {
     const response = await fetch(`https://phira.5wyxi.com/user/${userId}`, {
@@ -30,7 +33,9 @@ export function handleAuthenticate(
   token: string,
   sendResponse: (response: any) => void,
 ): void {
-  ctx.logger.debug(`正在尝试验证连接: ${connectionId} (Token长度: ${token.length})`, { userId: -1 });
+  ctx.logger.debug(`正在尝试验证连接: ${connectionId} (Token长度: ${token.length})`, {
+    userId: -1,
+  });
 
   if (ctx.sessions.has(connectionId)) {
     ctx.logger.warn(`重复验证尝试: ${connectionId}`, { userId: -1 });
@@ -53,13 +58,20 @@ export function handleAuthenticate(
   const isVirtualToken = token.startsWith('stress_') && process.env.NODE_ENV !== 'production';
 
   if (isVirtualToken) {
-    ctx.logger.warn(`[虚拟认证] 连接 ${connectionId} 使用虚拟 token 绕过认证（仅开发环境可用）`, { userId: -1 });
+    ctx.logger.warn(`[虚拟认证] 连接 ${connectionId} 使用虚拟 token 绕过认证（仅开发环境可用）`, {
+      userId: -1,
+    });
   }
 
   const authenticate = async (): Promise<void> => {
     try {
       const basicUserInfo = isVirtualToken
-        ? { id: parseInt(token.slice(7, 15), 36) % 900000 + 100000, name: `Stress_${token.slice(7, 13)}`, avatar: '', monitor: false }
+        ? {
+            id: (parseInt(token.slice(7, 15), 36) % 900000) + 100000,
+            name: `Stress_${token.slice(7, 13)}`,
+            avatar: '',
+            monitor: false,
+          }
         : await ctx.authService.authenticate(token);
 
       if (ctx.banManager) {
@@ -177,7 +189,9 @@ export function handleAuthenticate(
         result: { ok: true, value: [userInfo, roomState] },
       });
 
-      ctx.logger.debug(`[ProtocolHandler] 触发 player:auth:success 事件: ${userInfo.name} (ID: ${userInfo.id})`);
+      ctx.logger.debug(
+        `[ProtocolHandler] 触发 player:auth:success 事件: ${userInfo.name} (ID: ${userInfo.id})`,
+      );
       ctx.pluginManager?.emit('player:auth:success', {
         connectionId,
         user: userInfo,

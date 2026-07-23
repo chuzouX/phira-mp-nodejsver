@@ -102,20 +102,30 @@ export class BanManager {
       return;
     }
     const expiresAt = durationSeconds ? Date.now() + durationSeconds * 1000 : null;
-    this.idBans.set(userId, { target: userId, reason, createdAt: Date.now(), expiresAt, adminName });
+    this.idBans.set(userId, {
+      target: userId,
+      reason,
+      createdAt: Date.now(),
+      expiresAt,
+      adminName,
+    });
     this.saveBans();
-    this.logger.ban(`用户 ID ${userId} 已被 ${adminName || '未知'} 封禁。时长: ${durationSeconds ?? '永久'}, 原因: ${reason}`);
+    this.logger.ban(
+      `用户 ID ${userId} 已被 ${adminName || '未知'} 封禁。时长: ${durationSeconds ?? '永久'}, 原因: ${reason}`,
+    );
   }
 
   public banIp(ip: string, durationSeconds: number | null, reason: string, adminName?: string) {
     if (this.ipWhitelist.includes(ip)) {
-        this.logger.warn(`尝试封禁白名单 IP ${ip}，已拦截。`);
-        return;
+      this.logger.warn(`尝试封禁白名单 IP ${ip}，已拦截。`);
+      return;
     }
     const expiresAt = durationSeconds ? Date.now() + durationSeconds * 1000 : null;
     this.ipBans.set(ip, { target: ip, reason, createdAt: Date.now(), expiresAt, adminName });
     this.saveBans();
-    this.logger.ban(`IP ${ip} 已被 ${adminName || '未知'} 封禁。时长: ${durationSeconds ?? '永久'}, 原因: ${reason}`);
+    this.logger.ban(
+      `IP ${ip} 已被 ${adminName || '未知'} 封禁。时长: ${durationSeconds ?? '永久'}, 原因: ${reason}`,
+    );
   }
 
   public unbanId(userId: number, adminName: string = 'System') {
@@ -140,7 +150,7 @@ export class BanManager {
     if (expiresAt === null) return '永久';
     const remainingMs = expiresAt - Date.now();
     if (remainingMs <= 0) return '已过期';
-    
+
     const seconds = Math.floor(remainingMs / 1000);
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);

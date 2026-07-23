@@ -14,7 +14,6 @@ import { HttpServer } from './network/HttpServer';
 import { version } from '../package.json';
 import { ConsoleInterface } from './network/ConsoleInterface';
 import { PluginManager } from './plugins/manager';
-import { PluginEventName } from './plugins/types';
 
 export interface Application {
   readonly config: ServerConfig;
@@ -35,13 +34,16 @@ export interface Application {
 
 export const checkForUpdates = async (logger: Logger) => {
   try {
-    const response = await fetch('https://api.github.com/repos/chuzouX/phira-mp-nodejsver/releases/latest', {
-      headers: { 'User-Agent': 'PhiraServer-UpdateCheck' }
-    });
-    
+    const response = await fetch(
+      'https://api.github.com/repos/chuzouX/phira-mp-nodejsver/releases/latest',
+      {
+        headers: { 'User-Agent': 'PhiraServer-UpdateCheck' },
+      },
+    );
+
     if (!response.ok) return;
 
-    const data = await response.json() as any;
+    const data = (await response.json()) as any;
     const latestVersion = data.tag_name?.replace('v', '');
 
     if (latestVersion && latestVersion !== version) {
@@ -67,7 +69,7 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
   const protocolLogger = new ConsoleLogger('协议', logLevel);
   const webSocketLogger = new ConsoleLogger('WebSocket', logLevel);
 
-  [logger, roomLogger, authLogger, protocolLogger, webSocketLogger].forEach(l => {
+  [logger, roomLogger, authLogger, protocolLogger, webSocketLogger].forEach((l) => {
     l.setSilentIds(config.silentPhiraIds);
   });
 
@@ -82,28 +84,22 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
   const banManager = new BanManager(authLogger);
   banManager.setWhitelists(config.banIdWhitelist, config.banIpWhitelist);
   const protocolHandler = new ProtocolHandler(
-    roomManager, 
-    authService, 
-    protocolLogger, 
-    config.serverName, 
-    config.phiraApiUrl, 
-    broadcastStats, 
+    roomManager,
+    authService,
+    protocolLogger,
+    config.serverName,
+    config.phiraApiUrl,
+    broadcastStats,
     banManager,
     config.serverAnnouncement,
-    config.defaultAvatar
+    config.defaultAvatar,
   );
-  
+
   const networkServer = new NetworkServer(config, logger, protocolHandler);
   let httpServer: HttpServer | undefined;
 
   if (config.enableWebServer) {
-    httpServer = new HttpServer(
-      config,
-      logger,
-      roomManager,
-      protocolHandler,
-      banManager,
-    );
+    httpServer = new HttpServer(config, logger, roomManager, protocolHandler, banManager);
     logger.info('[程序] Web 功能将完全由插件系统承载。');
   } else {
     logger.info('Web server is disabled via configuration.');
@@ -111,21 +107,21 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
 
   const reloadConfig = (): void => {
     const newConfig = configService.reloadConfig();
-    
+
     // Update BanManager
     banManager.setWhitelists(newConfig.banIdWhitelist, newConfig.banIpWhitelist);
-    
+
     // Update ProtocolHandler
     protocolHandler.reloadConfig(
-        newConfig.serverName,
-        newConfig.phiraApiUrl,
-        newConfig.serverAnnouncement,
-        newConfig.defaultAvatar
+      newConfig.serverName,
+      newConfig.phiraApiUrl,
+      newConfig.serverAnnouncement,
+      newConfig.defaultAvatar,
     );
 
     // Update Logger silents
-    [logger, roomLogger, authLogger, protocolLogger, webSocketLogger].forEach(l => {
-        l.setSilentIds(newConfig.silentPhiraIds);
+    [logger, roomLogger, authLogger, protocolLogger, webSocketLogger].forEach((l) => {
+      l.setSilentIds(newConfig.silentPhiraIds);
     });
 
     logger.mark('[程序] 配置已从 .env 重新加载');
@@ -134,31 +130,31 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
   const setAdminStatus = async (userId: number, isAdmin: boolean): Promise<string | null> => {
     const currentAdmins = [...config.adminPhiraId];
     if (isAdmin) {
-        if (!currentAdmins.includes(userId)) {
-            currentAdmins.push(userId);
-        }
+      if (!currentAdmins.includes(userId)) {
+        currentAdmins.push(userId);
+      }
     } else {
-        const index = currentAdmins.indexOf(userId);
-        if (index > -1) {
-            currentAdmins.splice(index, 1);
-        }
+      const index = currentAdmins.indexOf(userId);
+      if (index > -1) {
+        currentAdmins.splice(index, 1);
+      }
     }
 
     // Persist to .env
     configService.updateAdminPhiraIds(currentAdmins);
-    
+
     // Sync other components
     reloadConfig();
 
     // Fetch username for display
     try {
-        const response = await fetch(`${config.phiraApiUrl}/user/${userId}`);
-        if (response.ok) {
-            const data = await response.json() as any;
-            return data.name || '未知用户';
-        }
+      const response = await fetch(`${config.phiraApiUrl}/user/${userId}`);
+      if (response.ok) {
+        const data = (await response.json()) as any;
+        return data.name || '未知用户';
+      }
     } catch (e) {
-        // Silently ignore API errors
+      // Silently ignore API errors
     }
     return '未知用户';
   };
@@ -172,26 +168,28 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
     const validLevels = ['debug', 'info', 'mark', 'warn', 'error'];
     const normalized = level.toLowerCase();
     if (validLevels.includes(normalized)) {
-        [logger, roomLogger, authLogger, protocolLogger, webSocketLogger].forEach(l => {
-            l.setLevel(normalized as any);
-        });
-        logger.mark(`[程序] 日志等级已设置为: ${normalized.toUpperCase()}`);
+      [logger, roomLogger, authLogger, protocolLogger, webSocketLogger].forEach((l) => {
+        l.setLevel(normalized as any);
+      });
+      logger.mark(`[程序] 日志等级已设置为: ${normalized.toUpperCase()}`);
     }
   };
 
   const setLogLevels = (levels: string[]): void => {
     const validLevels = ['debug', 'info', 'mark', 'warn', 'error'];
-    const filtered = levels.map(l => l.toLowerCase()).filter(l => validLevels.includes(l)) as any[];
-    
+    const filtered = levels
+      .map((l) => l.toLowerCase())
+      .filter((l) => validLevels.includes(l)) as any[];
+
     if (filtered.length === 0) return;
 
     if (filtered.length === 1) {
-        setLogLevel(filtered[0]);
+      setLogLevel(filtered[0]);
     } else {
-        [logger, roomLogger, authLogger, protocolLogger, webSocketLogger].forEach(l => {
-            l.setAllowedLevels(filtered);
-        });
-        logger.mark(`[程序] 日志等级已设置为显示: ${filtered.join(', ').toUpperCase()}`);
+      [logger, roomLogger, authLogger, protocolLogger, webSocketLogger].forEach((l) => {
+        l.setAllowedLevels(filtered);
+      });
+      logger.mark(`[程序] 日志等级已设置为显示: ${filtered.join(', ').toUpperCase()}`);
     }
   };
 
@@ -223,6 +221,8 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
       webSocketServer,
       expressApp: httpServer?.getExpressApp(),
       banManager,
+      reloadConfig,
+      executeConsoleCommand: (input: string) => consoleInterface.executeCommand(input),
     });
     protocolHandler.setPluginManager(pluginManager);
     consoleInterface.setPluginManager(pluginManager);
@@ -231,11 +231,11 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
 
   const start = async (): Promise<void> => {
     if (config.enableUpdateCheck) {
-        void checkForUpdates(logger);
+      void checkForUpdates(logger);
     }
     const promises: Promise<void>[] = [networkServer.start()];
     if (httpServer) {
-        promises.push(httpServer.start());
+      promises.push(httpServer.start());
     }
     await Promise.all(promises);
 
@@ -257,7 +257,7 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
 
     const promises: Promise<void>[] = [networkServer.stop()];
     if (httpServer) {
-        promises.push(httpServer.stop());
+      promises.push(httpServer.stop());
     }
     await Promise.all(promises);
   };

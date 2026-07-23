@@ -4,10 +4,19 @@ import * as path from 'path';
 import { version } from '../../../package.json';
 
 export async function handleOp(ctx: ConsoleCtx, args: string[], isAdmin: boolean): Promise<void> {
-  if (!ctx.setAdminStatus) { ctx.logger.warn('[控制台] 此环境不支持动态设置管理员。'); return; }
-  if (args.length < 2) { ctx.logger.warn(`[控制台] 用法: ${isAdmin ? '/op' : '/deop'} {phira_id}`); return; }
+  if (!ctx.setAdminStatus) {
+    ctx.logger.warn('[控制台] 此环境不支持动态设置管理员。');
+    return;
+  }
+  if (args.length < 2) {
+    ctx.logger.warn(`[控制台] 用法: ${isAdmin ? '/op' : '/deop'} {phira_id}`);
+    return;
+  }
   const phiraId = Number(args[1]);
-  if (isNaN(phiraId)) { ctx.logger.warn('[控制台] 非法的 Phira ID'); return; }
+  if (isNaN(phiraId)) {
+    ctx.logger.warn('[控制台] 非法的 Phira ID');
+    return;
+  }
   const userName = await ctx.setAdminStatus(phiraId, isAdmin);
   const actionStr = isAdmin ? '已设置为管理员' : '已移除管理员权限';
   ctx.logger.command(`[控制台] ${userName}[${phiraId}] ${actionStr}`);
@@ -36,16 +45,29 @@ API 地址: ${ctx.config.phiraApiUrl}
 }
 
 export function handleSet(ctx: ConsoleCtx, args: string[]): void {
-  if (!ctx.onUpdateConfig) { ctx.logger.warn('[控制台] 此环境不支持动态设置配置。'); return; }
-  if (args.length < 3) { ctx.logger.warn('[控制台] 用法: /set "{env变量}" "{值}"'); return; }
-  const key = args[1]; const value = args[2];
+  if (!ctx.onUpdateConfig) {
+    ctx.logger.warn('[控制台] 此环境不支持动态设置配置。');
+    return;
+  }
+  if (args.length < 3) {
+    ctx.logger.warn('[控制台] 用法: /set "{env变量}" "{值}"');
+    return;
+  }
+  const key = args[1];
+  const value = args[2];
   if (ctx.onUpdateConfig) ctx.onUpdateConfig(key, value);
   ctx.logger.command(`[控制台] 配置项 ${key} 已更新为: ${value}，并已重新加载生效。`);
 }
 
 export function handleLog(ctx: ConsoleCtx, args: string[]): void {
-  if (!ctx.onSetLogLevels) { ctx.logger.warn('[控制台] 此环境不支持动态调整日志等级。'); return; }
-  if (args.length < 2) { ctx.logger.warn('[控制台] 用法: /log 参数1|参数2|... (例如: /log warn|error)'); return; }
+  if (!ctx.onSetLogLevels) {
+    ctx.logger.warn('[控制台] 此环境不支持动态调整日志等级。');
+    return;
+  }
+  if (args.length < 2) {
+    ctx.logger.warn('[控制台] 用法: /log 参数1|参数2|... (例如: /log warn|error)');
+    return;
+  }
   const input = args[1];
   const levels = input.split(/[|,]/);
   if (ctx.onSetLogLevels) ctx.onSetLogLevels(levels);
@@ -56,7 +78,11 @@ export function stopServer(ctx: ConsoleCtx, _args: string[]): void {
   setTimeout(() => {
     const isNodemon = process.env.NODEMON === 'true';
     if (isNodemon && process.ppid) {
-      try { process.kill(process.ppid, 'SIGTERM'); } catch (e: any) { ctx.logger.warn(`[控制台] 终止 nodemon 进程失败: ${e?.message || e}`); }
+      try {
+        process.kill(process.ppid, 'SIGTERM');
+      } catch (e: any) {
+        ctx.logger.warn(`[控制台] 终止 nodemon 进程失败: ${e?.message || e}`);
+      }
     }
     process.exit(0);
   }, 500);
@@ -66,7 +92,8 @@ export function restartServer(ctx: ConsoleCtx, _args: string[]): void {
   ctx.logger.command('[控制台] 正在请求重启服务器...');
   try {
     if ((process as any).pkg) {
-      const exePath = process.execPath; const args = process.argv.slice(1);
+      const exePath = process.execPath;
+      const args = process.argv.slice(1);
       ctx.logger.command(`[控制台] 正在重启: ${exePath}`);
       ctx.logger.command('[控制台] 即将关闭当前进程并启动新实例...');
       const { spawn } = require('child_process');
@@ -76,13 +103,21 @@ export function restartServer(ctx: ConsoleCtx, _args: string[]): void {
     }
     const indexPath = path.join(process.cwd(), 'src', 'index.ts');
     if (fs.existsSync(indexPath)) {
-      const now = new Date(); fs.utimesSync(indexPath, now, now);
+      const now = new Date();
+      fs.utimesSync(indexPath, now, now);
       ctx.logger.command('[控制台] 已触发 nodemon 重启 (通过更新 src/index.ts 时间戳)');
-    } else { ctx.logger.warn('[控制台] 无法自动重启，请手动重启服务。'); }
-  } catch (err: any) { ctx.logger.error(`[控制台] 尝试重启失败: ${err.message}`); }
+    } else {
+      ctx.logger.warn('[控制台] 无法自动重启，请手动重启服务。');
+    }
+  } catch (err: any) {
+    ctx.logger.error(`[控制台] 尝试重启失败: ${err.message}`);
+  }
 }
 
 export function reloadServerConfig(ctx: ConsoleCtx, _args: string[]): void {
-  if (ctx.onReload) { ctx.onReload(); }
-  else { ctx.logger.warn('[控制台] 此环境不支持动态重新加载配置。'); }
+  if (ctx.onReload) {
+    ctx.onReload();
+  } else {
+    ctx.logger.warn('[控制台] 此环境不支持动态重新加载配置。');
+  }
 }

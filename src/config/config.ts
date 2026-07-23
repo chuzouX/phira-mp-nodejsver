@@ -9,20 +9,20 @@ import * as path from 'path';
 const ensureEnvFile = () => {
   const envPath = path.join(process.cwd(), '.env');
   const examplePath = path.join(process.cwd(), '.env.example');
-  
+
   if (!fs.existsSync(envPath)) {
     let defaultEnv = '';
-    
+
     if (fs.existsSync(examplePath)) {
-        try {
-            defaultEnv = fs.readFileSync(examplePath, 'utf8');
-        } catch (e) {
-            // Fallback
-        }
+      try {
+        defaultEnv = fs.readFileSync(examplePath, 'utf8');
+      } catch (e) {
+        // Fallback
+      }
     }
 
     if (!defaultEnv) {
-        defaultEnv = `# Game Server Configuration
+      defaultEnv = `# Game Server Configuration
 PORT=12346
 HOST=0.0.0.0
 TCP_ENABLED=true
@@ -30,6 +30,7 @@ USE_PROXY_PROTOCOL=false
 # Proxy trust hops (1 for Nginx, 2 for CDN+Nginx)
 TRUST_PROXY_HOPS=1
 LOG_LEVEL=info
+# WARNING: Set to production for public servers, otherwise virtual auth (stress_ token) remains active
 NODE_ENV=development
 PHIRA_API_URL=https://phira.5wyxi.com
 SERVER_NAME=Server
@@ -142,7 +143,10 @@ const parseBoolean = (value: string | undefined, fallback: boolean): boolean => 
 
 const parseNumberList = (value: string | undefined, fallback: number[]): number[] => {
   if (value === undefined || value.trim() === '') return fallback;
-  return value.split(/[,，]/).map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+  return value
+    .split(/[,，]/)
+    .map((s) => parseInt(s.trim(), 10))
+    .filter((n) => !isNaN(n));
 };
 
 export const createServerConfig = (overrides: Partial<ServerConfig> = {}): ServerConfig => {
@@ -164,12 +168,21 @@ export const createServerConfig = (overrides: Partial<ServerConfig> = {}): Serve
     adminPhiraId: parseNumberList(process.env.ADMIN_PHIRA_ID, defaultConfig.adminPhiraId),
     ownerPhiraId: parseNumberList(process.env.OWNER_PHIRA_ID, defaultConfig.ownerPhiraId),
     banIdWhitelist: parseNumberList(process.env.BAN_ID_WHITELIST, defaultConfig.banIdWhitelist),
-    banIpWhitelist: (process.env.BAN_IP_WHITELIST || '').split(',').map(s => s.trim()).filter(s => s !== ''),
+    banIpWhitelist: (process.env.BAN_IP_WHITELIST || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s !== ''),
     silentPhiraIds: parseNumberList(process.env.SILENT_PHIRA_IDS, defaultConfig.silentPhiraIds),
     serverAnnouncement: process.env.SERVER_ANNOUNCEMENT ?? defaultConfig.serverAnnouncement,
     defaultAvatar: process.env.DEFAULT_AVATAR ?? defaultConfig.defaultAvatar,
-    enableUpdateCheck: parseBoolean(process.env.ENABLE_UPDATE_CHECK, defaultConfig.enableUpdateCheck),
-    trustProxyHops: Number.parseInt(process.env.TRUST_PROXY_HOPS ?? `${defaultConfig.trustProxyHops}`, 10),
+    enableUpdateCheck: parseBoolean(
+      process.env.ENABLE_UPDATE_CHECK,
+      defaultConfig.enableUpdateCheck,
+    ),
+    trustProxyHops: Number.parseInt(
+      process.env.TRUST_PROXY_HOPS ?? `${defaultConfig.trustProxyHops}`,
+      10,
+    ),
     pluginsEnabled: parseBoolean(process.env.PLUGINS_ENABLED, defaultConfig.pluginsEnabled),
   };
 
@@ -181,9 +194,7 @@ export const createServerConfig = (overrides: Partial<ServerConfig> = {}): Serve
   };
 
   // Owner is the highest role and always inherits every Admin permission.
-  config.adminPhiraId = Array.from(
-    new Set([...config.adminPhiraId, ...config.ownerPhiraId]),
-  );
+  config.adminPhiraId = Array.from(new Set([...config.adminPhiraId, ...config.ownerPhiraId]));
 
   return config;
 };
@@ -193,7 +204,9 @@ export class ConfigService {
   constructor(overrides?: Partial<ServerConfig>) {
     this.config = createServerConfig(overrides);
   }
-  getConfig(): ServerConfig { return this.config; }
+  getConfig(): ServerConfig {
+    return this.config;
+  }
 
   public updateAdminPhiraIds(ids: number[]): void {
     this.config.adminPhiraId = Array.from(new Set([...ids, ...this.config.ownerPhiraId]));
@@ -207,13 +220,13 @@ export class ConfigService {
     try {
       let content = fs.readFileSync(envPath, 'utf8');
       const regex = new RegExp(`^${key}=.*`, 'm');
-      
+
       if (regex.test(content)) {
         content = content.replace(regex, `${key}=${value}`);
       } else {
         content += `\n${key}=${value}`;
       }
-      
+
       fs.writeFileSync(envPath, content, 'utf8');
     } catch (err) {
       console.error(`Failed to save config to .env: ${err}`);
@@ -226,12 +239,12 @@ export class ConfigService {
     if (fs.existsSync(envPath)) {
       dotenv.config({ path: envPath, override: true });
     }
-    
+
     const newConfig = createServerConfig();
-    
+
     // Update existing object properties so references remain valid
     Object.assign(this.config, newConfig);
-    
+
     return this.config;
   }
 }

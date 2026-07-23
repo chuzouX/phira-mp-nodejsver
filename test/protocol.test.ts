@@ -1,5 +1,9 @@
 import { BinaryReader, BinaryWriter } from '../src/domain/protocol/BinaryProtocol';
-import { CommandParser, ClientCommandType, ServerCommandType } from '../src/domain/protocol/Commands';
+import {
+  CommandParser,
+  ClientCommandType,
+  ServerCommandType,
+} from '../src/domain/protocol/Commands';
 
 describe('二进制协议 (BinaryProtocol)', () => {
   test('应当能正确编解码基本类型', () => {
@@ -49,12 +53,12 @@ describe('指令解析器 (CommandParser)', () => {
     const writer = new BinaryWriter();
     writer.u8(ClientCommandType.Authenticate);
     writer.string(token);
-    
+
     const reader = new BinaryReader(writer.toBuffer());
     const parsed = CommandParser.parseClientCommand(reader);
     expect(parsed.command).toEqual({
       type: ClientCommandType.Authenticate,
-      token: token
+      token: token,
     });
   });
 
@@ -62,7 +66,7 @@ describe('指令解析器 (CommandParser)', () => {
     const writer = new BinaryWriter();
     CommandParser.writeServerCommand(writer, { type: ServerCommandType.Pong });
     const buffer = writer.toBuffer();
-    
+
     expect(buffer[0]).toBe(ServerCommandType.Pong);
     expect(buffer.length).toBe(1);
   });
@@ -72,16 +76,16 @@ describe('指令解析器 (CommandParser)', () => {
     const message = {
       type: 'Chat' as const,
       user: 1001,
-      content: '你好，世界'
+      content: '你好，世界',
     };
     CommandParser.writeServerCommand(writer, {
       type: ServerCommandType.Message,
-      message
+      message,
     });
-    
+
     const buffer = writer.toBuffer();
     const reader = new BinaryReader(buffer);
-    
+
     expect(reader.u8()).toBe(ServerCommandType.Message);
     expect(reader.u8()).toBe(0); // 聊天类型的判别值
     expect(reader.i32()).toBe(1001);
