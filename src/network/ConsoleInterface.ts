@@ -13,10 +13,46 @@ import * as net from 'net';
 import { HttpServer } from './HttpServer';
 import { ConsoleLogger } from '../logging/logger';
 import { PluginManager } from '../plugins/manager';
-import { listRooms as listRoomsFn, listPlayers as listPlayersFn, broadcast as broadcastFn, kickPlayer as kickPlayerFn, forceStart as forceStartFn, lockRoom as lockRoomFn, setMaxPlayers as setMaxPlayersFn, closeRoom as closeRoomFn, toggleMode as toggleModeFn, sendSystemMessage as sendSystemMessageFn, bulkAction as bulkActionFn } from './console/room';
-import { listBans as listBansFn, addBan as addBanFn, unban as unbanFn, listLoginBlacklist as listLoginBlacklistFn, blacklistIp as blacklistIpFn, unblacklistIp as unblacklistIpFn } from './console/ban';
-import { showInfo as showInfoFn, handleSet as handleSetFn, handleLog as handleLogFn, stopServer as stopServerFn, restartServer as restartServerFn, reloadServerConfig as reloadServerConfigFn } from './console/admin';
-import { showPluginsHelp as showPluginsHelpFn, listPlugins as listPluginsFn, reloadPlugin as reloadPluginFn, reloadAllPlugins as reloadAllPluginsFn, showPluginInfo as showPluginInfoFn, disablePlugin as disablePluginFn, enablePlugin as enablePluginFn, installPlugin as installPluginFn, uninstallPlugin as uninstallPluginFn } from './console/plugins';
+import {
+  listRooms as listRoomsFn,
+  listPlayers as listPlayersFn,
+  broadcast as broadcastFn,
+  kickPlayer as kickPlayerFn,
+  forceStart as forceStartFn,
+  lockRoom as lockRoomFn,
+  setMaxPlayers as setMaxPlayersFn,
+  closeRoom as closeRoomFn,
+  toggleMode as toggleModeFn,
+  sendSystemMessage as sendSystemMessageFn,
+  bulkAction as bulkActionFn,
+} from './console/room';
+import {
+  listBans as listBansFn,
+  addBan as addBanFn,
+  unban as unbanFn,
+  listLoginBlacklist as listLoginBlacklistFn,
+  blacklistIp as blacklistIpFn,
+  unblacklistIp as unblacklistIpFn,
+} from './console/ban';
+import {
+  showInfo as showInfoFn,
+  handleSet as handleSetFn,
+  handleLog as handleLogFn,
+  stopServer as stopServerFn,
+  restartServer as restartServerFn,
+  reloadServerConfig as reloadServerConfigFn,
+} from './console/admin';
+import {
+  showPluginsHelp as showPluginsHelpFn,
+  listPlugins as listPluginsFn,
+  reloadPlugin as reloadPluginFn,
+  reloadAllPlugins as reloadAllPluginsFn,
+  showPluginInfo as showPluginInfoFn,
+  disablePlugin as disablePluginFn,
+  enablePlugin as enablePluginFn,
+  installPlugin as installPluginFn,
+  uninstallPlugin as uninstallPluginFn,
+} from './console/plugins';
 
 export class ConsoleInterface {
   private rl: readline.Interface;
@@ -37,23 +73,64 @@ export class ConsoleInterface {
     private readonly onSetLogLevels?: (levels: string[]) => void,
   ) {
     const commands = [
-        '/help', '/room', '/status', '/ping', '/list', '/broadcast',
-        '/kick', '/fstart', '/lock', '/maxp', '/close', '/tmode', '/smsg', '/bulk',
-        '/bans', '/ban', '/unban', '/blist', '/blip', '/ublip', '/stop', '/restart',
-        '/reload', '/op', '/deop', '/info', '/set', '/log', '/plugins'
+      '/help',
+      '/room',
+      '/status',
+      '/ping',
+      '/list',
+      '/broadcast',
+      '/kick',
+      '/fstart',
+      '/lock',
+      '/maxp',
+      '/close',
+      '/tmode',
+      '/smsg',
+      '/bulk',
+      '/bans',
+      '/ban',
+      '/unban',
+      '/blist',
+      '/blip',
+      '/ublip',
+      '/stop',
+      '/restart',
+      '/reload',
+      '/op',
+      '/deop',
+      '/info',
+      '/set',
+      '/log',
+      '/plugins',
     ];
 
     const logLevels = ['debug', 'info', 'mark', 'warn', 'error'];
 
     const envKeys = [
-        'PORT', 'HOST', 'TCP_ENABLED', 'USE_PROXY_PROTOCOL', 'TRUST_PROXY_HOPS',
-        'LOG_LEVEL', 'PHIRA_API_URL', 'SERVER_NAME', 'ROOM_SIZE',
-        'SERVER_ANNOUNCEMENT', 'WEB_PORT', 'ENABLE_WEB_SERVER',
-        'DEFAULT_AVATAR', 'ENABLE_UPDATE_CHECK',
-        'ADMIN_PHIRA_ID', 'OWNER_PHIRA_ID',
-        'BAN_ID_WHITELIST', 'BAN_IP_WHITELIST', 'SILENT_PHIRA_IDS',
-        'ENABLE_PUB_WEB', 'PUB_PREFIX', 'ENABLE_PRI_WEB', 'PRI_PREFIX',
-        'PLUGINS_ENABLED'
+      'PORT',
+      'HOST',
+      'TCP_ENABLED',
+      'USE_PROXY_PROTOCOL',
+      'TRUST_PROXY_HOPS',
+      'LOG_LEVEL',
+      'PHIRA_API_URL',
+      'SERVER_NAME',
+      'ROOM_SIZE',
+      'SERVER_ANNOUNCEMENT',
+      'WEB_PORT',
+      'ENABLE_WEB_SERVER',
+      'DEFAULT_AVATAR',
+      'ENABLE_UPDATE_CHECK',
+      'ADMIN_PHIRA_ID',
+      'OWNER_PHIRA_ID',
+      'BAN_ID_WHITELIST',
+      'BAN_IP_WHITELIST',
+      'SILENT_PHIRA_IDS',
+      'ENABLE_PUB_WEB',
+      'PUB_PREFIX',
+      'ENABLE_PRI_WEB',
+      'PRI_PREFIX',
+      'PLUGINS_ENABLED',
     ];
 
     this.rl = readline.createInterface({
@@ -63,7 +140,7 @@ export class ConsoleInterface {
       crlfDelay: Infinity,
       completer: (line: string) => {
         if (!line.startsWith('/')) {
-            return [[], line];
+          return [[], line];
         }
 
         const parts = line.split(' ');
@@ -72,46 +149,46 @@ export class ConsoleInterface {
 
         // Complete Commands
         if (parts.length <= 1) {
-            const hits = commands.filter((c) => c.startsWith(line.toLowerCase()));
-            return [hits, line];
+          const hits = commands.filter((c) => c.startsWith(line.toLowerCase()));
+          return [hits, line];
         }
 
         // Complete Arguments for specific commands
         let suggestions: string[] = [];
-        
+
         // Room IDs
         const roomCmds = ['/lock', '/fstart', '/close', '/maxp', '/tmode', '/smsg'];
         if (roomCmds.includes(currentCommand)) {
-            suggestions = this.roomManager.listRooms().map(r => r.id);
+          suggestions = this.roomManager.listRooms().map((r) => r.id);
         }
-        
+
         // User IDs (from sessions)
         const userCmds = ['/kick', '/op', '/deop'];
         if (userCmds.includes(currentCommand)) {
-            suggestions = this.protocolHandler.getAllSessions().map(s => s.id.toString());
+          suggestions = this.protocolHandler.getAllSessions().map((s) => s.id.toString());
         }
 
         // Ban types
         if (currentCommand === '/ban' || currentCommand === '/unban') {
-            if (parts.length === 2) {
-                suggestions = ['id', 'ip'];
-            }
+          if (parts.length === 2) {
+            suggestions = ['id', 'ip'];
+          }
         }
 
         // Env Keys
         if (currentCommand === '/set' && parts.length === 2) {
-            suggestions = envKeys;
+          suggestions = envKeys;
         }
 
         // Log Levels
         if (currentCommand === '/log' && parts.length === 2) {
-            suggestions = logLevels;
+          suggestions = logLevels;
         }
 
         const hits = suggestions.filter((s) => s.startsWith(arg));
-        
+
         return [hits, arg];
-      }
+      },
     });
 
     // Bind readline to ConsoleLogger to coordinate log output
@@ -134,7 +211,7 @@ export class ConsoleInterface {
         this.rl.prompt();
         return;
       }
-      
+
       if (!input.startsWith('/')) {
         this.logger.info(`[控制台] 未知输入: ${input}。输入 /help 查看命令列表。`);
         this.rl.prompt();
@@ -160,12 +237,26 @@ export class ConsoleInterface {
     ConsoleLogger.setReadline(null);
   }
 
+  public async executeCommand(input: string): Promise<void> {
+    const normalized = input.trim();
+    if (!normalized.startsWith('/')) {
+      this.logger.warn('[控制台] 指令必须以 / 开头');
+      return;
+    }
+    await this.handleCommand(normalized);
+  }
+
   private async handleCommand(input: string): Promise<void> {
     const args = this.parseArgs(input);
     if (args.length === 0) return;
-    
+
     const command = args[0].toLowerCase();
-    this.logger.command(`执行指令: ${input}`);
+    const commandName = command.startsWith('/') ? command.slice(1) : command;
+    const loggedInput =
+      this.pluginManager?.shouldRedactCommandInput(commandName) && args.length > 1
+        ? `${args[0]} <redacted>`
+        : input;
+    this.logger.command(`执行指令: ${loggedInput}`);
 
     switch (command) {
       case '/help':
@@ -312,7 +403,7 @@ export class ConsoleInterface {
 /plugins [list|info <name>|reload [name]] - 插件管理 (查看、详情、重载)
 ==============================
 `;
-    console.log(help);
+    this.logger.command(help.trim());
   }
 
   private async checkStatus(): Promise<void> {
@@ -361,27 +452,45 @@ export class ConsoleInterface {
         listPluginsFn(this as any, args);
         break;
       case 'info':
-        if (!args[2]) { this.logger.warn('[控制台] 用法: /plugins info <plugin-name>'); return; }
+        if (!args[2]) {
+          this.logger.warn('[控制台] 用法: /plugins info <plugin-name>');
+          return;
+        }
         showPluginInfoFn(this as any, args);
         break;
       case 'reload':
-        if (args[2]) { reloadPluginFn(this as any, args); }
-        else { reloadAllPluginsFn(this as any, args); }
+        if (args[2]) {
+          reloadPluginFn(this as any, args);
+        } else {
+          reloadAllPluginsFn(this as any, args);
+        }
         break;
       case 'disable':
-        if (!args[2]) { this.logger.warn('[控制台] 用法: /plugins disable <plugin-name>'); return; }
+        if (!args[2]) {
+          this.logger.warn('[控制台] 用法: /plugins disable <plugin-name>');
+          return;
+        }
         disablePluginFn(this as any, args);
         break;
       case 'enable':
-        if (!args[2]) { this.logger.warn('[控制台] 用法: /plugins enable <plugin-name>'); return; }
+        if (!args[2]) {
+          this.logger.warn('[控制台] 用法: /plugins enable <plugin-name>');
+          return;
+        }
         enablePluginFn(this as any, args);
         break;
       case 'install':
-        if (!args[2]) { this.logger.warn('[控制台] 用法: /plugins install <plugin-name>'); return; }
+        if (!args[2]) {
+          this.logger.warn('[控制台] 用法: /plugins install <plugin-name>');
+          return;
+        }
         installPluginFn(this as any, args);
         break;
       case 'uninstall':
-        if (!args[2]) { this.logger.warn('[控制台] 用法: /plugins uninstall <plugin-name>'); return; }
+        if (!args[2]) {
+          this.logger.warn('[控制台] 用法: /plugins uninstall <plugin-name>');
+          return;
+        }
         uninstallPluginFn(this as any, args);
         break;
       default:

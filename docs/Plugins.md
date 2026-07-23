@@ -133,16 +133,16 @@ config/
 
 ### 控制台命令
 
-| 命令 | 说明 |
-|------|------|
-| `/plugins [list]` | 列出所有插件（包括已禁用） |
-| `/plugins info <name>` | 查看插件详细信息 |
-| `/plugins help` | 显示帮助信息 |
-| `/plugins reload [name]` | 重载插件（不指定则重载全部） |
-| `/plugins enable <name>` | 启用已禁用的插件 |
-| `/plugins disable <name>` | 禁用插件（添加前缀 !） |
-| `/plugins install <name>` | 安装并加载 plugins 目录下的插件 |
-| `/plugins uninstall <name>` | 卸载并删除插件目录 |
+| 命令                        | 说明                            |
+| --------------------------- | ------------------------------- |
+| `/plugins [list]`           | 列出所有插件（包括已禁用）      |
+| `/plugins info <name>`      | 查看插件详细信息                |
+| `/plugins help`             | 显示帮助信息                    |
+| `/plugins reload [name]`    | 重载插件（不指定则重载全部）    |
+| `/plugins enable <name>`    | 启用已禁用的插件                |
+| `/plugins disable <name>`   | 禁用插件（添加前缀 !）          |
+| `/plugins install <name>`   | 安装并加载 plugins 目录下的插件 |
+| `/plugins uninstall <name>` | 卸载并删除插件目录              |
 
 ### 插件状态
 
@@ -186,7 +186,7 @@ description: 我的第一个插件
 author: Your Name
 license: MIT
 main: main.js
-serverVersion: ">=0.4.0"
+serverVersion: '>=0.4.0'
 ```
 
 **3. 编写插件代码**
@@ -217,7 +217,7 @@ module.exports = {
 
   destroy() {
     // 清理资源（可选）
-  }
+  },
 };
 ```
 
@@ -247,8 +247,8 @@ version: 1.0.0
 description: TypeScript 示例插件
 author: Your Name
 license: MIT
-main: main.js  # 编译后的文件
-serverVersion: ">=0.4.0"
+main: main.js # 编译后的文件
+serverVersion: '>=0.4.0'
 ```
 
 **3. 获取类型声明文件**
@@ -267,7 +267,7 @@ const pluginModule: PluginModule = {
 
     // 支持相对路径加载其他模块
     // import { helper } from './lib/helper';
-    
+
     // 静态资源使用相对路径（相对于 res 目录）
     // api.serveStatic('/my-plugin', 'public');
   },
@@ -307,6 +307,7 @@ npx tsc
 ```
 
 **重要事项：**
+
 - 服务端优先加载 `index.js`；仅在开发模式（ts-node）下才 fallback 到 `index.ts`
 - 加载顺序由目录名字母序决定。如果插件间有依赖关系，可通过命名前缀控制（如 `00-base`、`01-dashboard`）
 - 联邦插件（`federation`）作为标准插件加载，其内部联邦网络启动在插件 `init` 中完成
@@ -321,17 +322,17 @@ npx tsc
 
 ### 上下文属性
 
-| 属性 | 类型 | 说明 |
-|------|------|------|
-| `config` | `ServerConfig` | 服务器配置（只读） |
-| `logger` | `Logger` | 日志记录器（`info` / `debug` / `warn` / `error`） |
-| `roomManager` | `RoomManager` | 房间管理器 |
-| `protocolHandler` | `ProtocolHandler` | 协议处理器（管理玩家会话） |
-| `networkServer` | `NetworkServer` | TCP 服务器实例 |
-| `httpServer` | `HttpServer \| undefined` | HTTP 服务器（`ENABLE_WEB_SERVER=false` 时为 `undefined`） |
-| `banManager` | `BanManager` | 封禁管理器 |
-| `federationManager` | `FederationManager \| undefined` | 联邦管理器（懒获取，由联邦插件注入后可用） |
-| `pluginName` | `string` | 当前插件名称 |
+| 属性                | 类型                             | 说明                                                      |
+| ------------------- | -------------------------------- | --------------------------------------------------------- |
+| `config`            | `ServerConfig`                   | 服务器配置（只读）                                        |
+| `logger`            | `Logger`                         | 日志记录器（`info` / `debug` / `warn` / `error`）         |
+| `roomManager`       | `RoomManager`                    | 房间管理器                                                |
+| `protocolHandler`   | `ProtocolHandler`                | 协议处理器（管理玩家会话）                                |
+| `networkServer`     | `NetworkServer`                  | TCP 服务器实例                                            |
+| `httpServer`        | `HttpServer \| undefined`        | HTTP 服务器（`ENABLE_WEB_SERVER=false` 时为 `undefined`） |
+| `banManager`        | `BanManager`                     | 封禁管理器                                                |
+| `federationManager` | `FederationManager \| undefined` | 联邦管理器（懒获取，由联邦插件注入后可用）                |
+| `pluginName`        | `string`                         | 当前插件名称                                              |
 
 `federationManager` 是一个 getter，只有在联邦插件加载后才会返回实例。如需主动获取联邦实例：
 
@@ -388,7 +389,7 @@ api.registerRoute('get', '/api/my-plugin/status', (req, res) => {
 
 // 挂载静态文件目录
 // 相对路径会相对于插件的 res 目录解析
-api.serveStatic('/my-plugin', 'public');  // 推荐：相对路径
+api.serveStatic('/my-plugin', 'public'); // 推荐：相对路径
 
 // 或使用绝对路径
 const path = require('path');
@@ -408,6 +409,17 @@ api.registerCommand('greet', (name) => {
 });
 // 控制台输入: /greet 张三
 ```
+
+如果命令参数包含密码、令牌或其他敏感内容，请使用 `redactInput` 标签。
+服务器仍会把原始参数传给处理器，但写入 `command.log` 时会隐藏参数：
+
+```js
+api.registerCommand('login-token', (token) => useToken(token), { redactInput: true });
+// 控制台日志: 执行指令: /login-token <redacted>
+```
+
+标签只负责控制服务器控制台命令日志的脱敏，不会修改参数，也不会自动保存或删除
+敏感数据。插件仍应避免在其他日志中输出原始参数。
 
 ### 数据包处理器
 
@@ -537,7 +549,7 @@ const dir = api.getPluginConfigDir();
 配置文件示例 (`config/example/config.yaml`)：
 
 ```yaml
-greeting: "你好"
+greeting: '你好'
 maxRetries: 3
 ```
 
@@ -560,7 +572,7 @@ plugins/my-plugin/
 ```yaml
 # 插件配置
 enabled: true
-greeting: "你好"
+greeting: '你好'
 maxRetries: 3
 ```
 
@@ -570,21 +582,21 @@ maxRetries: 3
 
 以下是 `api.events.on(event, handler)` 可监听的全部事件：
 
-| 事件名 | 载荷类型 | 触发时机 |
-|--------|----------|----------|
-| `player:connect` | `{ connectionId, ip }` | 玩家 TCP 连接建立 |
-| `player:auth:success` | `{ connectionId, user, ip }` | 玩家认证成功 |
-| `player:disconnect` | `{ connectionId, userId?, user?, ip? }` | 玩家断开连接 |
-| `room:beforeCreate` | `{ connectionId, userId, roomId }` | 房间创建前 |
-| `room:create` | `{ room, user, connectionId }` | 房间创建后 |
-| `room:join` | `{ room, user, connectionId }` | 玩家加入房间 |
-| `room:leave` | `{ roomId, userId, userName, connectionId }` | 玩家离开房间 |
-| `room:gameStart` | `{ room, triggeredBy, mode }` | 游戏开始（`mode`: `ready` / `solo-confirm` / `force`） |
-| `room:gameEnd` | `{ room, rankings }` | 游戏结束，附带排名数据 |
-| `protocol:beforeHandle` | `{ connectionId, command }` | 协议命令处理前 |
-| `protocol:afterHandle` | `{ connectionId, command }` | 协议命令处理后 |
-| `chat:message` | `{ room, userId, content, connectionId }` | 房间内聊天消息 |
-| `custom:*` | `any` | 插件自定义事件（`custom:` 前缀） |
+| 事件名                  | 载荷类型                                     | 触发时机                                               |
+| ----------------------- | -------------------------------------------- | ------------------------------------------------------ |
+| `player:connect`        | `{ connectionId, ip }`                       | 玩家 TCP 连接建立                                      |
+| `player:auth:success`   | `{ connectionId, user, ip }`                 | 玩家认证成功                                           |
+| `player:disconnect`     | `{ connectionId, userId?, user?, ip? }`      | 玩家断开连接                                           |
+| `room:beforeCreate`     | `{ connectionId, userId, roomId }`           | 房间创建前                                             |
+| `room:create`           | `{ room, user, connectionId }`               | 房间创建后                                             |
+| `room:join`             | `{ room, user, connectionId }`               | 玩家加入房间                                           |
+| `room:leave`            | `{ roomId, userId, userName, connectionId }` | 玩家离开房间                                           |
+| `room:gameStart`        | `{ room, triggeredBy, mode }`                | 游戏开始（`mode`: `ready` / `solo-confirm` / `force`） |
+| `room:gameEnd`          | `{ room, rankings }`                         | 游戏结束，附带排名数据                                 |
+| `protocol:beforeHandle` | `{ connectionId, command }`                  | 协议命令处理前                                         |
+| `protocol:afterHandle`  | `{ connectionId, command }`                  | 协议命令处理后                                         |
+| `chat:message`          | `{ room, userId, content, connectionId }`    | 房间内聊天消息                                         |
+| `custom:*`              | `any`                                        | 插件自定义事件（`custom:` 前缀）                       |
 
 其中 `user` 类型为 `UserInfo`（包含 `id`、`name` 等字段），`room` 类型为 `Room`，`command` 类型为 `ClientCommand`。
 
@@ -602,10 +614,10 @@ maxRetries: 3
 
 ```yaml
 # 显示的服务器 IP/域名
-displayIp: "your-server.com:666"
+displayIp: 'your-server.com:666'
 
 # Session 密钥（强烈建议修改）
-sessionSecret: "change-this-to-a-random-secret"
+sessionSecret: 'change-this-to-a-random-secret'
 
 # 登录失败后 IP 黑名单持续时间（秒）
 loginBlacklistDuration: 600
@@ -623,10 +635,10 @@ allowedOrigins:
   - https://your-domain.com
 
 # Web 房间过滤规则
-enablePubWeb: false  # 仅显示特定前缀的房间
-pubPrefix: "pub"     # 公开房间前缀
-enablePriWeb: false  # 隐藏特定前缀的房间
-priPrefix: "sm"      # 私密房间前缀
+enablePubWeb: false # 仅显示特定前缀的房间
+pubPrefix: 'pub' # 公开房间前缀
+enablePriWeb: false # 隐藏特定前缀的房间
+priPrefix: 'sm' # 私密房间前缀
 ```
 
 **注意**: 这些配置项在 v0.4.2 之前位于 `.env` 文件中，现已迁移到插件配置。旧的环境变量仍然作为后备选项保留。
@@ -651,7 +663,7 @@ allowedOrigins:
 
 ```yaml
 # 问候语
-greeting: "你好"
+greeting: '你好'
 ```
 
 ### 4. **nonebot-auth** — NoneBot 鉴权插件
@@ -662,7 +674,7 @@ greeting: "你好"
 
 ```yaml
 # 管理员密钥
-adminSecret: "your-admin-secret"
+adminSecret: 'your-admin-secret'
 
 # 哈希算法 (sha256 或 sha512)
 secretHashAlgorithm: sha256
@@ -675,6 +687,7 @@ enableLogging: true
 ```
 
 **API 端点**:
+
 - `GET /api/nonebot/test` - 测试鉴权
 - `GET /api/nonebot/status` - 服务器状态
 
@@ -707,13 +720,14 @@ showRoomState: true
 publicOnly: true
 
 # 公开房间前缀
-publicPrefix: "pub"
+publicPrefix: 'pub'
 
 # 播报消息前缀
-messagePrefix: "【房间播报】"
+messagePrefix: '【房间播报】'
 ```
 
 **控制台命令**:
+
 - `/roomlist` - 查看当前房间列表
 - `/roomannouncer status` - 查看插件状态
 - `/roomannouncer announce` - 手动触发播报
@@ -733,13 +747,13 @@ seedNodes:
   - http://other-server:8080
 
 # 共享密钥（所有联入同一网络的节点必须一致）
-secret: ""
+secret: ''
 
 # 本节点对外地址
-nodeUrl: ""
+nodeUrl: ''
 
 # 节点 ID（留空自动生成）
-nodeId: ""
+nodeId: ''
 
 # 健康检查间隔（ms）
 healthInterval: 300
@@ -763,13 +777,13 @@ allowLocal: false
 
 ---
 
-| 插件 | 目录 | 说明 |
-|------|------|------|
-| **web-dashboard** | `plugins/web-dashboard/` | Web 管理面板，提供登录、房间管理、封禁管理等完整后台 |
-| **federation** | `plugins/federation/` | 联邦网络，去中心化多服互联（节点发现、房间同步、跨服代理） |
-| **websocket** | `plugins/websocket/` | WebSocket 服务，为前端提供实时房间状态推送 |
-| **example** | `plugins/example/` | 示例插件，展示事件监听、路由注册、控制台命令、配置读写等核心用法 |
-| **nonebot-auth** | `plugins/nonebot-auth/` | NoneBot 鉴权插件，支持 SHA-256 和 AES-256-CBC 认证 |
-| **room-announcer** | `plugins/room-announcer/` | 房间播报插件，自动向玩家播报公开房间列表 |
-| **titles** | `plugins/titles/` | 冠军称号与排名系统 |
-| **tournament** | `plugins/tournament/` | 锦标赛比赛系统 |
+| 插件               | 目录                      | 说明                                                             |
+| ------------------ | ------------------------- | ---------------------------------------------------------------- |
+| **web-dashboard**  | `plugins/web-dashboard/`  | Web 管理面板，提供登录、房间管理、封禁管理等完整后台             |
+| **federation**     | `plugins/federation/`     | 联邦网络，去中心化多服互联（节点发现、房间同步、跨服代理）       |
+| **websocket**      | `plugins/websocket/`      | WebSocket 服务，为前端提供实时房间状态推送                       |
+| **example**        | `plugins/example/`        | 示例插件，展示事件监听、路由注册、控制台命令、配置读写等核心用法 |
+| **nonebot-auth**   | `plugins/nonebot-auth/`   | NoneBot 鉴权插件，支持 SHA-256 和 AES-256-CBC 认证               |
+| **room-announcer** | `plugins/room-announcer/` | 房间播报插件，自动向玩家播报公开房间列表                         |
+| **titles**         | `plugins/titles/`         | 冠军称号与排名系统                                               |
+| **tournament**     | `plugins/tournament/`     | 锦标赛比赛系统                                                   |

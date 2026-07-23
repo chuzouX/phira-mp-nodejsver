@@ -34,7 +34,7 @@ export class PhiraAuthService implements AuthService {
           Authorization: `Bearer ${token}`,
           'User-Agent': 'PhiraServer/1.0',
         },
-        redirect: 'error'
+        redirect: 'error',
       });
 
       if (!response.ok) {
@@ -45,7 +45,9 @@ export class PhiraAuthService implements AuthService {
 
       const userData: PhiraUserResponse = await response.json();
 
-      this.logger.info(`验证玩家成功：“${userData.name}”（用户ID：${userData.id}）`, { userId: userData.id });
+      this.logger.info(`验证玩家成功：“${userData.name}”（用户ID：${userData.id}）`, {
+        userId: userData.id,
+      });
 
       return {
         id: userData.id,

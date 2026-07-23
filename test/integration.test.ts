@@ -1,4 +1,3 @@
-
 import { ProtocolHandler } from '../src/domain/protocol/ProtocolHandler';
 import { InMemoryRoomManager } from '../src/domain/rooms/RoomManager';
 import { PhiraAuthService } from '../src/domain/auth/AuthService';
@@ -27,13 +26,13 @@ describe('核心流程集成测试 (Core Flow Integration)', () => {
       authService,
       mockLogger,
       'TestServer',
-      'https://api.test'
+      'https://api.test',
     );
 
     // 模拟认证成功
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ id: 100, name: 'Alice' })
+      json: async () => ({ id: 100, name: 'Alice' }),
     });
   });
 
@@ -46,22 +45,36 @@ describe('核心流程集成测试 (Core Flow Integration)', () => {
 
     // 1. 认证
     await new Promise<void>((resolve) => {
-      handler.handleMessage(connId, { type: ClientCommandType.Authenticate, token: '12345678901234567890' }, (resp) => {
-        sendResponse(resp);
-        if (resp.type === ServerCommandType.Authenticate) resolve();
-      });
+      handler.handleMessage(
+        connId,
+        { type: ClientCommandType.Authenticate, token: '12345678901234567890' },
+        (resp) => {
+          sendResponse(resp);
+          if (resp.type === ServerCommandType.Authenticate) resolve();
+        },
+      );
     });
 
-    expect(responses.some(r => r.type === ServerCommandType.Authenticate && r.result.ok)).toBe(true);
+    expect(responses.some((r) => r.type === ServerCommandType.Authenticate && r.result.ok)).toBe(
+      true,
+    );
 
     // 2. 创建房间
-    handler.handleMessage(connId, { type: ClientCommandType.CreateRoom, id: 'room-alice' }, sendResponse);
+    handler.handleMessage(
+      connId,
+      { type: ClientCommandType.CreateRoom, id: 'room-alice' },
+      sendResponse,
+    );
     expect(roomManager.getRoom('room-alice')).toBeDefined();
 
     // 3. 发送聊天
-    handler.handleMessage(connId, { type: ClientCommandType.Chat, message: 'Hello!' }, sendResponse);
-    
+    handler.handleMessage(
+      connId,
+      { type: ClientCommandType.Chat, message: 'Hello!' },
+      sendResponse,
+    );
+
     const room = roomManager.getRoom('room-alice');
-    expect(room?.messages.some(m => m.type === 'Chat' && m.content === 'Hello!')).toBe(true);
+    expect(room?.messages.some((m) => m.type === 'Chat' && m.content === 'Hello!')).toBe(true);
   });
 });

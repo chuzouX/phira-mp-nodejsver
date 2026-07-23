@@ -16,10 +16,10 @@ describe('控制台日志 (ConsoleLogger)', () => {
     jest.spyOn(console, 'warn').mockImplementation(() => {});
     jest.spyOn(console, 'error').mockImplementation(() => {});
     jest.spyOn(console, 'debug').mockImplementation(() => {});
-    
+
     // 模拟 fs.existsSync 返回 true，避免尝试创建日志目录
     (fs.existsSync as jest.Mock).mockReturnValue(true);
-    
+
     logger = new ConsoleLogger('test', 'debug');
     // Ensure readline is null for simple console.log testing
     ConsoleLogger.setReadline(null);
@@ -39,14 +39,17 @@ describe('控制台日志 (ConsoleLogger)', () => {
   test('应当能记录 info 级别消息', () => {
     logger.info('测试 Info 消息');
     expect(console.log).toHaveBeenCalledWith(expect.stringContaining('[INFO] 测试 Info 消息'));
-    expect(fs.appendFileSync).toHaveBeenCalledWith(expect.stringContaining('server-'), expect.stringContaining('[INFO] 测试 Info 消息\n'));
+    expect(fs.appendFileSync).toHaveBeenCalledWith(
+      expect.stringContaining('server-'),
+      expect.stringContaining('[INFO] 测试 Info 消息\n'),
+    );
   });
 
   test('应当能根据日志级别过滤输出', () => {
     const infoLogger = new ConsoleLogger('test', 'info');
     infoLogger.debug('Debug 消息');
     expect(console.log).not.toHaveBeenCalled();
-    
+
     infoLogger.info('Info 消息');
     expect(console.log).toHaveBeenCalled();
   });

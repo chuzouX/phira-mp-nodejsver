@@ -33,7 +33,13 @@ describe('HTTP API 测试 (HttpServer)', () => {
       error: jest.fn(),
     } as any;
 
-    httpServer = new HttpServer(config, mockLogger, mockRoomManager, mockProtocolHandler, mockBanManager);
+    httpServer = new HttpServer(
+      config,
+      mockLogger,
+      mockRoomManager,
+      mockProtocolHandler,
+      mockBanManager,
+    );
   });
 
   afterEach(async () => {
@@ -61,8 +67,8 @@ describe('HTTP API 测试 (HttpServer)', () => {
         state: { type: 'SelectChart', chartId: 1 },
         selectedChart: { name: 'Test Chart' },
         locked: false,
-        cycle: false
-      } as any
+        cycle: false,
+      } as any,
     ]);
     mockProtocolHandler.getSessionCount.mockReturnValue(1);
 

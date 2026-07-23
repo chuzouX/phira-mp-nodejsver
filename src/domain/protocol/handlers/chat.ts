@@ -38,7 +38,9 @@ export function handleChat(
     connectionId,
   });
 
-  ctx.logger.debug(`已在房间 "${room.id}" 广播来自玩家 "${session.userInfo.name}" 的聊天消息`, { userId: session.userId });
+  ctx.logger.debug(`已在房间 "${room.id}" 广播来自玩家 "${session.userInfo.name}" 的聊天消息`, {
+    userId: session.userId,
+  });
 
   ctx.respond(connectionId, sendResponse, {
     type: ServerCommandType.Chat,

@@ -2,7 +2,6 @@ import express from 'express';
 import { createServer, Server } from 'http';
 import session from 'express-session';
 import cookieParser from 'cookie-parser';
-import crypto from 'crypto';
 import { Logger } from '../logging/logger';
 import { ServerConfig } from '../config/config';
 import { RoomManager } from '../domain/rooms/RoomManager';
@@ -33,7 +32,9 @@ export class HttpServer {
     this.app.set('trust proxy', this.config.trustProxyHops);
 
     this.sessionParser = session({
-      secret: this.config.pluginsEnabled ? 'plugin-managed-session-secret' : (process.env.SESSION_SECRET || 'a-very-insecure-secret-change-it'),
+      secret: this.config.pluginsEnabled
+        ? 'plugin-managed-session-secret'
+        : process.env.SESSION_SECRET || 'a-very-insecure-secret-change-it',
       resave: false,
       saveUninitialized: true,
       cookie: {
@@ -49,24 +50,37 @@ export class HttpServer {
   }
 
   private setupMiddleware(): void {
-    this.app.use(express.urlencoded({ extended: true }));
-    this.app.use(express.json());
+    this.app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+    this.app.use(express.json({ limit: '2mb' }));
     this.app.use(cookieParser());
 
-    if (!this.config.pluginsEnabled && (process.env.SESSION_SECRET || 'a-very-insecure-secret-change-it') === 'a-very-insecure-secret-change-it') {
-      this.logger.warn('安全警告：正在使用默认的 Session Secret。请在 .env 或插件配置中设置 Session Secret。');
+    if (
+      !this.config.pluginsEnabled &&
+      (process.env.SESSION_SECRET || 'a-very-insecure-secret-change-it') ===
+        'a-very-insecure-secret-change-it'
+    ) {
+      this.logger.warn(
+        '安全警告：正在使用默认的 Session Secret。请在 .env 或插件配置中设置 Session Secret。',
+      );
     }
 
     this.app.use(this.sessionParser);
 
     this.app.use((_req, res, next) => {
       res.header('Access-Control-Allow-Origin', '*');
-      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, X-Admin-Token, Authorization');
+      res.header(
+        'Access-Control-Allow-Headers',
+        'Origin, X-Requested-With, Content-Type, Accept, X-Admin-Token, Authorization',
+      );
       next();
     });
   }
 
-  private rateLimitMiddleware(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  private rateLimitMiddleware(
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction,
+  ): void {
     const ip = req.ip || req.socket.remoteAddress || 'unknown';
     const now = Date.now();
     const limit = this.rateLimits.get(ip) || { count: 0, lastReset: now };
@@ -97,8 +111,9 @@ export class HttpServer {
         return res.json(this.cachedStatus);
       }
 
-      const rooms = this.roomManager.listRooms()
-        .filter(room => {
+      const rooms = this.roomManager
+        .listRooms()
+        .filter((room) => {
           if (this.config.enablePubWeb) {
             return room.id.startsWith(this.config.pubPrefix);
           }
@@ -107,8 +122,8 @@ export class HttpServer {
           }
           return true;
         })
-        .map(room => {
-          const players = Array.from(room.players.values()).map(p => ({
+        .map((room) => {
+          const players = Array.from(room.players.values()).map((p) => ({
             id: p.user.id,
             name: p.user.name,
           }));
@@ -134,27 +149,29 @@ export class HttpServer {
         onlinePlayers: this.protocolHandler.getSessionCount(),
         roomCount: rooms.length,
         rooms,
-        federation: this.federationManager ? {
-          enabled: true,
-          nodeId: this.federationManager.getNodeId(),
-          remoteRooms: this.federationManager.getRemoteRooms().map((r: any) => ({
-            id: r.id,
-            name: r.name,
-            nodeId: r.nodeId,
-            nodeName: r.nodeName,
-            playerCount: r.playerCount,
-            maxPlayers: r.maxPlayers,
-            state: r.state,
-            locked: r.locked,
-            cycle: r.cycle,
-            players: r.players,
-          })),
-          nodes: this.federationManager.getOnlineNodes().map((n: any) => ({
-            id: n.id,
-            serverName: n.serverName,
-            status: n.status,
-          })),
-        } : { enabled: false },
+        federation: this.federationManager
+          ? {
+              enabled: true,
+              nodeId: this.federationManager.getNodeId(),
+              remoteRooms: this.federationManager.getRemoteRooms().map((r: any) => ({
+                id: r.id,
+                name: r.name,
+                nodeId: r.nodeId,
+                nodeName: r.nodeName,
+                playerCount: r.playerCount,
+                maxPlayers: r.maxPlayers,
+                state: r.state,
+                locked: r.locked,
+                cycle: r.cycle,
+                players: r.players,
+              })),
+              nodes: this.federationManager.getOnlineNodes().map((n: any) => ({
+                id: n.id,
+                serverName: n.serverName,
+                status: n.status,
+              })),
+            }
+          : { enabled: false },
       };
 
       this.cachedStatus = response;
@@ -169,7 +186,11 @@ export class HttpServer {
     return Array.from(this.blacklistedIps.entries()).map(([ip, expiresAt]) => ({ ip, expiresAt }));
   }
 
-  public blacklistIpManual(ip: string, durationSeconds: number, _adminName: string = 'Console'): void {
+  public blacklistIpManual(
+    ip: string,
+    durationSeconds: number,
+    _adminName: string = 'Console',
+  ): void {
     const expiresAt = Date.now() + durationSeconds * 1000;
     this.blacklistedIps.set(ip, expiresAt);
   }

@@ -9,7 +9,15 @@ import { NetworkServer } from '../network/NetworkServer';
 import { HttpServer } from '../network/HttpServer';
 import { BanManager } from '../domain/auth/BanManager';
 
-export type PluginRouteMethod = 'get' | 'post' | 'put' | 'patch' | 'delete' | 'options' | 'head' | 'use';
+export type PluginRouteMethod =
+  | 'get'
+  | 'post'
+  | 'put'
+  | 'patch'
+  | 'delete'
+  | 'options'
+  | 'head'
+  | 'use';
 
 export type PluginEventMap = {
   'player:connect': { connectionId: string; ip: string };
@@ -20,7 +28,16 @@ export type PluginEventMap = {
   'room:join': { room: Room; user: UserInfo; connectionId: string };
   'room:leave': { roomId: string; userId: number; userName: string; connectionId: string };
   'room:gameStart': { room: Room; triggeredBy: number; mode: 'ready' | 'solo-confirm' | 'force' };
-  'room:gameEnd': { room: Room; rankings: Array<{ rank: number; userId: number; userName: string; score: number; accuracy: number }> };
+  'room:gameEnd': {
+    room: Room;
+    rankings: Array<{
+      rank: number;
+      userId: number;
+      userName: string;
+      score: number;
+      accuracy: number;
+    }>;
+  };
   'protocol:beforeHandle': { connectionId: string; command: ClientCommand };
   'protocol:afterHandle': { connectionId: string; command: ClientCommand };
   'chat:message': { room: Room; userId: number; content: string; connectionId: string };
@@ -65,22 +82,45 @@ export interface PluginContext {
   readonly webSocketServer?: { broadcast(type: string, payload: any): void };
   readonly expressApp?: express.Application;
   readonly banManager: BanManager;
+  readonly reloadConfig?: () => void;
+  readonly executeConsoleCommand?: (input: string) => Promise<void>;
+}
+
+export interface PluginCommandOptions {
+  /** Replace command arguments with <redacted> in command.log. */
+  redactInput?: boolean;
 }
 
 export interface PluginApi extends PluginContext {
   readonly events: PluginEventBus;
   readonly pluginName: string;
-  registerRoute(method: PluginRouteMethod, routePath: string, handler: express.RequestHandler): void;
+  registerRoute(
+    method: PluginRouteMethod,
+    routePath: string,
+    handler: express.RequestHandler,
+  ): void;
   serveStatic(mountPath: string, rootDir: string): void;
   getExpressApp(): express.Application | undefined;
   getPluginConfigDir(): string;
   readPluginConfig<T = any>(): T | undefined;
   writePluginConfig(config: unknown): void;
+  listPlugins(): Array<{
+    directory: string;
+    enabled: boolean;
+    loaded: boolean;
+    metadata?: PluginMetadata;
+  }>;
+  reloadPlugin(pluginName: string): Promise<boolean>;
+  reloadServerConfig(): boolean;
   broadcastWs(event: string, data: any): void;
-  registerCommand(name: string, handler: (...args: string[]) => void | Promise<void>): void;
+  registerCommand(
+    name: string,
+    handler: (...args: string[]) => void | Promise<void>,
+    options?: PluginCommandOptions,
+  ): void;
   registerPacketHandler(registration: PacketHandlerRegistration): void;
   broadcastToRoom(roomId: string, command: ServerCommand): boolean;
-  
+
   /** 向指定用户发送协议命令（用于发送私信等） */
   sendCommandToUser(userId: number, command: ServerCommand): boolean;
 
@@ -123,22 +163,24 @@ export interface PluginApi extends PluginContext {
   }>;
 
   /** 获取房间详情 */
-  getRoom(roomId: string): {
-    id: string;
-    name: string;
-    playerCount: number;
-    maxPlayers: number;
-    state: string;
-    locked: boolean;
-    cycle: boolean;
-    ownerId: number;
-    players: Array<{
-      id: number;
-      name: string;
-      isReady: boolean;
-      isFinished: boolean;
-    }>;
-  } | undefined;
+  getRoom(roomId: string):
+    | {
+        id: string;
+        name: string;
+        playerCount: number;
+        maxPlayers: number;
+        state: string;
+        locked: boolean;
+        cycle: boolean;
+        ownerId: number;
+        players: Array<{
+          id: number;
+          name: string;
+          isReady: boolean;
+          isFinished: boolean;
+        }>;
+      }
+    | undefined;
 
   /** 获取服务器统计信息 */
   getServerStats(): {
@@ -178,16 +220,18 @@ export interface PluginApi extends PluginContext {
   isUserOwner(userId: number): boolean;
 
   /** 获取玩家信息 */
-  getPlayer(userId: number): {
-    id: number;
-    name: string;
-    connectionId: string;
-    roomId?: string;
-    roomName?: string;
-    ip: string;
-    isAdmin: boolean;
-    isOwner: boolean;
-  } | undefined;
+  getPlayer(userId: number):
+    | {
+        id: number;
+        name: string;
+        connectionId: string;
+        roomId?: string;
+        roomName?: string;
+        ip: string;
+        isAdmin: boolean;
+        isOwner: boolean;
+      }
+    | undefined;
 
   /** 向指定玩家发送消息 */
   sendServerMessage(roomId: string, content: string): void;
@@ -222,7 +266,7 @@ export interface PluginApi extends PluginContext {
 
 export interface PluginMetadata {
   id: string;
-  uuid: string;            // 插件唯一标识符（UUID）
+  uuid: string; // 插件唯一标识符（UUID）
   name: string;
   version: string;
   description?: string;

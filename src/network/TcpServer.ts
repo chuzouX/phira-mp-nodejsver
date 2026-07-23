@@ -3,11 +3,16 @@
  * Copyright (c) 2024
  */
 
-import { Server as NetServer, Socket, createServer, AddressInfo } from 'net';
+import { Server as NetServer, Socket, createServer } from 'net';
 import { Logger } from '../logging/logger';
 import { ProtocolHandler } from '../domain/protocol/ProtocolHandler';
 import { BinaryReader, BinaryWriter } from '../domain/protocol/BinaryProtocol';
-import { ClientCommandType, CommandParser, ServerCommand, ServerCommandType } from '../domain/protocol/Commands';
+import {
+  ClientCommandType,
+  CommandParser,
+  ServerCommand,
+  ServerCommandType,
+} from '../domain/protocol/Commands';
 
 const PROTOCOL_VERSION = 1;
 
@@ -37,12 +42,12 @@ export class TcpServer {
   private readonly connections = new Map<string, ConnectionState>();
   private readonly connectionsPerIp = new Map<string, number>();
   private readonly illegalPacketCounts = new Map<string, { count: number; lastTime: number }>();
-  
+
   private readonly MAX_PACKET_SIZE = 1024 * 1024; // 1MB limit per packet
-  private readonly MAX_CONNECTIONS_PER_IP = 50;   // DoS protection
+  private readonly MAX_CONNECTIONS_PER_IP = 50; // DoS protection
 
   private readonly PROXY_V2_SIGNATURE = Buffer.from([
-    0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D, 0x0A, 0x51, 0x55, 0x49, 0x54, 0x0A,
+    0x0d, 0x0a, 0x0d, 0x0a, 0x00, 0x0d, 0x0a, 0x51, 0x55, 0x49, 0x54, 0x0a,
   ]);
 
   constructor(
@@ -50,15 +55,18 @@ export class TcpServer {
     private readonly protocolHandler: ProtocolHandler,
     private readonly useProxyProtocol: boolean = false,
   ) {
-      // Periodic cleanup of the tracker every 30 minutes
-      setInterval(() => {
-          const now = Date.now();
-          for (const [ip, data] of this.illegalPacketCounts.entries()) {
-              if (now - data.lastTime > 30 * 60 * 1000) {
-                  this.illegalPacketCounts.delete(ip);
-              }
+    // Periodic cleanup of the tracker every 30 minutes
+    setInterval(
+      () => {
+        const now = Date.now();
+        for (const [ip, data] of this.illegalPacketCounts.entries()) {
+          if (now - data.lastTime > 30 * 60 * 1000) {
+            this.illegalPacketCounts.delete(ip);
           }
-      }, 30 * 60 * 1000);
+        }
+      },
+      30 * 60 * 1000,
+    );
   }
 
   start(port: number, host: string): Promise<void> {
@@ -122,9 +130,9 @@ export class TcpServer {
     // Limit connections per IP (skip localhost for stress testing)
     const currentCount = this.connectionsPerIp.get(ip) || 0;
     if (!isLocal && currentCount >= this.MAX_CONNECTIONS_PER_IP) {
-        this.logger.warn(`拦截到来自 IP ${ip} 的过多 TCP 连接尝试 (${currentCount})`);
-        socket.destroy();
-        return;
+      this.logger.warn(`拦截到来自 IP ${ip} 的过多 TCP 连接尝试 (${currentCount})`);
+      socket.destroy();
+      return;
     }
     this.connectionsPerIp.set(ip, currentCount + 1);
 
@@ -132,9 +140,9 @@ export class TcpServer {
     const banManager = this.protocolHandler.getBanManager();
     const banInfo = banManager?.isIpBanned(ip);
     if (!isLocal && banInfo && banInfo.adminName === 'System') {
-        this.logger.warn(`拦截到来自系统封禁 IP ${ip} 的 TCP 连接尝试`);
-        socket.destroy();
-        return;
+      this.logger.warn(`拦截到来自系统封禁 IP ${ip} 的 TCP 连接尝试`);
+      socket.destroy();
+      return;
     }
 
     const connectionId = this.generateConnectionId();
@@ -150,10 +158,16 @@ export class TcpServer {
 
     this.connections.set(connectionId, state);
 
-    this.logger.debug(`建立 TCP 连接: ${connectionId} (${socket.remoteAddress}:${socket.remotePort})`);
+    this.logger.debug(
+      `建立 TCP 连接: ${connectionId} (${socket.remoteAddress}:${socket.remotePort})`,
+    );
 
     // Initial handle with remoteAddress, will be updated if proxy protocol gives real IP
-    this.protocolHandler.handleConnection(connectionId, () => this.forceCloseConnection(connectionId), ip);
+    this.protocolHandler.handleConnection(
+      connectionId,
+      () => this.forceCloseConnection(connectionId),
+      ip,
+    );
     this.startTimeoutMonitor(connectionId, state);
 
     socket.on('data', (data: Buffer) => {
@@ -178,7 +192,9 @@ export class TcpServer {
             this.logger.debug(`收到协议版本信息: ${connectionId} (版本: ${version})`);
 
             if (version !== PROTOCOL_VERSION) {
-              this.logger.warn(`客户端协议版本不匹配: ${connectionId} (预期: ${PROTOCOL_VERSION}, 收到: ${version})`);
+              this.logger.warn(
+                `客户端协议版本不匹配: ${connectionId} (预期: ${PROTOCOL_VERSION}, 收到: ${version})`,
+              );
             }
           } else {
             return;
@@ -194,12 +210,12 @@ export class TcpServer {
     socket.on('close', () => {
       this.clearTimeoutMonitor(state);
       this.connections.delete(connectionId);
-      
+
       const currentCount = this.connectionsPerIp.get(ip) || 1;
       if (currentCount <= 1) {
-          this.connectionsPerIp.delete(ip);
+        this.connectionsPerIp.delete(ip);
       } else {
-          this.connectionsPerIp.set(ip, currentCount - 1);
+        this.connectionsPerIp.set(ip, currentCount - 1);
       }
 
       this.protocolHandler.handleDisconnection(connectionId);
@@ -209,7 +225,7 @@ export class TcpServer {
     socket.on('error', (error) => {
       this.logger.error(`TCP 通信错误: ${connectionId} (${error.message})`);
       if (error.message.includes('ECONNABORTED') || error.message.includes('ECONNRESET')) {
-          this.reportSuspiciousActivity(ip, connectionId, `连接重置/中止 (${error.message})`);
+        this.reportSuspiciousActivity(ip, connectionId, `连接重置/中止 (${error.message})`);
       }
     });
   }
@@ -231,7 +247,9 @@ export class TcpServer {
 
       if (timeSinceLastReceived <= allowableInactivity) {
         if (state.missedHeartbeats !== 0) {
-          this.logger.debug(`[心跳] 恢复正常: ${connectionId} (连续次数: ${state.missedHeartbeats}, 延迟: ${timeSinceLastReceived}ms)`);
+          this.logger.debug(
+            `[心跳] 恢复正常: ${connectionId} (连续次数: ${state.missedHeartbeats}, 延迟: ${timeSinceLastReceived}ms)`,
+          );
           state.missedHeartbeats = 0;
         }
         return;
@@ -239,7 +257,9 @@ export class TcpServer {
 
       state.missedHeartbeats += 1;
 
-      this.logger.warn(`[心跳] 超时警告: ${connectionId} (连续次数: ${state.missedHeartbeats}, 延迟: ${timeSinceLastReceived}ms)`);
+      this.logger.warn(
+        `[心跳] 超时警告: ${connectionId} (连续次数: ${state.missedHeartbeats}, 延迟: ${timeSinceLastReceived}ms)`,
+      );
 
       if (state.missedHeartbeats >= HEARTBEAT_MAX_MISSED) {
         this.logger.error(`[心跳] 连续超时，正在断开连接: ${connectionId}`);
@@ -264,14 +284,16 @@ export class TcpServer {
     // Check signature
     if (state.buffer.subarray(0, 12).compare(this.PROXY_V2_SIGNATURE) !== 0) {
       this.logger.warn(`无效的 Proxy Protocol v2 签名: ${connectionId}`);
-      state.proxyHeaderReceived = true; // Fallback to normal if signature doesn't match? 
+      state.proxyHeaderReceived = true; // Fallback to normal if signature doesn't match?
       // Actually if useProxyProtocol is true, we expect it.
       return true;
     }
 
     const versionCommand = state.buffer[12];
-    if ((versionCommand & 0xF0) !== 0x20) {
-      this.logger.warn(`不支持的 Proxy Protocol 版本: ${connectionId} (0x${versionCommand.toString(16)})`);
+    if ((versionCommand & 0xf0) !== 0x20) {
+      this.logger.warn(
+        `不支持的 Proxy Protocol 版本: ${connectionId} (0x${versionCommand.toString(16)})`,
+      );
       state.proxyHeaderReceived = true;
       return true;
     }
@@ -284,10 +306,12 @@ export class TcpServer {
     const familyProto = state.buffer[13];
     let realIp: string | undefined;
 
-    if (familyProto === 0x11) { // IPv4, Stream
+    if (familyProto === 0x11) {
+      // IPv4, Stream
       const srcAddr = `${state.buffer[16]}.${state.buffer[17]}.${state.buffer[18]}.${state.buffer[19]}`;
       realIp = srcAddr;
-    } else if (familyProto === 0x21) { // IPv6, Stream
+    } else if (familyProto === 0x21) {
+      // IPv6, Stream
       const parts = [];
       for (let i = 0; i < 8; i++) {
         parts.push(state.buffer.readUInt16BE(16 + i * 2).toString(16));
@@ -298,17 +322,17 @@ export class TcpServer {
     if (realIp) {
       state.realIp = realIp;
       this.logger.debug(`Proxy Protocol v2 识别到真实 IP: ${connectionId} -> ${realIp}`);
-      
+
       // Update real IP in ProtocolHandler
       this.protocolHandler.updateConnectionIp(connectionId, realIp);
-      
+
       // Re-check ban for the real IP
       const banManager = this.protocolHandler.getBanManager();
       const realIpBanInfo = banManager?.isIpBanned(realIp);
       if (realIpBanInfo && realIpBanInfo.adminName === 'System') {
-          this.logger.warn(`拦截到来自系统封禁真实 IP ${realIp} 的 TCP 连接 (${connectionId})`);
-          state.socket.destroy();
-          return false;
+        this.logger.warn(`拦截到来自系统封禁真实 IP ${realIp} 的 TCP 连接 (${connectionId})`);
+        state.socket.destroy();
+        return false;
       }
     }
 
@@ -331,11 +355,13 @@ export class TcpServer {
       const { value: packetLength, bytesRead: lengthBytes } = lengthResult;
 
       if (packetLength > this.MAX_PACKET_SIZE) {
-          const ip = state.socket.remoteAddress || 'unknown';
-          this.logger.error(`收到过大的包: ${connectionId} (${ip}) (大小: ${packetLength} bytes), 强制断开连接`);
-          this.forceCloseConnection(connectionId);
-          this.reportSuspiciousActivity(ip, connectionId, '包大小超限');
-          return;
+        const ip = state.socket.remoteAddress || 'unknown';
+        this.logger.error(
+          `收到过大的包: ${connectionId} (${ip}) (大小: ${packetLength} bytes), 强制断开连接`,
+        );
+        this.forceCloseConnection(connectionId);
+        this.reportSuspiciousActivity(ip, connectionId, '包大小超限');
+        return;
       }
 
       if (state.buffer.length < lengthBytes + packetLength) {
@@ -354,8 +380,14 @@ export class TcpServer {
           if (parsed.command.type === ClientCommandType.Authenticate) {
             if (parsed.command.token.length !== 20) {
               const ip = state.socket.remoteAddress || 'unknown';
-              this.logger.warn(`检测到非法的 Token 长度: ${connectionId} (${ip}) (长度: ${parsed.command.token.length})`);
-              this.reportSuspiciousActivity(ip, connectionId, `非法 Token 长度 (${parsed.command.token.length})`);
+              this.logger.warn(
+                `检测到非法的 Token 长度: ${connectionId} (${ip}) (长度: ${parsed.command.token.length})`,
+              );
+              this.reportSuspiciousActivity(
+                ip,
+                connectionId,
+                `非法 Token 长度 (${parsed.command.token.length})`,
+              );
               // Let protocolHandler handle the response to client but we've reported it
             }
           }
@@ -363,7 +395,9 @@ export class TcpServer {
           // Source: phira-mp-server/src/session.rs:164-166
           // Client sends Ping, server responds with Pong immediately
           if (parsed.command.type === ClientCommandType.Ping) {
-            this.logger.debug(`[心跳] 收到客户端 Ping，立即响应 Pong: ${connectionId} (延迟: ${Date.now() - state.lastReceivedTime}ms)`);
+            this.logger.debug(
+              `[心跳] 收到客户端 Ping，立即响应 Pong: ${connectionId} (延迟: ${Date.now() - state.lastReceivedTime}ms)`,
+            );
             this.sendCommand(state.socket, { type: ServerCommandType.Pong });
             continue;
           }
@@ -381,10 +415,10 @@ export class TcpServer {
       } catch (error) {
         const ip = state.socket.remoteAddress || 'unknown';
         this.logger.error(`收到非法的包: ${connectionId} (${ip}) (${(error as Error).message})`);
-        
+
         // Immediate action: close connection
         this.forceCloseConnection(connectionId);
-        
+
         // Anti-clogging: Track illegal packets per IP and ban if necessary
         this.reportSuspiciousActivity(ip, connectionId, '非法数据包');
         break; // Stop processing this buffer
@@ -393,45 +427,55 @@ export class TcpServer {
   }
 
   public reportSuspiciousActivity(ip: string, connectionId?: string, reason?: string): void {
-      if (ip === 'unknown') return;
+    if (ip === 'unknown') return;
 
-      let targetIp = ip;
-      if (connectionId) {
-          const state = this.connections.get(connectionId);
-          if (state && state.realIp) {
-              targetIp = state.realIp;
-          }
+    let targetIp = ip;
+    if (connectionId) {
+      const state = this.connections.get(connectionId);
+      if (state && state.realIp) {
+        targetIp = state.realIp;
+      }
+    }
+
+    // Anti-self-ban: skip automatic banning for local/proxy IPs if they are not the real source
+    const isLocal =
+      targetIp === '127.0.0.1' || targetIp === '::1' || targetIp === '::ffff:127.0.0.1';
+
+    const now = Date.now();
+    const data = this.illegalPacketCounts.get(targetIp) || { count: 0, lastTime: now };
+
+    // Reset if last failure was long ago
+    if (now - data.lastTime > 5 * 60 * 1000) {
+      data.count = 0;
+    }
+
+    data.count += 1;
+    data.lastTime = now;
+    this.illegalPacketCounts.set(targetIp, data);
+
+    if (data.count >= 10) {
+      if (isLocal) {
+        this.logger.warn(
+          `检测到本地/穿透 IP ${targetIp} 触发可疑活动 (${data.count} 次: ${reason || '未知'}), 由于是穿透环境，跳过自动封禁。`,
+        );
+        return;
       }
 
-      // Anti-self-ban: skip automatic banning for local/proxy IPs if they are not the real source
-      const isLocal = targetIp === '127.0.0.1' || targetIp === '::1' || targetIp === '::ffff:127.0.0.1';
-      
-      const now = Date.now();
-      const data = this.illegalPacketCounts.get(targetIp) || { count: 0, lastTime: now };
-      
-      // Reset if last failure was long ago
-      if (now - data.lastTime > 5 * 60 * 1000) {
-          data.count = 0;
+      const banManager = this.protocolHandler.getBanManager();
+      if (banManager) {
+        this.logger.error(
+          `IP ${targetIp} 触发了过多可疑活动 (${data.count} 次: ${reason || '未知'}), 正在自动封禁该 IP 7天`,
+        );
+        // 7 days = 7 * 24 * 3600 = 604800 seconds
+        banManager.banIp(
+          targetIp,
+          604800,
+          `可疑活动过多 (系统自动封禁): ${reason || '异常行为'}`,
+          'System',
+        );
+        this.illegalPacketCounts.delete(targetIp);
       }
-
-      data.count += 1;
-      data.lastTime = now;
-      this.illegalPacketCounts.set(targetIp, data);
-
-      if (data.count >= 10) {
-          if (isLocal) {
-              this.logger.warn(`检测到本地/穿透 IP ${targetIp} 触发可疑活动 (${data.count} 次: ${reason || '未知'}), 由于是穿透环境，跳过自动封禁。`);
-              return;
-          }
-
-          const banManager = this.protocolHandler.getBanManager();
-          if (banManager) {
-              this.logger.error(`IP ${targetIp} 触发了过多可疑活动 (${data.count} 次: ${reason || '未知'}), 正在自动封禁该 IP 7天`);
-              // 7 days = 7 * 24 * 3600 = 604800 seconds
-              banManager.banIp(targetIp, 604800, `可疑活动过多 (系统自动封禁): ${reason || '异常行为'}`, 'System');
-              this.illegalPacketCounts.delete(targetIp);
-          }
-      }
+    }
   }
 
   private readULEB(buffer: Buffer): { value: number; bytesRead: number } | null {
