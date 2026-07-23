@@ -19,7 +19,6 @@ config/*
 # 只保留 example 作为官方示例插件
 plugins/*
 !plugins/example/
-!plugins/server-control/
 !plugins/tsconfig.json
 
 tools/

@@ -16,12 +16,11 @@ module.exports = [
       'eslint.config.js',
       'jest.config.js',
       'plugins/**/*.js',
-      'plugins/server-control/res/public/**',
     ],
   },
   ...tseslint.configs['flat/recommended'],
   {
-    files: ['src/**/*.ts', 'plugins/**/*.ts', 'test/**/*.ts', 'plugin-api.d.ts'],
+    files: ['src/**/*.ts', 'plugins/example/**/*.ts', 'test/**/*.ts', 'plugin-api.d.ts'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
@@ -29,7 +28,6 @@ module.exports = [
           './tsconfig.json',
           './tsconfig.test.json',
           './plugins/tsconfig.json',
-          './plugins/server-control/ui/tsconfig.json',
         ],
         tsconfigRootDir: __dirname,
       },

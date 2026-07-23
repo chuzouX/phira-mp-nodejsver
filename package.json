@@ -5,18 +5,14 @@
   "main": "dist/index.js",
   "bin": "dist/index.js",
   "scripts": {
-    "build": "tsc && npm run build:plugins",
-    "build:plugins": "tsc -p plugins/tsconfig.json && npm run build:server-control-ui",
-    "build:server-control-ui": "vite build --config plugins/server-control/ui/vite.config.ts",
-    "server-control:hash": "node plugins/server-control/scripts/hash-password.js",
+    "build": "tsc",
     "plugin:create": "node scripts/create-plugin.js",
     "dev": "nodemon",
     "start": "node dist/index.js",
-    "test": "jest --verbose --testPathIgnorePatterns=server-control",
-    "test:plugins": "jest --verbose test/server-control.test.ts test/server-control-security.test.ts",
+    "test": "jest --verbose",
     "test:watch": "jest --watch",
-    "lint": "eslint src plugins test plugin-api.d.ts --ext .ts",
-    "lint:fix": "eslint src plugins test plugin-api.d.ts --ext .ts --fix",
+    "lint": "eslint src plugins/example test plugin-api.d.ts --ext .ts",
+    "lint:fix": "eslint src plugins/example test plugin-api.d.ts --ext .ts --fix",
     "format": "prettier --write \"src/**/*.ts\"",
     "package:exe": "npm run build && node scripts/package.js win-x64",
     "package:linux": "npm run build && node scripts/package.js linux-x64",
@@ -53,13 +49,10 @@
     "@types/jest": "^30.0.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^24.9.2",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
     "@types/supertest": "^6.0.3",
     "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^8.46.2",
     "@typescript-eslint/parser": "^8.46.2",
-    "@vitejs/plugin-react": "^4.3.4",
     "@yao-pkg/pkg": "6.10.1",
     "eslint": "^9.38.0",
     "eslint-config-prettier": "^10.1.8",
@@ -70,8 +63,7 @@
     "supertest": "^7.2.2",
     "ts-jest": "^29.4.11",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3",
-    "vite": "^6.3.5"
+    "typescript": "^5.9.3"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",
@@ -79,10 +71,6 @@
     "express": "^5.2.1",
     "express-session": "^1.19.0",
     "js-yaml": "^4.1.0",
-    "lucide-react": "^1.25.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "recharts": "^3.10.0",
     "ws": "^8.19.0"
   }
 }
