@@ -128,6 +128,7 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
   };
 
   const setAdminStatus = async (userId: number, isAdmin: boolean): Promise<string | null> => {
+    if (!userId || userId <= 0) return null;
     const currentAdmins = [...config.adminPhiraId];
     if (isAdmin) {
       if (!currentAdmins.includes(userId)) {
@@ -150,13 +151,14 @@ export const createApplication = (overrides?: Partial<ServerConfig>): Applicatio
     try {
       const response = await fetch(`${config.phiraApiUrl}/user/${userId}`);
       if (response.ok) {
-        const data = (await response.json()) as any;
+        const data = (await response.json()) as { name?: string };
         return data.name || '未知用户';
       }
     } catch (e) {
       // Silently ignore API errors
     }
-    return '未知用户';
+
+    return null;
   };
 
   const updateConfig = (key: string, value: string): void => {

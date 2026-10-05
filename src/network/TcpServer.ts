@@ -55,6 +55,13 @@ export class TcpServer {
     private readonly protocolHandler: ProtocolHandler,
     private readonly useProxyProtocol: boolean = false,
   ) {
+    this.protocolHandler.onSuspiciousActivity = (
+      ip: string,
+      connectionId?: string,
+      reason?: string,
+    ) => {
+      this.reportSuspiciousActivity(ip, connectionId, reason);
+    };
     // Periodic cleanup of the tracker every 30 minutes
     setInterval(
       () => {

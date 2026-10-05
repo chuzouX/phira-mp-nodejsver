@@ -55,7 +55,25 @@ export function handleAuthenticate(
     return;
   }
 
-  const isVirtualToken = token.startsWith('stress_') && process.env.NODE_ENV !== 'production';
+  const isVirtualAuthAllowed =
+    process.env.NODE_ENV !== 'production' &&
+    (process.env.STRESS_VIRTUAL_AUTH === 'true' || process.env.ENABLE_STRESS_VIRTUAL_AUTH === 'true');
+  const isVirtualToken = isVirtualAuthAllowed && token.startsWith('stress_');
+
+  if (!isVirtualAuthAllowed && token.startsWith('stress_')) {
+    const ip = ctx.connectionIps.get(connectionId) || 'unknown';
+    ctx.logger.warn(`[虚拟认证拦截] 收到未经启用的虚拟 Token: ${connectionId} (${ip})`, {
+      userId: -1,
+    });
+    ctx.reportSuspiciousActivity?.(ip, connectionId, '尝试未启用的虚拟Token认证');
+    ctx.respond(connectionId, sendResponse, {
+      type: ServerCommandType.Authenticate,
+      result: { ok: false, error: '虚拟 Token 认证未启用' },
+    });
+    const closer = ctx.connectionClosers.get(connectionId);
+    if (closer) closer();
+    return;
+  }
 
   if (isVirtualToken) {
     ctx.logger.warn(`[虚拟认证] 连接 ${connectionId} 使用虚拟 token 绕过认证（仅开发环境可用）`, {
@@ -65,14 +83,21 @@ export function handleAuthenticate(
 
   const authenticate = async (): Promise<void> => {
     try {
-      const basicUserInfo = isVirtualToken
-        ? {
-            id: (parseInt(token.slice(7, 15), 36) % 900000) + 100000,
-            name: `Stress_${token.slice(7, 13)}`,
-            avatar: '',
-            monitor: false,
-          }
-        : await ctx.authService.authenticate(token);
+      let basicUserInfo: { id: number; name: string; avatar?: string; monitor: boolean };
+      let detailedInfo: { rks?: number; bio?: string };
+
+      if (isVirtualToken) {
+        basicUserInfo = {
+          id: -((parseInt(token.slice(7, 15), 36) % 900000) + 1000000), // 负数ID命名空间
+          name: `Stress_${token.slice(7, 13)}`,
+          avatar: '',
+          monitor: false,
+        };
+        detailedInfo = { rks: 0, bio: '' };
+      } else {
+        basicUserInfo = await ctx.authService.authenticate(token);
+        detailedInfo = await fetchUserInfo(ctx, basicUserInfo.id);
+      }
 
       if (ctx.banManager) {
         const ip = ctx.connectionIps.get(connectionId) || 'unknown';
@@ -117,7 +142,6 @@ export function handleAuthenticate(
         }
       }
 
-      const detailedInfo = await fetchUserInfo(ctx, basicUserInfo.id);
 
       const userInfo: UserInfo = {
         ...basicUserInfo,

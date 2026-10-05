@@ -22,3 +22,4 @@ plugins/*
 !plugins/tsconfig.json
 
 tools/
+ctf2/

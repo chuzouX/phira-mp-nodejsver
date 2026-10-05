@@ -37,6 +37,20 @@ describe('二进制协议 (BinaryProtocol)', () => {
       expect(reader.uleb()).toBe(v);
     }
   });
+
+  test('畸形超长 ULEB 应当在 shift > 63n 时快速失败防止 DoS', () => {
+    const malicious = Buffer.concat([Buffer.alloc(64, 0x80), Buffer.from([0x01])]);
+    const reader = new BinaryReader(malicious);
+    expect(() => reader.uleb()).toThrow('Invalid ULEB128 encoding: shift limit exceeded');
+  });
+
+  test('string 长度超出剩余缓冲区时应当快速失败', () => {
+    const writer = new BinaryWriter();
+    writer.uleb(1000n);
+    writer.u8(1);
+    const reader = new BinaryReader(writer.toBuffer());
+    expect(() => reader.string()).toThrow('Invalid string length');
+  });
 });
 
 describe('指令解析器 (CommandParser)', () => {

@@ -512,8 +512,11 @@ export class InMemoryRoomManager implements RoomManager {
   setRoomBlacklist(roomId: string, userIds: number[]): boolean {
     const room = this.rooms.get(roomId);
     if (!room) return false;
-    room.blacklist = userIds;
-    this.logger.debug(`房间 “${roomId}” 黑名单已更新，人数: ${userIds.length}`, { userId: -1 });
+    const cleanIds = Array.isArray(userIds)
+      ? userIds.map(Number).filter((n) => Number.isSafeInteger(n) && n > 0)
+      : [];
+    room.blacklist = Array.from(new Set(cleanIds));
+    this.logger.debug(`房间 “${roomId}” 黑名单已更新，人数: ${room.blacklist.length}`, { userId: -1 });
     return true;
   }
 
@@ -526,8 +529,11 @@ export class InMemoryRoomManager implements RoomManager {
   setRoomWhitelist(roomId: string, userIds: number[]): boolean {
     const room = this.rooms.get(roomId);
     if (!room) return false;
-    room.whitelist = userIds;
-    this.logger.debug(`房间 “${roomId}” 白名单已更新，人数: ${userIds.length}`, { userId: -1 });
+    const cleanIds = Array.isArray(userIds)
+      ? userIds.map(Number).filter((n) => Number.isSafeInteger(n) && n > 0)
+      : [];
+    room.whitelist = Array.from(new Set(cleanIds));
+    this.logger.debug(`房间 “${roomId}” 白名单已更新，人数: ${room.whitelist.length}`, { userId: -1 });
     return true;
   }
 }

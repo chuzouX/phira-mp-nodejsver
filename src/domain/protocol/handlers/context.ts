@@ -57,4 +57,5 @@ export interface HandlerCtx {
   toClientRoomState(room: Room, userId: number): ClientRoomState;
   handleDisconnection(connectionId: string): void;
   sendServerMessage(roomId: string, content: string): void;
+  reportSuspiciousActivity?: (ip: string, connectionId?: string, reason?: string) => void;
 }

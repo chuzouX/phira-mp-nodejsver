@@ -85,7 +85,7 @@ export function listPlugins(ctx: ConsoleCtx, _args: string[]): void {
 
 export async function reloadPlugin(ctx: ConsoleCtx, args: string[]): Promise<void> {
   if (!ctx.pluginManager) return;
-  const pluginName = args[1];
+  const pluginName = args[2];
   ctx.logger.command(`[插件重载] 正在重载插件: ${pluginName}`);
   const success = await ctx.pluginManager.reloadPlugin(pluginName);
   if (success) {

@@ -37,7 +37,7 @@ export function createPluginApi(
       }
       const routeSnapshot = self.snapshotExpressLayers();
       const wrappedHandler: express.RequestHandler = (req, res, next) => {
-        if (!ctx.plugins.has(pluginName)) {
+        if (!ctx.plugins.has(pluginName) && !self.initializingPlugins.has(pluginName)) {
           return res.status(503).json({
             error: 'Service Unavailable',
             message: `Plugin '${pluginName}' is not loaded`,
@@ -120,7 +120,7 @@ export function createPluginApi(
         ...session,
         connectionId: '',
         isAdmin: isAdminOrOwner(context, session.id),
-        isOwner: context.config.ownerPhiraId.includes(session.id),
+        isOwner: Boolean(session.id && session.id > 0 && context.config.ownerPhiraId.includes(session.id)),
       }));
     },
     getRooms: () => {
@@ -183,7 +183,7 @@ export function createPluginApi(
       };
     },
     isUserAdmin: (userId: number) => isAdminOrOwner(context, userId),
-    isUserOwner: (userId: number) => context.config.ownerPhiraId.includes(userId),
+    isUserOwner: (userId: number) => Boolean(userId && userId > 0 && context.config.ownerPhiraId.includes(userId)),
     getPlayer: (userId: number) => {
       const sessions = context.protocolHandler.getAllSessions();
       const session: any = sessions.find((s: any) => s.id === userId);
@@ -195,7 +195,7 @@ export function createPluginApi(
         roomId: room?.id,
         roomName: room?.name,
         isAdmin: isAdminOrOwner(context, userId),
-        isOwner: context.config.ownerPhiraId.includes(userId),
+        isOwner: Boolean(userId && userId > 0 && context.config.ownerPhiraId.includes(userId)),
       };
     },
     sendServerMessage: (roomId: string, content: string) => {
@@ -221,6 +221,10 @@ export function createPluginApi(
   };
 }
 
-function isAdminOrOwner(ctx: any, userId: number): boolean {
+function isAdminOrOwner(
+  ctx: { config: { adminPhiraId: number[]; ownerPhiraId: number[] } },
+  userId: number,
+): boolean {
+  if (!userId || userId <= 0) return false;
   return ctx.config.adminPhiraId.includes(userId) || ctx.config.ownerPhiraId.includes(userId);
 }

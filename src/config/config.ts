@@ -31,7 +31,8 @@ USE_PROXY_PROTOCOL=false
 TRUST_PROXY_HOPS=1
 LOG_LEVEL=info
 # WARNING: Set to production for public servers, otherwise virtual auth (stress_ token) remains active
-NODE_ENV=development
+NODE_ENV=production
+STRESS_VIRTUAL_AUTH=false
 PHIRA_API_URL=https://phira.5wyxi.com
 SERVER_NAME=Server
 ROOM_SIZE=8
@@ -67,12 +68,12 @@ PLUGINS_ENABLED=true
 
 ensureEnvFile();
 
-if (process.env.NODE_ENV !== 'production') {
-  const dotenv = require('dotenv');
-  dotenv.config();
-} else {
-  const dotenv = require('dotenv');
-  dotenv.config();
+const dotenv = require('dotenv');
+dotenv.config();
+
+if (process.env.NODE_ENV === 'production') {
+  process.env.STRESS_VIRTUAL_AUTH = 'false';
+  process.env.ENABLE_STRESS_VIRTUAL_AUTH = 'false';
 }
 
 export interface ServerConfig {

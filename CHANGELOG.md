@@ -1,3 +1,33 @@
+## [0.6.3] — 2026-10-05
+
+### 🛡️ 安全审计漏洞修复 (Security Hardening)
+
+依据白盒安全审计报告，全面修复 V-01 至 V-10 共 10 项安全问题：
+
+- **V-01 虚拟 Token 绕过与提权防护**:
+  - `NODE_ENV === 'production'` 启动时强置虚拟认证关闭（`STRESS_VIRTUAL_AUTH = false`）。
+  - 开发压测环境下虚拟 Token 本地直接生成负数区间用户 ID，跳过 Phira 远程网络调用，特权检查强制要求 `userId > 0`。
+  - 未开启虚拟认证时直接快速拒绝 `stress_` 前缀连接并记录可疑活动。
+- **V-02 `X-Admin-Secret` 垂直越权修复**:
+  - 限制 `X-Admin-Secret` 仅代表 Admin 级外部鉴权，禁止访问 Owner 专属端点（直接返回 HTTP 403 Forbidden）。
+- **V-03 CORS 统一治理**:
+  - 移除 HTTP 宿主全局通配跨域头，按需对只读端点设置 `Access-Control-Allow-Origin: *`。
+  - Web 面板仅针对配置白名单 `allowedOrigins` 严格比对并下发跨域凭据响应头。
+- **V-04 弱密钥动态安全回退**:
+  - 增加弱密钥与默认示例密钥检测，回退至强随机运行时密钥并输出控制台告警。
+- **V-05 房间黑/白名单类型收敛与逻辑加固**:
+  - 严格校验 `userIds` 为正整数数组，非法类型直接返回 HTTP 400；`RoomManager` 防御式去重与整数清洗。
+- **V-06 ULEB128 解码边界与 CPU DoS 防护**:
+  - `BinaryReader.uleb()` 增加 `shift > 63n` 上限拦截，阻断超长畸形数据包导致的 CPU 放大攻击；增加缓冲区剩余长度预检。
+- **V-07 AES Admin Token 时间戳验证与防重放**:
+  - 支持 `${timestamp}_${nonce}_${secret}_xy521` 格式与 5 分钟有效窗口校验；内存缓存 Nonce 阻断重放攻击；向下兼容旧版并打印废弃告警。
+- **V-08 聊天消息长度限制**:
+  - `handleChat` 限制单条消息最大 2048 字符，超长消息快速拦截。
+- **V-09 控制台密码策略加固**:
+  - `server-control` 识别默认哈希与未配置状态，强行阻断面板登录认证（HTTP 503）。
+- **V-10 联邦路由规范注册与生命周期包装**:
+  - `PluginManager` 维护 `initializingPlugins` 状态集，支持插件 `init()` 阶段正常握手，并将联邦路由规范注册纳入生命周期监管。
+
 ## [0.6.1] — 2026-07-20
 
 ### 🔌 联邦插件化

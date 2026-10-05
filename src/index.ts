@@ -20,6 +20,11 @@ process.emit = function (name: string, data: unknown, ...args: unknown[]) {
   return originalEmit.apply(process, [name, data, ...args]);
 };
 
+if (process.env.NODE_ENV === 'production') {
+  process.env.STRESS_VIRTUAL_AUTH = 'false';
+  process.env.ENABLE_STRESS_VIRTUAL_AUTH = 'false';
+}
+
 import { createApplication } from './app';
 
 const main = async () => {
