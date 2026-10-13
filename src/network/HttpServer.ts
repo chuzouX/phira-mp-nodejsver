@@ -1,4 +1,5 @@
 import express from 'express';
+import crypto from 'crypto';
 import { createServer, Server } from 'http';
 import session from 'express-session';
 import cookieParser from 'cookie-parser';
@@ -31,10 +32,22 @@ export class HttpServer {
 
     this.app.set('trust proxy', this.config.trustProxyHops);
 
+    const knownWeak = new Set([
+      'a-very-insecure-secret-change-it',
+      'change-this-to-a-random-secret',
+      'plugin-managed-session-secret',
+    ]);
+    const rawSecret = process.env.SESSION_SECRET || this.config.sessionSecret;
+    let effectiveSecret = rawSecret;
+    if (!effectiveSecret || effectiveSecret.length < 16 || knownWeak.has(effectiveSecret)) {
+      effectiveSecret = crypto.randomBytes(32).toString('hex');
+      this.logger.warn(
+        '安全警告：未配置安全 Session Secret（或使用了已知弱密钥），已动态生成高强度运行时随机密钥。请在环境变量或配置中设置强 SESSION_SECRET。',
+      );
+    }
+
     this.sessionParser = session({
-      secret: this.config.pluginsEnabled
-        ? 'plugin-managed-session-secret'
-        : process.env.SESSION_SECRET || 'a-very-insecure-secret-change-it',
+      secret: effectiveSecret,
       resave: false,
       saveUninitialized: true,
       cookie: {
@@ -53,27 +66,7 @@ export class HttpServer {
     this.app.use(express.urlencoded({ extended: true, limit: '2mb' }));
     this.app.use(express.json({ limit: '2mb' }));
     this.app.use(cookieParser());
-
-    if (
-      !this.config.pluginsEnabled &&
-      (process.env.SESSION_SECRET || 'a-very-insecure-secret-change-it') ===
-        'a-very-insecure-secret-change-it'
-    ) {
-      this.logger.warn(
-        '安全警告：正在使用默认的 Session Secret。请在 .env 或插件配置中设置 Session Secret。',
-      );
-    }
-
     this.app.use(this.sessionParser);
-
-    this.app.use((_req, res, next) => {
-      res.header('Access-Control-Allow-Origin', '*');
-      res.header(
-        'Access-Control-Allow-Headers',
-        'Origin, X-Requested-With, Content-Type, Accept, X-Admin-Token, Authorization',
-      );
-      next();
-    });
   }
 
   private rateLimitMiddleware(
@@ -103,10 +96,12 @@ export class HttpServer {
 
   private setupRoutes(): void {
     this.app.get('/api/version', (_req, res) => {
+      res.header('Access-Control-Allow-Origin', '*');
       return res.json({ version });
     });
 
     this.app.get('/api/status', this.rateLimitMiddleware.bind(this), (_req, res) => {
+      res.header('Access-Control-Allow-Origin', '*');
       if (Date.now() - this.statusCacheTime < 1000 && this.cachedStatus) {
         return res.json(this.cachedStatus);
       }

@@ -88,6 +88,12 @@ export class ProtocolHandler {
     return this.sessions.size;
   }
 
+  public onSuspiciousActivity?: (ip: string, connectionId?: string, reason?: string) => void;
+
+  public reportSuspiciousActivity(ip: string, connectionId?: string, reason?: string): void {
+    this.onSuspiciousActivity?.(ip, connectionId, reason);
+  }
+
   // ========== 联邦功能方法 ==========
 
   public setFederationManager(fm: any): void {

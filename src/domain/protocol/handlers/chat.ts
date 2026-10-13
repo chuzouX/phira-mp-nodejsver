@@ -1,12 +1,22 @@
 import { HandlerCtx } from './context';
 import { ServerCommandType } from '../Commands';
 
+const MAX_CHAT_LENGTH = 2048;
+
 export function handleChat(
   ctx: HandlerCtx,
   connectionId: string,
   message: string,
   sendResponse: (response: any) => void,
 ): void {
+  if (typeof message !== 'string' || message.length === 0 || message.length > MAX_CHAT_LENGTH) {
+    ctx.respond(connectionId, sendResponse, {
+      type: ServerCommandType.Chat,
+      result: { ok: false, error: '消息长度超出限制喵' },
+    });
+    return;
+  }
+
   const session = ctx.sessions.get(connectionId);
   if (!session) {
     ctx.respond(connectionId, sendResponse, {

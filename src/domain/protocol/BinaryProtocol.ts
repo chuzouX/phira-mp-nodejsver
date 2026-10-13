@@ -32,6 +32,9 @@ export class BinaryReader {
     let result = 0n;
     let shift = 0n;
     while (true) {
+      if (shift > 63n) {
+        throw new Error('Invalid ULEB128 encoding: shift limit exceeded (potential DoS payload)');
+      }
       const byte = this.byte();
       result |= BigInt(byte & 0x7f) << shift;
       if ((byte & 0x80) === 0) {
@@ -95,12 +98,18 @@ export class BinaryReader {
 
   string(): string {
     const len = Number(this.uleb());
+    if (len < 0 || len > this.remaining()) {
+      throw new Error(`Invalid string length: ${len} (remaining buffer: ${this.remaining()})`);
+    }
     const bytes = this.take(len);
     return bytes.toString('utf8');
   }
 
   array<T>(readElement: () => T): T[] {
     const len = Number(this.uleb());
+    if (len < 0 || len > this.remaining()) {
+      throw new Error(`Invalid array length: ${len} (remaining buffer: ${this.remaining()})`);
+    }
     const result: T[] = [];
     for (let i = 0; i < len; i++) {
       result.push(readElement());

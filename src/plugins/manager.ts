@@ -139,6 +139,7 @@ class SafePluginEventBus implements PluginEventBus {
 export class PluginManager {
   private readonly plugins = new Map<string, LoadedPlugin>();
   private readonly pluginsByUuid = new Map<string, LoadedPlugin>(); // UUID 索引
+  public readonly initializingPlugins = new Set<string>();
   private readonly packetHandlers = new Map<
     number,
     Array<PacketHandlerRegistration & { pluginName: string }>
@@ -459,9 +460,11 @@ export class PluginManager {
 
       const api = this.createApi(pluginName, resDir);
       const routeSnapshot = this.snapshotExpressLayers();
+      this.initializingPlugins.add(pluginName);
       try {
         await pluginModule.init(api);
       } finally {
+        this.initializingPlugins.delete(pluginName);
         this.trackExpressLayers(pluginName, routeSnapshot);
       }
 
