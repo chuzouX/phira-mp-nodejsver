@@ -57,7 +57,8 @@ export function handleAuthenticate(
 
   const isVirtualAuthAllowed =
     process.env.NODE_ENV !== 'production' &&
-    (process.env.STRESS_VIRTUAL_AUTH === 'true' || process.env.ENABLE_STRESS_VIRTUAL_AUTH === 'true');
+    (process.env.STRESS_VIRTUAL_AUTH === 'true' ||
+      process.env.ENABLE_STRESS_VIRTUAL_AUTH === 'true');
   const isVirtualToken = isVirtualAuthAllowed && token.startsWith('stress_');
 
   if (!isVirtualAuthAllowed && token.startsWith('stress_')) {
@@ -141,7 +142,6 @@ export function handleAuthenticate(
           return;
         }
       }
-
 
       const userInfo: UserInfo = {
         ...basicUserInfo,

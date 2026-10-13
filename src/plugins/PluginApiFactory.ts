@@ -120,7 +120,9 @@ export function createPluginApi(
         ...session,
         connectionId: '',
         isAdmin: isAdminOrOwner(context, session.id),
-        isOwner: Boolean(session.id && session.id > 0 && context.config.ownerPhiraId.includes(session.id)),
+        isOwner: Boolean(
+          session.id && session.id > 0 && context.config.ownerPhiraId.includes(session.id),
+        ),
       }));
     },
     getRooms: () => {
@@ -183,7 +185,8 @@ export function createPluginApi(
       };
     },
     isUserAdmin: (userId: number) => isAdminOrOwner(context, userId),
-    isUserOwner: (userId: number) => Boolean(userId && userId > 0 && context.config.ownerPhiraId.includes(userId)),
+    isUserOwner: (userId: number) =>
+      Boolean(userId && userId > 0 && context.config.ownerPhiraId.includes(userId)),
     getPlayer: (userId: number) => {
       const sessions = context.protocolHandler.getAllSessions();
       const session: any = sessions.find((s: any) => s.id === userId);

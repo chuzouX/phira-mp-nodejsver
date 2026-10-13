@@ -516,7 +516,9 @@ export class InMemoryRoomManager implements RoomManager {
       ? userIds.map(Number).filter((n) => Number.isSafeInteger(n) && n > 0)
       : [];
     room.blacklist = Array.from(new Set(cleanIds));
-    this.logger.debug(`房间 “${roomId}” 黑名单已更新，人数: ${room.blacklist.length}`, { userId: -1 });
+    this.logger.debug(`房间 “${roomId}” 黑名单已更新，人数: ${room.blacklist.length}`, {
+      userId: -1,
+    });
     return true;
   }
 
@@ -533,7 +535,9 @@ export class InMemoryRoomManager implements RoomManager {
       ? userIds.map(Number).filter((n) => Number.isSafeInteger(n) && n > 0)
       : [];
     room.whitelist = Array.from(new Set(cleanIds));
-    this.logger.debug(`房间 “${roomId}” 白名单已更新，人数: ${room.whitelist.length}`, { userId: -1 });
+    this.logger.debug(`房间 “${roomId}” 白名单已更新，人数: ${room.whitelist.length}`, {
+      userId: -1,
+    });
     return true;
   }
 }

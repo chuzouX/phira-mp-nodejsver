@@ -18,9 +18,8 @@ import * as path from 'path';
 
 const repoRoot = path.join(__dirname, '..');
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const sanitize = require(path.join(repoRoot, 'plugins/web-dashboard/res/public/sanitize.js'));
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+
 const textSafety = require(path.join(repoRoot, 'plugins/websocket/res/lib/textSafety.js'));
 
 const { escapeHtml, escapeAttr, escapeJs, safeUrl } = sanitize;
@@ -91,7 +90,7 @@ describe('渲染端输出编码 (sanitize.js)', () => {
     /** 把转义结果当作 `onclick="f('<此处>')"` 里的字符串字面量求值 */
     function evalInJsStringLiteral(encoded: string): any {
       let captured: any;
-      // eslint-disable-next-line no-new-func
+
       const fn = new Function('f', `f('${encoded}');`);
       fn((v: any) => {
         captured = v;

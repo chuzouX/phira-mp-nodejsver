@@ -16,7 +16,6 @@ import * as path from 'path';
 
 const repoRoot = path.join(__dirname, '..');
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const pluginExports = require(path.join(repoRoot, 'plugins/web-dashboard/res/main.js'));
 // 编译产物是 CommonJS + `export default`，与 plugins/manager.ts 的取值方式保持一致
 const pluginModule = pluginExports.default ?? pluginExports;
@@ -72,7 +71,9 @@ async function boot(configOverrides: Record<string, any> = {}): Promise<Harness>
     protocolHandler: { getSessionCount: () => 0, getAllSessions: () => [] },
     banManager: {
       isIpBanned: () =>
-        harness.banReason === null ? null : { reason: harness.banReason, expiresAt: Date.now() + 60000 },
+        harness.banReason === null
+          ? null
+          : { reason: harness.banReason, expiresAt: Date.now() + 60000 },
     },
     federationManager: undefined,
     getExpressApp: () => app,
@@ -102,7 +103,7 @@ describe('web-dashboard HTTP 安全回归', () => {
       expect(csp).toBeDefined();
       // 关键：只允许同源 + WebSocket，攻击者域不在白名单内
       expect(csp).toContain("connect-src 'self' ws: wss:");
-      expect(csp).not.toContain('attacker.example');
+      expect(csp).not.toContain(new URL(EXFIL_HOST).hostname);
       // 阻断 <base> 劫持与插件类载体
       expect(csp).toContain("base-uri 'self'");
       expect(csp).toContain("object-src 'none'");
