@@ -16,6 +16,8 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "package:exe": "npm run build && node scripts/package.js win-x64",
     "package:linux": "npm run build && node scripts/package.js linux-x64",
+    "package:linux-arm64": "npm run build && node scripts/package.js linux-arm64",
+    "package:linux-static": "npm run build && node scripts/package.js linux-static",
     "package:macos-x64": "npm run build && node scripts/package.js macos-x64",
     "package:macos-arm64": "npm run build && node scripts/package.js macos-arm64",
     "package:all": "npm run package:exe && npm run package:linux && npm run package:macos-x64 && npm run package:macos-arm64"
