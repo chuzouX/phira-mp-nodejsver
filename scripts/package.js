@@ -13,6 +13,14 @@ const targets = {
     target: 'node18-linux-x64',
     filename: `phira-mp-nodejsver-linux-v${version}`,
   },
+  'linux-arm64': {
+    target: 'node18-linux-arm64',
+    filename: `phira-mp-nodejsver-linux-arm64-v${version}`,
+  },
+  'linux-static': {
+    target: 'node18-linuxstatic-x64',
+    filename: `phira-mp-nodejsver-linuxstatic-x64-v${version}`,
+  },
   'macos-x64': {
     target: 'node18-macos-x64',
     filename: `phira-mp-nodejsver-macos-x64-v${version}`,
