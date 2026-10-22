@@ -168,7 +168,7 @@ export interface JoinRoomResponse {
 
 // Source: phira-mp-common/src/command.rs:181-234
 export type Message =
-  | { type: 'Chat'; user: number; content: string }
+  | { type: 'Chat'; user: number; content: string; senderName?: string; isHost?: boolean }
   | { type: 'CreateRoom'; user: number }
   | { type: 'JoinRoom'; user: number; name: string }
   | { type: 'LeaveRoom'; user: number; name: string }

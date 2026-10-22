@@ -22,6 +22,7 @@ import {
 import { PluginManager } from '../../plugins';
 import { handleAuthenticate } from './handlers/auth';
 import { handleChat } from './handlers/chat';
+import { isValidChatContent } from './ChatValidation';
 import { handleTouches, handleJudges } from './handlers/input';
 import {
   handleCreateRoom,
@@ -204,6 +205,39 @@ export class ProtocolHandler {
     }
   }
 
+  public isValidChatContent(content: unknown): content is string {
+    return isValidChatContent(content);
+  }
+
+  public sendRoomMessage(roomId: string, userId: number, content: string): boolean {
+    const room = this.roomManager.getRoom(roomId);
+    if (
+      !room ||
+      room.chatEnabled === false ||
+      !room.players.has(userId) ||
+      this.roomManager.getRoomByUserId(userId)?.id !== roomId ||
+      !Number.isSafeInteger(userId) ||
+      userId <= 0 ||
+      !isValidChatContent(content)
+    )
+      return false;
+    this.broadcastMessage(room, {
+      type: 'Chat',
+      user: userId,
+      content,
+      senderName: room.players.get(userId)!.user.name,
+      isHost: room.ownerId === userId,
+    });
+    this.pluginManager?.emit('chat:message', {
+      room,
+      userId,
+      content,
+      connectionId: 'web-dashboard',
+    });
+    this.logger.debug(`Web chat in room "${roomId}"`, { userId });
+    return true;
+  }
+
   public sendServerMessage(roomId: string, content: string): void {
     const room = this.roomManager.getRoom(roomId);
     if (room) {
@@ -216,9 +250,16 @@ export class ProtocolHandler {
     }
   }
 
-  public kickPlayer(userId: number): boolean {
+  public kickPlayer(userId: number, expectedRoomId?: string): boolean {
     const connectionId = this.userConnections.get(userId);
     const room = this.roomManager.getRoomByUserId(userId);
+    // Bound room operations must never follow a stale index into another room.
+    if (
+      expectedRoomId !== undefined &&
+      (!room || room.id !== expectedRoomId || !room.players.has(userId))
+    ) {
+      return false;
+    }
 
     if (room) {
       const userInfo = room.players.get(userId)?.user;

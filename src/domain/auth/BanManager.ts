@@ -6,6 +6,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { Logger } from '../../logging/logger';
+import { normalizeIp } from '../../network/ClientAddress';
 
 export interface BanInfo {
   target: string | number; // userId (number) or IP (string)
@@ -30,7 +31,7 @@ export class BanManager {
 
   public setWhitelists(ids: number[], ips: string[]) {
     this.idWhitelist = ids;
-    this.ipWhitelist = ips;
+    this.ipWhitelist = ips.map(normalizeIp);
   }
 
   private ensureDataDir() {
@@ -51,7 +52,13 @@ export class BanManager {
       if (fs.existsSync(this.ipBanFile)) {
         const data = JSON.parse(fs.readFileSync(this.ipBanFile, 'utf8'));
         Object.entries(data).forEach(([ip, info]) => {
-          this.ipBans.set(ip, info as BanInfo);
+          const canonical = normalizeIp(ip);
+          const candidate = { ...(info as BanInfo), target: canonical };
+          const existing = this.ipBans.get(canonical);
+          // Aliases may collide in legacy files: keep the longer (or permanent) ban.
+          if (!existing || (candidate.expiresAt ?? Infinity) > (existing.expiresAt ?? Infinity)) {
+            this.ipBans.set(canonical, candidate);
+          }
         });
       }
       this.logger.info(`已加载 ${this.idBans.size} 个用户封禁和 ${this.ipBans.size} 个 IP 封禁。`);
@@ -116,6 +123,7 @@ export class BanManager {
   }
 
   public banIp(ip: string, durationSeconds: number | null, reason: string, adminName?: string) {
+    ip = normalizeIp(ip);
     if (this.ipWhitelist.includes(ip)) {
       this.logger.warn(`尝试封禁白名单 IP ${ip}，已拦截。`);
       return;
@@ -138,6 +146,7 @@ export class BanManager {
   }
 
   public unbanIp(ip: string, adminName: string = 'System') {
+    ip = normalizeIp(ip);
     if (this.ipBans.delete(ip)) {
       this.saveBans();
       this.logger.ban(`IP ${ip} 已被 ${adminName} 解封。`);
@@ -176,6 +185,7 @@ export class BanManager {
   }
 
   public isIpBanned(ip: string): BanInfo | null {
+    ip = normalizeIp(ip);
     const info = this.ipBans.get(ip);
     if (info) {
       if (info.expiresAt && info.expiresAt < Date.now()) {

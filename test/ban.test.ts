@@ -42,6 +42,36 @@ describe('封禁管理器 (BanManager)', () => {
     expect(banManager.isIpBanned('1.2.3.4')).toBeNull();
   });
 
+  test('IPv4-mapped IPv6 aliases share bans, whitelists and unban operations', () => {
+    banManager.banIp('::ffff:192.0.2.1', null, 'mapped');
+    expect(banManager.isIpBanned('192.0.2.1')).toBeTruthy();
+    expect(banManager.isIpBanned('::FFFF:c000:0201')).toBeTruthy();
+    banManager.unbanIp('192.0.2.1');
+    expect(banManager.isIpBanned('::ffff:192.0.2.1')).toBeNull();
+    banManager.setWhitelists([], ['::ffff:192.0.2.1']);
+    banManager.banIp('192.0.2.1', null, 'must be blocked');
+    expect(banManager.isIpBanned('192.0.2.1')).toBeNull();
+  });
+
+  test('legacy alias collisions preserve the strongest ban', () => {
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
+    (fs.readFileSync as jest.Mock).mockImplementation((file: string) =>
+      file.includes('banipList.json')
+        ? JSON.stringify({
+            '::ffff:192.0.2.1': {
+              target: '::ffff:192.0.2.1',
+              reason: 'permanent',
+              createdAt: 1,
+              expiresAt: null,
+            },
+            '192.0.2.1': { target: '192.0.2.1', reason: 'expired', createdAt: 1, expiresAt: 1 },
+          })
+        : '{}',
+    );
+    const loaded = new BanManager(mockLogger);
+    expect(loaded.isIpBanned('192.0.2.1')?.reason).toBe('permanent');
+  });
+
   test('封禁过期后应当自动失效', () => {
     jest.useFakeTimers();
     const now = Date.now();

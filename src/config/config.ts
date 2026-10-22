@@ -27,8 +27,8 @@ PORT=12346
 HOST=0.0.0.0
 TCP_ENABLED=true
 USE_PROXY_PROTOCOL=false
-# Proxy trust hops (1 for Nginx, 2 for CDN+Nginx)
-TRUST_PROXY_HOPS=1
+# Proxy trust hops (0=direct, 1=Nginx, 2=CDN+Nginx); restrict backend ingress when enabled
+TRUST_PROXY_HOPS=0
 LOG_LEVEL=info
 # WARNING: Set to production for public servers, otherwise virtual auth (stress_ token) remains active
 NODE_ENV=production
@@ -129,7 +129,7 @@ const defaultConfig: ServerConfig = {
   serverAnnouncement: 'Hello {{name}}, welcome to {{serverName}} server',
   defaultAvatar: 'https://phira.5wyxi.com/files/6ad662de-b505-4725-a7ef-72d65f32b404',
   enableUpdateCheck: true,
-  trustProxyHops: 1,
+  trustProxyHops: 0,
   enablePubWeb: false,
   pubPrefix: 'pub',
   enablePriWeb: false,

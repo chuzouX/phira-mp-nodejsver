@@ -22,6 +22,13 @@ describe('配置服务 (Config)', () => {
     expect(config.serverName).toBe('Server');
   });
 
+  test('proxy headers are untrusted by default and require explicit configuration', () => {
+    delete process.env.TRUST_PROXY_HOPS;
+    expect(createServerConfig().trustProxyHops).toBe(0);
+    process.env.TRUST_PROXY_HOPS = '2';
+    expect(createServerConfig().trustProxyHops).toBe(2);
+  });
+
   test('应当能通过环境变量覆盖配置', () => {
     process.env.PORT = '9999';
     process.env.SERVER_NAME = 'MyCustomServer';

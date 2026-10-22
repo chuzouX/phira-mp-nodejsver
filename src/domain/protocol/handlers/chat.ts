@@ -1,7 +1,6 @@
 import { HandlerCtx } from './context';
 import { ServerCommandType } from '../Commands';
-
-const MAX_CHAT_LENGTH = 2048;
+import { isValidChatContent } from '../ChatValidation';
 
 export function handleChat(
   ctx: HandlerCtx,
@@ -9,10 +8,10 @@ export function handleChat(
   message: string,
   sendResponse: (response: any) => void,
 ): void {
-  if (typeof message !== 'string' || message.length === 0 || message.length > MAX_CHAT_LENGTH) {
+  if (!isValidChatContent(message)) {
     ctx.respond(connectionId, sendResponse, {
       type: ServerCommandType.Chat,
-      result: { ok: false, error: '消息长度超出限制喵' },
+      result: { ok: false, error: '消息必须为 1–2048 长度的单行纯文本，不允许标记或控制字符' },
     });
     return;
   }
@@ -35,10 +34,20 @@ export function handleChat(
     return;
   }
 
+  if (room.chatEnabled === false) {
+    ctx.respond(connectionId, sendResponse, {
+      type: ServerCommandType.Chat,
+      result: { ok: false, error: '房间聊天已关闭' },
+    });
+    return;
+  }
+
   ctx.broadcastMessage(room, {
     type: 'Chat',
     user: session.userId,
     content: message,
+    senderName: session.userInfo.name,
+    isHost: room.ownerId === session.userId,
   });
 
   ctx.pluginManager?.emit('chat:message', {
