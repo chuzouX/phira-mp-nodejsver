@@ -52,6 +52,22 @@ describe('HTTP API 测试 (HttpServer)', () => {
     expect(response.body).toHaveProperty('version');
   });
 
+  test.each(['application/json', 'application/x-www-form-urlencoded'])(
+    'rejects Brotli %s bodies before native decompression',
+    async (contentType) => {
+      const app = httpServer.getExpressApp();
+      const reached = jest.fn((_req, res) => res.json({ ok: true }));
+      app.post('/test-compressed-body', reached);
+      const response = await request(app)
+        .post('/test-compressed-body')
+        .set('Content-Type', contentType)
+        .set('Content-Encoding', 'br')
+        .send(Buffer.from('malformed brotli'));
+      expect(response.status).toBe(415);
+      expect(reached).not.toHaveBeenCalled();
+    },
+  );
+
   test('GET /check-auth 未加载仪表盘插件时应当不可用', async () => {
     const response = await request(httpServer.getInternalServer()).get('/check-auth');
     expect(response.status).toBe(404);

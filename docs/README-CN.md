@@ -1,5 +1,7 @@
 # Phira 多人游戏服务器
 
+> 0.7.0 源码安全更新：必须先升级 Node.js，再安装依赖、构建并重启。HTTP JSON/表单接口不再接受压缩请求体（返回 415）。本次不提供单文件可执行版，当前打包器尚未包含已修复运行时。
+
 中文说明 | [English](../README.md)
 
 基于 TypeScript 的 Node.js 服务器，支持 TCP 协议，专为多人在线游戏设计。
@@ -55,7 +57,7 @@
 
 ### 前置条件
 
-- Node.js 18+ 
+- Node.js 22.23.4+ / 24.22.1+ / 26.12.1+ (supported release lines only)
 - npm 或 pnpm
 
 ### 安装

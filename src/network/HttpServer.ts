@@ -63,8 +63,8 @@ export class HttpServer {
   }
 
   private setupMiddleware(): void {
-    this.app.use(express.urlencoded({ extended: true, limit: '2mb' }));
-    this.app.use(express.json({ limit: '2mb' }));
+    this.app.use(express.urlencoded({ extended: true, limit: '2mb', inflate: false }));
+    this.app.use(express.json({ limit: '2mb', inflate: false }));
     this.app.use(cookieParser());
     this.app.use(this.sessionParser);
   }

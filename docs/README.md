@@ -1,5 +1,7 @@
 # Phira Multiplayer Server
 
+> 0.7.0 source security release: upgrade Node.js before installing, building and restarting. Compressed JSON/form bodies return HTTP 415. Standalone executables are not included: the current packager does not yet provide a patched embedded runtime.
+
 中文说明 | [English](../README.md)
 
 TypeScript-based Node.js server with TCP support for multiplayer gaming.
@@ -55,7 +57,7 @@ TypeScript-based Node.js server with TCP support for multiplayer gaming.
 
 ### Prerequisites
 
-- Node.js 18+ 
+- Node.js 22.23.4+ / 24.22.1+ / 26.12.1+ (supported release lines only)
 - npm or pnpm
 
 ### Installation

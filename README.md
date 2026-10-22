@@ -1,5 +1,7 @@
 # Phira Multiplayer Server (Node.js)
 
+> 0.7.0 source security release: upgrade Node.js before installing, building and restarting. Compressed JSON/form bodies return HTTP 415. Standalone executables are not included: the current packager does not yet provide a patched embedded runtime.
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ** English | [中文文档](docs/README-CN.md) **
@@ -31,7 +33,7 @@ npm run build && npm start
 
 ### System Requirements
 
-- Node.js 18+
+- Node.js 22.23.4+ / 24.22.1+ / 26.12.1+ (supported release lines only)
 - npm
 
 ## Directory Structure

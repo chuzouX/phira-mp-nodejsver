@@ -26,9 +26,11 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 import { createApplication } from './app';
+import { assertSecureRuntime } from './common/RuntimeSecurity';
 
 const main = async () => {
   try {
+    assertSecureRuntime();
     const app = createApplication();
 
     await app.start();
