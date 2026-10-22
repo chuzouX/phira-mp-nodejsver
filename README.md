@@ -1,6 +1,6 @@
 # Phira Multiplayer Server (Node.js)
 
-> 0.7.0 is a source-only release. Standalone executables are unavailable until the packager provides a patched embedded Node.js runtime.
+> The 0.7.0 Release contains source only. The current development branch supports executable builds using Enhanced SEA with official Node.js 22.23.4.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -41,7 +41,9 @@ on older or unverified release lines. See the [October 2026 Node.js security adv
 Upgrade Node.js, reinstall dependencies, rebuild, and restart the server. HTTP JSON
 and form requests must use uncompressed bodies (compressed requests return HTTP 415).
 Executable packaging also checks the embedded Node.js patch version; packaging stops
-if the installed packager cannot provide a patched runtime.
+if the selected runtime is unsafe. Enhanced SEA downloads and verifies official Node.js 22.23.4.
+`package:all` builds Windows x64, Linux x64 and macOS x64/arm64. Fully static Linux
+is unavailable; macOS executables built on Windows still require signing and native validation.
 
 ## Directory Structure
 

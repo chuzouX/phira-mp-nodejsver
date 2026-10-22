@@ -1,6 +1,6 @@
 # Phira 多人游戏服务器
 
-> 0.7.0 仅发布源码；当前打包器尚未包含已修复的内置 Node.js，暂不提供单文件可执行程序。
+> 0.7.0 Release 仅发布源码；当前开发分支已支持通过 SEA 构建内置官方 Node.js 22.23.4 的可执行程序。
 
 中文说明 | [English](../README.md)
 
@@ -140,7 +140,9 @@ seedNodes:
 本项目支持打包为独立的可执行文件（无需安装 Node.js 即可运行）。
 
 ### 1. 下载或构建
-使用 `npm run package:all` 构建所有版本（文件将生成在 `outputs/` 目录中）。
+使用 `npm run package:all` 构建 Windows x64、Linux x64、macOS x64/arm64（输出至 `outputs/0.7.0/`）。
+
+打包使用 Enhanced SEA，首次构建会下载并校验官方 Node.js 22.23.4；不再使用 `pkg-fetch` 的旧运行时。Linux arm64 可单独执行 `npm run package:linux-arm64`。官方未提供完全静态的 Linux 运行时，因此 `package:linux-static` 暂不支持。跨平台生成的 macOS 程序仍须在 macOS 上完成签名和运行验证。
 
 ### 2. 各平台运行方式
 

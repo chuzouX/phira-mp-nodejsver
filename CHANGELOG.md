@@ -1,3 +1,8 @@
+## [Unreleased]
+
+- 修复 `npm run package:all` 被 `pkg-fetch` 内置 Node 22.23.2 阻断：切换至 Enhanced SEA，固定下载官方 Node 22.23.4 并校验下载校验和，保留安全版本检查。
+- Windows、Linux 和 macOS 的输出文件名不变；Linux 静态版暂不支持，执行 `package:linux-static` 会给出明确说明，不回退到旧运行时。
+
 ## [0.7.0] — 2026-10-22
 
 ### 安全修复

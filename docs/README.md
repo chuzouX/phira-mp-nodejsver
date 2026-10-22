@@ -1,6 +1,6 @@
 # Phira Multiplayer Server
 
-> 0.7.0 is a source-only release. Standalone executables are unavailable until the packager provides a patched embedded Node.js runtime.
+> The 0.7.0 Release contains source only. The current development branch supports executable builds using Enhanced SEA with official Node.js 22.23.4.
 
 中文说明 | [English](../README.md)
 
