@@ -190,7 +190,7 @@ declare module 'phira-plugin-api' {
   }
 
   export type Message =
-    | { type: 'Chat'; user: number; content: string }
+    | { type: 'Chat'; user: number; content: string; senderName?: string; isHost?: boolean }
     | { type: 'CreateRoom'; user: number }
     | { type: 'JoinRoom'; user: number; name: string }
     | { type: 'LeaveRoom'; user: number; name: string }
@@ -261,6 +261,8 @@ declare module 'phira-plugin-api' {
   }
 
   export interface Room {
+    readonly creatorId: number;
+    chatEnabled: boolean;
     id: string;
     name: string;
     ownerId: number;
@@ -339,8 +341,10 @@ declare module 'phira-plugin-api' {
       roomName?: string;
       ip: string;
     }[];
+    isValidChatContent(content: unknown): content is string;
+    sendRoomMessage(roomId: string, userId: number, content: string): boolean;
     sendServerMessage(roomId: string, content: string): void;
-    kickPlayer(userId: number): boolean;
+    kickPlayer(userId: number, expectedRoomId?: string): boolean;
     kickIp(ip: string): void;
     forceStartGame(roomId: string): boolean;
     toggleRoomLock(roomId: string): boolean;
@@ -459,6 +463,8 @@ declare module 'phira-plugin-api' {
   }
 
   export interface HttpServer {
+    getClientIp(req: import('http').IncomingMessage): string;
+    getRequestOrigin(req: import('http').IncomingMessage): string | undefined;
     getExpressApp(): ExpressApp;
     getInternalServer(): HttpNodeServer;
     getSessionParser(): RequestHandler;

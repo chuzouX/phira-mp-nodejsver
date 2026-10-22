@@ -24,7 +24,7 @@ describe('IP 识别测试 (HTTP Headers)', () => {
       getSessionCount: jest.fn().mockReturnValue(0),
     } as any;
 
-    mockBanManager = {} as any;
+    mockBanManager = { isIpBanned: jest.fn(() => null) } as any;
 
     mockLogger = {
       info: jest.fn(),

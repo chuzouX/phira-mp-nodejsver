@@ -41,6 +41,8 @@ export interface ChartInfo {
 }
 
 export interface Room {
+  readonly creatorId: number;
+  chatEnabled: boolean;
   id: string;
   name: string;
   ownerId: number;
@@ -186,6 +188,8 @@ export class InMemoryRoomManager implements RoomManager {
     });
 
     const room: Room = {
+      creatorId: ownerId,
+      chatEnabled: true,
       id,
       name,
       ownerId,

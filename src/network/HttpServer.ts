@@ -1,6 +1,7 @@
 import express from 'express';
 import crypto from 'crypto';
-import { createServer, Server } from 'http';
+import { createServer, Server, IncomingMessage } from 'http';
+import { resolveClientIp, resolveRequestOrigin } from './ClientAddress';
 import session from 'express-session';
 import cookieParser from 'cookie-parser';
 import { Logger } from '../logging/logger';
@@ -49,9 +50,9 @@ export class HttpServer {
     this.sessionParser = session({
       secret: effectiveSecret,
       resave: false,
-      saveUninitialized: true,
+      saveUninitialized: false,
       cookie: {
-        secure: process.env.NODE_ENV === 'production',
+        secure: 'auto',
         httpOnly: true,
         sameSite: 'lax',
         maxAge: 24 * 60 * 60 * 1000,
@@ -63,8 +64,17 @@ export class HttpServer {
   }
 
   private setupMiddleware(): void {
-    this.app.use(express.urlencoded({ extended: true, limit: '2mb' }));
-    this.app.use(express.json({ limit: '2mb' }));
+    // Covers host-owned routes too; plugin middleware is mounted later than /api/status.
+    this.app.use((req, res, next) => {
+      if (this.banManager.isIpBanned(this.getClientIp(req))) {
+        res.status(403).json({ error: 'Forbidden: IP banned' });
+        return;
+      }
+      next();
+    });
+    // Reject compressed bodies before body-parser can invoke native decompression.
+    this.app.use(express.urlencoded({ extended: true, limit: '2mb', inflate: false }));
+    this.app.use(express.json({ limit: '2mb', inflate: false }));
     this.app.use(cookieParser());
     this.app.use(this.sessionParser);
   }
@@ -74,7 +84,7 @@ export class HttpServer {
     res: express.Response,
     next: express.NextFunction,
   ): void {
-    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    const ip = this.getClientIp(req);
     const now = Date.now();
     const limit = this.rateLimits.get(ip) || { count: 0, lastReset: now };
 
@@ -100,7 +110,8 @@ export class HttpServer {
       return res.json({ version });
     });
 
-    this.app.get('/api/status', this.rateLimitMiddleware.bind(this), (_req, res) => {
+    this.app.get('/api/status', this.rateLimitMiddleware.bind(this), (_req, res, next) => {
+      if (this.app.locals.webDashboardAuth) return next();
       res.header('Access-Control-Allow-Origin', '*');
       if (Date.now() - this.statusCacheTime < 1000 && this.cachedStatus) {
         return res.json(this.cachedStatus);
@@ -192,6 +203,14 @@ export class HttpServer {
 
   public unblacklistIpManual(ip: string, _adminName: string = 'Console'): boolean {
     return this.blacklistedIps.delete(ip);
+  }
+
+  public getClientIp(req: IncomingMessage): string {
+    return resolveClientIp(req, this.config.trustProxyHops);
+  }
+
+  public getRequestOrigin(req: IncomingMessage): string | undefined {
+    return resolveRequestOrigin(req, this.config.trustProxyHops);
   }
 
   public getExpressApp(): express.Application {

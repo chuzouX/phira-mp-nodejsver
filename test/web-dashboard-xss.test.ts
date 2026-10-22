@@ -124,6 +124,25 @@ describe('渲染端输出编码 (sanitize.js)', () => {
       delete (globalThis as any).__XSS_BREAKOUT__;
     });
 
+    it.each([
+      '" onmouseover=alert(1) x="',
+      "' onmouseover=alert(1) x='",
+      '&quot; onfocus=alert(1) x=&quot;',
+      '\\" autofocus onfocus=alert(1) x="',
+      "'); globalThis.__XSS_BREAKOUT__ = true; //",
+    ])('preserves the payload without raw HTML quote delimiters: %s', (payload) => {
+      const encoded = escapeJs(payload);
+      expect(encoded).not.toContain('"');
+      expect(encoded).not.toContain("'");
+      expect(encoded).not.toContain('&');
+      expect(evalInJsStringLiteral(encoded)).toBe(payload);
+      let captured: unknown;
+      new Function('f', `f("${encoded}")`)((value: unknown) => {
+        captured = value;
+      });
+      expect(captured).toBe(payload);
+    });
+
     it('转义 </script>、<、>、& 与行终止符，防止属性/脚本块被撕开', () => {
       const encoded = escapeJs('</script><img src=x>&\u2028\u2029"\\');
       expect(encoded).not.toContain('<');
