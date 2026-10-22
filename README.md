@@ -1,6 +1,6 @@
 # Phira Multiplayer Server (Node.js)
 
-> 0.7.0 source security release: upgrade Node.js before installing, building and restarting. Compressed JSON/form bodies return HTTP 415. Standalone executables are not included: the current packager does not yet provide a patched embedded runtime.
+> 0.7.0 is a source-only release. Standalone executables are unavailable until the packager provides a patched embedded Node.js runtime.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -35,6 +35,13 @@ npm run build && npm start
 
 - Node.js 22.23.4+ / 24.22.1+ / 26.12.1+ (supported release lines only)
 - npm
+
+Version 0.7.0 requires the patched Node.js releases listed above and refuses to start
+on older or unverified release lines. See the [October 2026 Node.js security advisory](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases).
+Upgrade Node.js, reinstall dependencies, rebuild, and restart the server. HTTP JSON
+and form requests must use uncompressed bodies (compressed requests return HTTP 415).
+Executable packaging also checks the embedded Node.js patch version; packaging stops
+if the installed packager cannot provide a patched runtime.
 
 ## Directory Structure
 
@@ -81,7 +88,7 @@ Copy `.env.example` to `.env` and edit:
 | `ADMIN_PHIRA_ID` | Admin user IDs (comma-separated) | |
 | `OWNER_PHIRA_ID` | Owner user IDs (comma-separated) | |
 | `USE_PROXY_PROTOCOL` | Enable Proxy Protocol v2 for real IP | `false` |
-| `TRUST_PROXY_HOPS` | Proxy trust depth (1=Nginx, 2=CDN+Nginx) | `1` |
+| `TRUST_PROXY_HOPS` | Proxy trust depth (0=direct, 1=Nginx, 2=CDN+Nginx) | `0` |
 
 > ⚠️ **Production Security**: Set `NODE_ENV=production` before deploying publicly.
 > Leaving it as `development` keeps *virtual token authentication* enabled — tokens starting with
@@ -242,3 +249,5 @@ location / {
 ## License
 
 [MIT](LICENSE)
+
+Proxy trust defaults to disabled. With positive hops, restrict backend ingress to trusted proxies and have them overwrite forwarding headers. Existing `.env` values are preserved. HTTP and WS share the host address policy; X-Real-IP is only a single loopback-proxy fallback and X-Forwarded-Host is ignored.

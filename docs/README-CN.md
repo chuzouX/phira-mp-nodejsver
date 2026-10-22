@@ -1,6 +1,6 @@
 # Phira 多人游戏服务器
 
-> 0.7.0 源码安全更新：必须先升级 Node.js，再安装依赖、构建并重启。HTTP JSON/表单接口不再接受压缩请求体（返回 415）。本次不提供单文件可执行版，当前打包器尚未包含已修复运行时。
+> 0.7.0 仅发布源码；当前打包器尚未包含已修复的内置 Node.js，暂不提供单文件可执行程序。
 
 中文说明 | [English](../README.md)
 
@@ -28,7 +28,7 @@
 - ⚙️ **优化的房间逻辑**：改进了单人房间处理及全服广播系统。
 - 🛡️ **高级安全防护**：
     - **多重 IP 识别**：支持 **Proxy Protocol v2** (TCP) 及 **HTTP 转发头** (X-Forwarded-For, X-Real-IP)，确保在各种反代环境下都能精准识别玩家真实 IP。
-    - **代理层级校验**：针对 **CDN + Nginx** 架构，支持通过 `TRUST_PROXY_HOPS` 校验请求头来源，防止攻击者通过伪造 `X-Forwarded-For` 绕过 IP 封禁。
+    - **代理层级校验**：HTTP/WS 默认不信任转发头；代理部署可用 `TRUST_PROXY_HOPS` 指定取址跳数，但跳数不认证代理身份，必须同时限制后端直连并由可信代理覆盖请求头。
     - **全站 Web 拦截**：被封禁的 IP 将无法访问任何 Web 资源（管理面板、公开 API、WebSocket），有效防止恶意扫描与 API 滥用。
     - **防暴力破解**：管理面板集成“登录黑名单”机制，自动拦截多次尝试失败的 IP，防御爆破攻击及潜在的 SSRF 探测。
     - **自定义显示 IP**：通过 `DISPLAY_IP` 配置，可在网页端显示自定义的服务器地址或域名。
@@ -57,8 +57,14 @@
 
 ### 前置条件
 
-- Node.js 22.23.4+ / 24.22.1+ / 26.12.1+ (supported release lines only)
+- Node.js 22.23.4+ / 24.22.1+ / 26.12.1+（仅支持这三个主版本分支）
 - npm 或 pnpm
+
+0.7.0 修复涉及 Node.js 内置 Brotli 解码器的 CVE-2026-111497：请先升级
+Node.js，再重新安装依赖、构建并重启服务。启动时会拒绝低于上述安全基线的
+运行时。HTTP JSON / 表单接口仅接受未压缩的请求体，压缩请求返回 HTTP 415。
+独立可执行文件的 Node.js 是内置的，也必须重新构建；更新系统 Node.js
+不能修复旧可执行文件。若打包工具仍提供旧运行时，打包会直接失败。
 
 ### 安装
 
@@ -88,7 +94,7 @@ npm install
 | `ALLOWED_ORIGINS` | 允许的跨域来源白名单 (逗号分隔) | (空) |
 | **安全与反代** | | |
 | `USE_PROXY_PROTOCOL` | 是否开启 Proxy Protocol v2 以获取真实 IP | `false` |
-| `TRUST_PROXY_HOPS` | 代理信任层级 (1 为仅 Nginx, 2 为 CDN+Nginx) | `1` |
+| `TRUST_PROXY_HOPS` | 代理信任层级 (0=直连，1=Nginx，2=CDN+Nginx) | `0` |
 | `LOGIN_BLACKLIST_DURATION` | 后台登录失败后的黑名单拦截时长 (秒) | `600` |
 | `CAPTCHA_PROVIDER` | 验证码提供商 (`geetest` 或 `none`) | `none` |
 | `GEETEST_ID` | Geetest 验证码 ID (仅在使用 geetest 时) | (空) |
@@ -256,3 +262,5 @@ fetch('/api/admin/kick-player', {
 ## 开源协议
 
 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件。
+
+代理信任默认关闭。设置正跳数时，须由代理覆盖转发头并限制后端直连；已有 `.env` 不会自动修改。HTTP 与 WS 共用宿主解析策略；`X-Real-IP` 只作单层回环代理后备，`X-Forwarded-Host` 不采信。

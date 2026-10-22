@@ -1,6 +1,6 @@
 # Phira Multiplayer Server
 
-> 0.7.0 source security release: upgrade Node.js before installing, building and restarting. Compressed JSON/form bodies return HTTP 415. Standalone executables are not included: the current packager does not yet provide a patched embedded runtime.
+> 0.7.0 is a source-only release. Standalone executables are unavailable until the packager provides a patched embedded Node.js runtime.
 
 中文说明 | [English](../README.md)
 
@@ -88,7 +88,7 @@ npm install
 | `ALLOWED_ORIGINS` | Whitelist of allowed cross-origin sources (comma separated) | (Empty) |
 | **Security & Proxy** | | |
 | `USE_PROXY_PROTOCOL` | Enable Proxy Protocol v2 for real IP | `false` |
-| `TRUST_PROXY_HOPS` | Proxy trust hops (1 for Nginx, 2 for CDN+Nginx) | `1` |
+| `TRUST_PROXY_HOPS` | Proxy trust hops (0=direct, 1=Nginx, 2=CDN+Nginx) | `0` |
 | `LOGIN_BLACKLIST_DURATION` | Seconds to blacklist IP after login failures | `600` |
 | `CAPTCHA_PROVIDER` | Captcha system (`geetest` or `none`) | `none` |
 | `GEETEST_ID` | Geetest ID (if using geetest) | (Empty) |
@@ -278,3 +278,4 @@ The server uses TCP sockets for communication. Clients can connect to the server
 ## License
 
 MIT License - see [LICENSE](LICENSE) file for details.
+Proxy trust defaults to disabled. With positive hops, restrict backend ingress to trusted proxies and have them overwrite forwarding headers. Existing `.env` values are preserved. HTTP and WS share the host address policy; X-Real-IP is only a single loopback-proxy fallback and X-Forwarded-Host is ignored.

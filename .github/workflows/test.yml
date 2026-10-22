@@ -17,6 +17,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Checkout WebSocket security integration
+        uses: actions/checkout@v4
+        with:
+          repository: chuzouX/phira-mp-nodejsver-websocket
+          ref: 3cf295e7004fd46352c1b4d608d359147d188942
+          path: plugins/websocket
+
+      - name: Checkout dashboard security integration
+        uses: actions/checkout@v4
+        with:
+          repository: chuzouX/phira-mp-nodejsver-web-dashboard
+          ref: 0348d3954fccb50a8fa1db42049e2df52c438f4e
+          path: plugins/web-dashboard
+
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
@@ -28,6 +42,5 @@ jobs:
 
       - run: npm run build
 
-      # Dashboard suites require separately installed plugin repositories.
-      - name: Test host source release
-        run: npm test -- --runInBand --testPathIgnorePatterns web-dashboard
+      - name: Test host and plugin integrations
+        run: npm test -- --runInBand
